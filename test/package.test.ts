@@ -25,6 +25,7 @@ describe("Horizon managed Agent package", () => {
       "horizon-milestone-decomposition", "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer",
       "horizon-executor", "horizon-verifier", "horizon-reconciler",
     ]);
+    expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress"]);
   });
 
   it("uses only existing platform catalog Resources and a long-horizon admission ceiling", async () => {
