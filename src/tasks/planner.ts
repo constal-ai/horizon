@@ -1,6 +1,6 @@
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { type HzDesign, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
+import { parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
 import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, planFinalizer, rubricAgent,
@@ -21,6 +21,18 @@ function planningFingerprint(rubric: HzRubric, design: HzDesign, workPlan: HzWor
   assertions: HzStepAssertions[]): Promise<string> {
   return hashValue({ rubric, design, workPlan,
     assertions: [...assertions].sort((left, right) => left.stepId.localeCompare(right.stepId)) });
+}
+
+function orderedMilestones(design: HzDesign): HzMilestone[] {
+  const remaining = new Map(design.milestones.map((milestone) => [milestone.id, milestone]));
+  const completed = new Set<string>(); const ordered: HzMilestone[] = [];
+  while (remaining.size > 0) {
+    const next = design.milestones.find((milestone) => remaining.has(milestone.id)
+      && milestone.dependsOn.every((dependency) => completed.has(dependency)));
+    if (!next) throw new TypeError("Horizon design milestone graph is not executable");
+    ordered.push(next); completed.add(next.id); remaining.delete(next.id);
+  }
+  return ordered;
 }
 
 async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
@@ -57,13 +69,22 @@ export const planner = subtask<HzPlannerResult>({
       return result.artifact;
     };
     const runDecomposition = async (rubric: HzRubric, design: HzDesign, prior: HzWorkPlan | null): Promise<HzWorkPlan> => {
-      const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, prior, critique, tools });
-      const result = await ctx.spawn(decompositionAgent, phaseInput, {
-        retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
-        attenuation: childAttenuation,
-      });
-      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "decomposition", input.revision, result, repairCycle);
-      return result.artifact;
+      const acceptedSteps: HzWorkPlan["steps"] = [];
+      for (const milestone of orderedMilestones(design)) {
+        const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, milestoneId: milestone.id,
+          acceptedSteps, prior: prior?.steps.filter((step) => step.milestoneId === milestone.id) ?? [], critique, tools });
+        const result = await ctx.spawn(decompositionAgent, phaseInput, {
+          retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
+          attenuation: childAttenuation,
+        });
+        planningRuns++; evidence.push(...result.toolEvidence);
+        await commitPhase(ctx, `decomposition:${milestone.id}`, input.revision, result, repairCycle);
+        acceptedSteps.push(...result.artifact.steps);
+      }
+      const workPlan = parseHzWorkPlan({ object: "constal.horizon.work-plan", version: 1,
+        revision: input.revision, steps: acceptedSteps }, input.revision);
+      if (!workPlan) throw new TypeError("Horizon milestone work does not form one valid dependency-ordered plan");
+      return workPlan;
     };
     const runAssertions = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
       prior: HzStepAssertions[]): Promise<HzStepAssertions[]> => {

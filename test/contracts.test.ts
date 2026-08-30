@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzPlanCritique,
+import { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
@@ -13,10 +13,10 @@ const plan = {
   workspaceRoot: "/workspace/repositories/source", unknowns: [unknown], risks: ["Replay drift"], question: null,
   blockedReason: null,
   steps: [
-    { id: "implement", title: "Implement behavior", responsibility: "Own the semantic behavior.",
+    { id: "implement", milestoneId: "behavior", title: "Implement behavior", responsibility: "Own the semantic behavior.",
       specification: "Inspect the current seam, make the smallest coherent change, and retain existing authority boundaries.",
       dependsOn: [], verification: ["Run the focused replay test."], stopWhen: "The behavior and replay test pass." },
-    { id: "verify", title: "Reconcile proof", responsibility: "Verify the completed behavior independently.",
+    { id: "verify", milestoneId: "behavior", title: "Reconcile proof", responsibility: "Verify the completed behavior independently.",
       specification: "Review the diff and execute the relevant suite.", dependsOn: ["implement"],
       verification: ["The suite passes and the diff stays within scope."], stopWhen: "Proof is conclusive or honestly blocked." },
   ],
@@ -86,6 +86,8 @@ describe("Horizon transport contracts", () => {
       milestones: [{ id: "behavior", title: "Durable behavior", outcome: "Replay succeeds.", dependsOn: [],
         responsibilities: ["Implement recovery."], risks: ["Duplicate effect."] }] }, 1)).not.toBeNull();
     expect(parseHzWorkPlan({ object: "constal.horizon.work-plan", version: 1, revision: 1, steps: plan.steps }, 1)).not.toBeNull();
+    expect(parseHzMilestoneWork({ object: "constal.horizon.milestone-work", version: 1, revision: 1,
+      milestoneId: "behavior", steps: plan.steps }, 1, "behavior")).not.toBeNull();
     expect(parseHzStepAssertions(plan.assertions[0], 1, "implement")).not.toBeNull();
     expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
       verdict: "accepted", summary: "The artifacts converge.", findings: [], question: null, blockedReason: null }, 1)).not.toBeNull();

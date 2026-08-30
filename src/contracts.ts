@@ -87,6 +87,14 @@ export interface HzWorkPlan {
   steps: HzPlanStep[];
 }
 
+export interface HzMilestoneWork {
+  object: "constal.horizon.milestone-work";
+  version: 1;
+  revision: number;
+  milestoneId: string;
+  steps: HzPlanStep[];
+}
+
 export interface HzAssertion {
   id: string;
   claim: string;
@@ -126,6 +134,7 @@ export interface HzPlanCritique {
 
 export interface HzPlanStep {
   id: string;
+  milestoneId: string;
   title: string;
   responsibility: string;
   specification: string;
@@ -481,6 +490,20 @@ export function parseHzWorkPlan(value: unknown, expectedRevision?: number): HzWo
   return { object: "constal.horizon.work-plan", version: 1, revision, steps };
 }
 
+export function parseHzMilestoneWork(value: unknown, expectedRevision?: number,
+  expectedMilestoneId?: string): HzMilestoneWork | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  const milestoneId = string(source?.milestoneId, 256);
+  if (!source || source.object !== "constal.horizon.milestone-work" || source.version !== 1 || revision === null
+    || !milestoneId || expectedMilestoneId !== undefined && milestoneId !== expectedMilestoneId
+    || !Array.isArray(source.steps) || source.steps.length === 0 || source.steps.length > 128) return null;
+  const steps = source.steps.map(parseHzPlanStep);
+  if (!steps.every((entry): entry is HzPlanStep => entry !== null)
+    || steps.some((step) => step.milestoneId !== milestoneId)
+    || new Set(steps.map(({ id }) => id)).size !== steps.length) return null;
+  return { object: "constal.horizon.milestone-work", version: 1, revision, milestoneId, steps };
+}
+
 function parseHzAssertion(value: unknown): HzAssertion | null {
   const source = item(value); const id = string(source?.id, 256); const claim = string(source?.claim, 16_384);
   const evidenceRequired = strings(source?.evidenceRequired, 64, 16_384);
@@ -528,12 +551,12 @@ export function parseHzPlanCritique(value: unknown, expectedRevision?: number): 
 
 export function parseHzPlanStep(value: unknown): HzPlanStep | null {
   const source = item(value);
-  const id = string(source?.id, 256); const title = string(source?.title, 1_024);
+  const id = string(source?.id, 256); const milestoneId = string(source?.milestoneId, 256); const title = string(source?.title, 1_024);
   const responsibility = string(source?.responsibility, 8_192); const specification = string(source?.specification);
   const dependsOn = strings(source?.dependsOn, 64, 256); const verification = strings(source?.verification, 64, 8_192);
   const stopWhen = string(source?.stopWhen, 8_192);
-  if (!source || !id || !title || !responsibility || !specification || !dependsOn || !verification || !stopWhen) return null;
-  return { id, title, responsibility, specification, dependsOn, verification, stopWhen };
+  if (!source || !id || !milestoneId || !title || !responsibility || !specification || !dependsOn || !verification || !stopWhen) return null;
+  return { id, milestoneId, title, responsibility, specification, dependsOn, verification, stopWhen };
 }
 
 export function parseHzPlan(value: unknown): HzPlan | null {

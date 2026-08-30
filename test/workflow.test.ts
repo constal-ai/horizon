@@ -7,7 +7,7 @@ const plan: HzPlan = {
   object: "constal.horizon.plan", version: 1, revision: 1, status: "ready", objective: "Implement durable behavior",
   summary: "Implement and verify one durable behavior.", specification: "Use the existing seam and prove durable execution.",
   workspaceRoot: "/workspace/repositories/source", unknowns: [], risks: [], question: null, blockedReason: null,
-  steps: [{ id: "implement", title: "Implement", responsibility: "Implement the durable behavior.",
+  steps: [{ id: "implement", milestoneId: "behavior", title: "Implement", responsibility: "Implement the durable behavior.",
     specification: "Inspect, edit, and verify the existing implementation.", dependsOn: [], verification: ["focused test passes"],
     stopWhen: "The focused test passes." }],
   assertions: [{ object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "implement",

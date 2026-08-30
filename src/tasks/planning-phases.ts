@@ -1,8 +1,8 @@
 import { canonicalJson, subtask } from "@constal/sdk";
 import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { parseHzDesign, parseHzPlan, parseHzPlanCritique, parseHzRubric, parseHzStepAssertions, parseHzWorkPlan,
-  type HzDesign, type HzPlan, type HzPlanCritique, type HzPlanInput, type HzRubric, type HzStepAssertions,
-  type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
+import { parseHzDesign, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzRubric, parseHzStepAssertions,
+  type HzDesign, type HzMilestoneWork, type HzPlan, type HzPlanCritique, type HzPlanInput, type HzPlanStep,
+  type HzRubric, type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM, RUBRIC_SYSTEM } from "../prompts/planning.js";
 import { PLANNER_SYSTEM } from "../prompts/planner.js";
 import { runReactLoop } from "../react-loop.js";
@@ -14,8 +14,8 @@ export interface PlanningPhaseResult<T> {
 
 interface RubricInput { planning: HzPlanInput; prior: HzRubric | null; critique: HzPlanCritique | null; tools: string[] }
 interface DesignInput { planning: HzPlanInput; rubric: HzRubric; prior: HzDesign | null; critique: HzPlanCritique | null; tools: string[] }
-interface DecompositionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; prior: HzWorkPlan | null;
-  critique: HzPlanCritique | null; tools: string[] }
+interface DecompositionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; milestoneId: string;
+  acceptedSteps: HzPlanStep[]; prior: HzPlanStep[]; critique: HzPlanCritique | null; tools: string[] }
 interface AssertionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
   stepId: string; prior: HzStepAssertions | null; critique: HzPlanCritique | null; tools: string[] }
 interface CritiqueInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
@@ -56,16 +56,19 @@ export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
   },
 });
 
-export const decompositionAgent = subtask<PlanningPhaseResult<HzWorkPlan>>({
-  id: "horizon-decomposition", version: "1",
+export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>({
+  id: "horizon-milestone-decomposition", version: "1",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DecompositionInput>(ctx, envelope);
+    const milestone = input.design.milestones.find(({ id }) => id === input.milestoneId);
+    if (!milestone) throw new TypeError("milestone decomposition received an unknown milestone");
     const loop = await runReactLoop({ role: "decomposition", system: DECOMPOSITION_SYSTEM,
-      objective: "Decompose milestones into ordered specialist agentic loops.",
+      objective: `Decompose milestone ${milestone.id} into ordered specialist agentic loops.`,
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
-        priorWorkPlan: input.prior, critique: input.critique },
+        assignedMilestone: milestone,
+        acceptedPrerequisiteSteps: input.acceptedSteps, priorMilestoneSteps: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: 24,
-      parse: (value) => parseHzWorkPlan(value, input.planning.revision) }, ctx);
+      parse: (value) => parseHzMilestoneWork(value, input.planning.revision, input.milestoneId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });

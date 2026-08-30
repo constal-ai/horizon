@@ -37,21 +37,21 @@ Use the revision supplied in context. Milestone dependencies must be acyclic.`,
 });
 
 export const DECOMPOSITION_SYSTEM = composePrompt({
-  role: "You are Horizon's work-decomposition agent. You turn an accepted rubric and design into ordered specialist agentic loops.",
-  task: `For every milestone responsibility, create the smallest coherent work units that can be executed and verified independently. Each work unit becomes a fresh execution Agent Run.
+  role: "You are Horizon's per-milestone work-decomposition agent. You turn one accepted design milestone into ordered specialist agentic loops.",
+  task: `For every responsibility owned by the assigned milestone, create the smallest coherent work units that can be executed and verified independently. Each work unit becomes a fresh execution Agent Run.
 
 A semantic decision may be its own work unit. A decision needing several observations or actions is one agentic loop when those actions share a stop condition. Split only at a real dependency, ownership, authority, rollback, migration, or proof boundary.`,
-  context: "Dynamic context supplies the rubric, design, discovery evidence, previous plan and completed work during replanning, and critique feedback on repair passes.",
+  context: "Dynamic context supplies the rubric, full design, one assigned milestone, already accepted prerequisite steps, discovery evidence, previous plan and completed work during replanning, and critique feedback on repair passes.",
   rules: `${COMMON_RULES}
 
-Steps must be self-contained natural-language specifications, not file checklists. State the specialist responsibility, dependencies, observable verification, and semantic stop condition.
+Steps must be self-contained natural-language specifications, not file checklists. State the assigned milestone id, specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
 
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",
   output: `Return exactly:
-{"object":"constal.horizon.work-plan","version":1,"revision":1,"steps":[{"id":"stable id","title":"work unit","responsibility":"one coherent semantic responsibility","specification":"self-contained execution specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"completion or honest plateau condition"}]}
+{"object":"constal.horizon.milestone-work","version":1,"revision":1,"milestoneId":"exact assigned milestone id","steps":[{"id":"stable id","milestoneId":"exact assigned milestone id","title":"work unit","responsibility":"one coherent semantic responsibility","specification":"self-contained execution specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"completion or honest plateau condition"}]}
 
-Use the revision supplied in context. Step dependencies must be acyclic.`,
+Use the revision supplied in context. Dependencies may reference accepted prerequisite step ids or earlier steps in this milestone.`,
 });
 
 export const ASSERTION_SYSTEM = composePrompt({
@@ -85,4 +85,3 @@ Use blocking only when execution would be materially wrong, unsafe, unverifiable
 
 Use the revision supplied in context. accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
 });
-

@@ -10,7 +10,7 @@ function handle<T>(value: T): Handle<T> {
   return promise as Handle<T>;
 }
 
-const step = { id: "implement", title: "Implement", responsibility: "Implement durable behavior.",
+const step = { id: "implement", milestoneId: "behavior", title: "Implement", responsibility: "Implement durable behavior.",
   specification: "Reuse the runtime seam and prove replay.", dependsOn: [], verification: ["Focused replay test passes."],
   stopWhen: "Replay is proven." };
 const assertions: HzStepAssertions = { object: "constal.horizon.step-assertions", version: 1, revision: 1,
@@ -42,9 +42,14 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
     planImplications: ["Reuse runtime."], blockedReason: null }], revision: 1, previousPlan: null, completed: [],
   replanBrief: null, answer: null, tools: [] };
 
-function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design]) {
+function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design], options: {
+  workByMilestone?: Record<string, typeof workPlan.steps>;
+  assertionsByStep?: Record<string, HzStepAssertions>;
+  finalPlan?: HzPlan;
+} = {}) {
   const spawned: string[] = []; const committed: Array<{ kind?: string; phase?: string }> = [];
   const artifacts = new Map<string, string>([["planning-input", JSON.stringify(input)]]); let artifactSequence = 0;
+  const decompositionInputs: Array<{ milestoneId: string; acceptedSteps: typeof workPlan.steps }> = [];
   let designIndex = 0; let criticIndex = 0;
   const ctx = {
     resources: { model: "model", cas: "cas" },
@@ -58,14 +63,22 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
       }
       throw new Error(`unexpected CAS operation ${operation}`);
     },
-    spawn: (task: { id: string }) => {
+    spawn: (task: { id: string }, envelope: { ref?: string }) => {
       spawned.push(task.id);
       if (task.id === "horizon-rubric") return handle({ artifact: rubric, toolEvidence: [] });
       if (task.id === "horizon-design") return handle({ artifact: designs[Math.min(designIndex++, designs.length - 1)]!, toolEvidence: [] });
-      if (task.id === "horizon-decomposition") return handle({ artifact: workPlan, toolEvidence: [] });
-      if (task.id === "horizon-assertions") return handle({ artifact: assertions, toolEvidence: [] });
+      if (task.id === "horizon-milestone-decomposition") {
+        const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { milestoneId: string; acceptedSteps: typeof workPlan.steps };
+        decompositionInputs.push({ milestoneId: phase.milestoneId, acceptedSteps: phase.acceptedSteps });
+        return handle({ artifact: { object: "constal.horizon.milestone-work", version: 1, revision: 1,
+          milestoneId: phase.milestoneId, steps: options.workByMilestone?.[phase.milestoneId] ?? [step] }, toolEvidence: [] });
+      }
+      if (task.id === "horizon-assertions") {
+        const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { stepId: string };
+        return handle({ artifact: options.assertionsByStep?.[phase.stepId] ?? assertions, toolEvidence: [] });
+      }
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
-      if (task.id === "horizon-plan-finalizer") return handle({ artifact: finalPlan, toolEvidence: [] });
+      if (task.id === "horizon-plan-finalizer") return handle({ artifact: options.finalPlan ?? finalPlan, toolEvidence: [] });
       throw new Error(`unexpected task ${task.id}`);
     },
     commit: async (artifact: { kind?: string; phase?: string }) => {
@@ -73,7 +86,7 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
       return { hash: `fact-${committed.length}`, artifact, artifactHash: `artifact-${committed.length}` } as unknown as Fact<unknown>;
     },
   } as unknown as Ctx;
-  return { ctx, spawned, committed, envelope: { ref: "planning-input" } };
+  return { ctx, spawned, committed, decompositionInputs, envelope: { ref: "planning-input" } };
 }
 
 describe("Horizon multi-loop planner", () => {
@@ -82,10 +95,10 @@ describe("Horizon multi-loop planner", () => {
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan).toEqual(finalPlan);
     expect(result.planningRuns).toBe(7);
-    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-decomposition",
+    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition",
       "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer"]);
     expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-phase").map(({ phase }) => phase))
-      .toEqual(["rubric", "design", "decomposition", "assertions:implement", "critique", "finalization"]);
+      .toEqual(["rubric", "design", "decomposition:behavior", "assertions:implement", "critique", "finalization"]);
   });
 
   it("reruns the owning phase and every dependent planning loop before re-critique", async () => {
@@ -97,8 +110,30 @@ describe("Horizon multi-loop planner", () => {
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("ready");
     expect(result.planningRuns).toBe(11);
-    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-decomposition", "horizon-assertions",
-      "horizon-plan-critique", "horizon-design", "horizon-decomposition", "horizon-assertions",
+    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition", "horizon-assertions",
+      "horizon-plan-critique", "horizon-design", "horizon-milestone-decomposition", "horizon-assertions",
       "horizon-plan-critique", "horizon-plan-finalizer"]);
+  });
+
+  it("runs one decomposition loop per milestone and feeds accepted prerequisite steps forward", async () => {
+    const proofStep = { ...step, id: "prove", milestoneId: "proof", title: "Prove",
+      responsibility: "Prove the durable behavior independently.", dependsOn: [step.id] };
+    const proofAssertions: HzStepAssertions = { ...assertions, stepId: proofStep.id,
+      assertions: [{ ...assertions.assertions[0]!, id: "independent-proof", claim: "Independent proof passes." }] };
+    const twoMilestones: HzDesign = { ...design, milestones: [design.milestones[0]!, {
+      id: "proof", title: "Independent proof", outcome: "The behavior is independently proven.", dependsOn: ["behavior"],
+      responsibilities: [proofStep.responsibility], risks: ["Incomplete negative-path proof."] }] };
+    const twoStepPlan: HzPlan = { ...finalPlan, steps: [step, proofStep], assertions: [assertions, proofAssertions] };
+    const fixture = planningContext([accepted], [twoMilestones], {
+      workByMilestone: { behavior: [step], proof: [proofStep] },
+      assertionsByStep: { [step.id]: assertions, [proofStep.id]: proofAssertions }, finalPlan: twoStepPlan,
+    });
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+    expect(result.planningRuns).toBe(9);
+    expect(fixture.spawned.filter((id) => id === "horizon-milestone-decomposition")).toHaveLength(2);
+    expect(fixture.decompositionInputs).toEqual([
+      { milestoneId: "behavior", acceptedSteps: [] },
+      { milestoneId: "proof", acceptedSteps: [step] },
+    ]);
   });
 });

@@ -31,7 +31,7 @@ Map critique state exactly: accepted becomes ready, needs-input becomes needs-in
   "specification":"the complete natural-language execution specification",
   "workspaceRoot":"/workspace/... or null",
   "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
-  "steps":[{"id":"stable id","title":"work unit","responsibility":"specialist responsibility","specification":"self-contained natural-language work specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"semantic completion or honest plateau condition"}],
+  "steps":[{"id":"stable id","milestoneId":"design milestone id","title":"work unit","responsibility":"specialist responsibility","specification":"self-contained natural-language work specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"semantic completion or honest plateau condition"}],
   "assertions":[{"object":"constal.horizon.step-assertions","version":1,"revision":1,"stepId":"step id","assertions":[{"id":"assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}],
   "risks":["specific risk"],
   "question":"one blocking user decision or null",
