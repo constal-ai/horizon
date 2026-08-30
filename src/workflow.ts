@@ -1,9 +1,9 @@
 import { hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
 import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
-import { discoveryFramer, executor, investigator, planner, reconciler } from "./tasks/index.js";
+import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES,
-  PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES } from "./tools/index.js";
+  PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 
 const MAX_PLAN_REVISIONS = 8;
 const MAX_WORKFLOW_TRANSITIONS = 384;
@@ -17,8 +17,8 @@ function nextStep(plan: HzPlan, completed: readonly HzStepResult[]): HzPlan["ste
   return plan.steps.find(({ id, dependsOn }) => !done.has(id) && dependsOn.every((dependency) => done.has(dependency))) ?? null;
 }
 
-function updateCompleted(completed: HzStepResult[], result: HzStepResult): HzStepResult[] {
-  if (result.status !== "complete") return completed;
+function updateCompleted(completed: HzStepResult[], result: HzStepResult, verified: boolean): HzStepResult[] {
+  if (result.status !== "complete" || !verified) return completed;
   return [...completed.filter(({ stepId }) => stepId !== result.stepId), result];
 }
 
@@ -176,22 +176,34 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     specialistRuns++;
     const stepFact = await ctx.commit({ kind: "horizon.step-result", planFact: current.fact, result: executed.result,
       toolEvidence: executed.toolEvidence }, { tier: "audit" });
-    const resultDigest = await hashValue(executed.result);
+    const verifierTools = availableTools(VERIFIER_TOOL_NAMES, ctx);
+    const verified = await ctx.spawn(verifier, { request, plan: current.plan, planFact: current.fact, step,
+      execution: executed.result, tools: verifierTools }, {
+      retries: 1, dedupe: "specHash", budget: { turns: 24, microUsd: 8_000_000, wallMs: 3_600_000 },
+      attenuation: attenuation(verifierTools, ctx),
+    });
+    specialistRuns++;
+    const verificationFact = await ctx.commit({ kind: "horizon.verification", planFact: current.fact,
+      stepFact: stepFact.hash, verification: verified.verification, toolEvidence: verified.toolEvidence }, { tier: "audit" });
+    const resultDigest = await hashValue({ execution: executed.result, verification: verified.verification });
     resultDigests = [...new Set([...resultDigests, resultDigest])];
-    completed = updateCompleted(completed, executed.result);
+    completed = updateCompleted(completed, executed.result, verified.verification.verdict === "passed");
 
-    plateau = await progressState(plateau, completed, resultDigests, executed.result.unknowns);
-    await ctx.commit({ kind: "horizon.progress", planFact: current.fact, step: step.id, plateau }, { tier: "audit" });
+    plateau = await progressState(plateau, completed, resultDigests,
+      [...executed.result.unknowns, ...verified.verification.unknowns]);
+    await ctx.commit({ kind: "horizon.progress", planFact: current.fact, step: step.id,
+      verificationFact: verificationFact.hash, plateau }, { tier: "audit" });
 
     const reconcilerTools = availableTools(RECONCILER_TOOL_NAMES, ctx);
     const reconciled = await ctx.spawn(reconciler, { request, plan: current.plan, planFact: current.fact,
-      completed, latest: executed.result, plateau, tools: reconcilerTools }, {
+      completed, latest: executed.result, verification: verified.verification, plateau, tools: reconcilerTools }, {
       retries: 1, dedupe: "specHash", budget: { turns: 12, microUsd: 5_000_000, wallMs: 1_800_000 },
       attenuation: attenuation(reconcilerTools, ctx),
     });
     specialistRuns++;
     await ctx.commit({ kind: "horizon.reconciliation", planFact: current.fact, stepFact: stepFact.hash,
-      reconciliation: reconciled.reconciliation, toolEvidence: reconciled.toolEvidence }, { tier: "audit" });
+      verificationFact: verificationFact.hash, reconciliation: reconciled.reconciliation,
+      toolEvidence: reconciled.toolEvidence }, { tier: "audit" });
 
     const decision = reconciled.reconciliation;
     remainingUnknowns = decision.remainingUnknowns;

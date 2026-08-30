@@ -32,6 +32,13 @@ const investigation = {
   evidence: ["src/index.ts"], unknowns: [], planImplications: ["Reuse the runtime seam."], blockedReason: null,
 };
 
+const verification = {
+  object: "constal.horizon.verification" as const, version: 1 as const, stepId: "implement",
+  verdict: "passed" as const, summary: "Independent proof passed.",
+  checks: [{ target: "focused behavior", outcome: "passed" as const, evidence: "focused test passed" }],
+  unknowns: [], failureBrief: null, blockedReason: null,
+};
+
 function handle<T>(value: T): Handle<T> {
   const promise = Promise.resolve(value) as Promise<T> & Partial<Handle<T>>;
   Object.assign(promise, { id: "handle", resolved: true, seq: 1, outcome: null, result: value, error: undefined,
@@ -55,6 +62,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [] });
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
+        if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 1, action: "complete", summary: "All work is proven.",
           remainingUnknowns: [], replanBrief: null, question: null, blockedReason: null,
@@ -68,10 +76,10 @@ describe("Horizon workflow", () => {
     const result = await runHorizon({ objective: plan.objective }, ctx);
     expect(result.status).toBe("complete");
     expect(result.artifact?.ref).toBe("artifact-ref");
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 5, replans: 0 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 6, replans: 0 });
     expect((committed as Array<{ kind?: string }>).map(({ kind }) => kind)).toEqual([
       "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
-      "horizon.progress", "horizon.reconciliation", "horizon.result",
+      "horizon.verification", "horizon.progress", "horizon.reconciliation", "horizon.result",
     ]);
   });
 
@@ -83,6 +91,9 @@ describe("Horizon workflow", () => {
     const failed: HzStepResult = { ...stepResult, status: "failed", summary: "The planned seam was stale.",
       changedFiles: [], verification: ["focused test exposed the stale seam"], unknowns: [{ id: "stale-seam",
         question: "Which live boundary replaces the planned seam?", state: "open", resolution: null, evidence: ["test failure"] }] };
+    const failedVerification = { ...verification, verdict: "failed" as const, summary: "The focused proof failed.",
+      checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "focused test failed" }],
+      failureBrief: "Use the observed live seam and make the focused test pass." };
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
@@ -101,6 +112,9 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-executor") {
           executorRuns++;
           return handle({ result: executorRuns === 1 ? failed : stepResult, toolEvidence: [] });
+        }
+        if (task.id === "horizon-verifier") {
+          return handle({ verification: executorRuns === 1 ? failedVerification : verification, toolEvidence: [] });
         }
         if (task.id === "horizon-reconciler") {
           reconcilerRuns++;
@@ -123,7 +137,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
     expect(result.plan.revision).toBe(2);
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 8, replans: 1 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 10, replans: 1 });
     expect(committed.filter(({ kind }) => kind === "horizon.plan").map(({ plan: committedPlan }) => committedPlan?.revision)).toEqual([1, 2]);
     expect(committed.filter(({ kind }) => kind === "horizon.step-result")).toHaveLength(2);
   });

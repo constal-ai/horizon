@@ -83,6 +83,24 @@ export interface HzStepResult {
   blockedReason: string | null;
 }
 
+export interface HzVerificationCheck {
+  target: string;
+  outcome: "passed" | "failed" | "not-run";
+  evidence: string;
+}
+
+export interface HzVerification {
+  object: "constal.horizon.verification";
+  version: 1;
+  stepId: string;
+  verdict: "passed" | "failed" | "blocked";
+  summary: string;
+  checks: HzVerificationCheck[];
+  unknowns: HzUnknown[];
+  failureBrief: string | null;
+  blockedReason: string | null;
+}
+
 export type HzReconcileAction = "continue" | "replan" | "ask" | "complete" | "blocked";
 
 export interface HzReconciliation {
@@ -155,12 +173,27 @@ export interface HzExecutorResult {
   toolEvidence: HzToolEvidence[];
 }
 
+export interface HzVerifierInput {
+  request: HzRequest;
+  plan: HzPlan;
+  planFact: string;
+  step: HzPlanStep;
+  execution: HzStepResult;
+  tools: string[];
+}
+
+export interface HzVerifierResult {
+  verification: HzVerification;
+  toolEvidence: HzToolEvidence[];
+}
+
 export interface HzReconcilerInput {
   request: HzRequest;
   plan: HzPlan;
   planFact: string;
   completed: HzStepResult[];
   latest: HzStepResult;
+  verification: HzVerification;
   plateau: HzPlateauState;
   tools: string[];
 }
@@ -353,6 +386,28 @@ export function parseHzStepResult(value: unknown, expectedStepId?: string): HzSt
   if (status === "blocked" && !blockedReason) return null;
   return { object: "constal.horizon.step-result", version: 1, stepId, status: status as HzStepStatus,
     summary, changedFiles, verification, observations, unknowns: parsedUnknowns, blockedReason };
+}
+
+function parseHzVerificationCheck(value: unknown): HzVerificationCheck | null {
+  const source = item(value); const target = string(source?.target, 8_192); const outcome = source?.outcome;
+  const evidence = string(source?.evidence, 16_384);
+  if (!source || !target || !["passed", "failed", "not-run"].includes(String(outcome)) || !evidence) return null;
+  return { target, outcome: outcome as HzVerificationCheck["outcome"], evidence };
+}
+
+export function parseHzVerification(value: unknown, expectedStepId?: string): HzVerification | null {
+  const source = item(value); const stepId = string(source?.stepId, 256); const verdict = source?.verdict;
+  const summary = string(source?.summary, 32_768); const parsedUnknowns = unknowns(source?.unknowns);
+  const failureBrief = nullableString(source?.failureBrief, 32_768); const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.verification" || source.version !== 1 || !stepId
+    || expectedStepId !== undefined && stepId !== expectedStepId
+    || !["passed", "failed", "blocked"].includes(String(verdict)) || !summary || !parsedUnknowns
+    || failureBrief === undefined || blockedReason === undefined || !Array.isArray(source.checks) || source.checks.length > 128) return null;
+  const checks = source.checks.map(parseHzVerificationCheck);
+  if (!checks.every((check): check is HzVerificationCheck => check !== null)
+    || verdict === "failed" && !failureBrief || verdict === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.verification", version: 1, stepId,
+    verdict: verdict as HzVerification["verdict"], summary, checks, unknowns: parsedUnknowns, failureBrief, blockedReason };
 }
 
 export function parseHzReconciliation(value: unknown): HzReconciliation | null {

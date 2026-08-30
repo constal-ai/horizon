@@ -19,6 +19,7 @@ export const reconciler = subtask<HzReconcilerResult>({
         planFact: input.planFact,
         completed: input.completed,
         latest: input.latest,
+        verification: input.verification,
         pendingStepIds: pending.map(({ id }) => id),
         plateau: input.plateau,
       },
@@ -30,7 +31,8 @@ export const reconciler = subtask<HzReconcilerResult>({
         if (!result) return null;
         if (result.action === "complete" && pending.length > 0) return null;
         if (result.action === "complete" && result.remainingUnknowns.some(({ state }) => !["resolved", "assumed"].includes(state))) return null;
-        if (result.action === "continue" && (pending.length === 0 || input.latest.status !== "complete")) return null;
+        if (result.action === "continue" && (pending.length === 0 || input.latest.status !== "complete"
+          || input.verification.verdict !== "passed")) return null;
         return result;
       },
     }, ctx);

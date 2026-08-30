@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzReconciliation, parseHzRequest,
-  parseHzStepResult } from "../src/contracts.js";
+  parseHzStepResult, parseHzVerification } from "../src/contracts.js";
 
 const unknown = { id: "architecture-seam", question: "Which existing abstraction owns publication?", state: "resolved",
   resolution: "The deployment boundary owns it.", evidence: ["src/deploy.ts"] };
@@ -54,5 +54,16 @@ describe("Horizon transport contracts", () => {
       status: "complete", summary: "The coordinator owns recovery.", findings: ["Recovery is ledger-driven."],
       evidence: ["src/runtime.ts"], unknowns: [unknown], planImplications: ["Keep recovery in the coordinator."],
       blockedReason: null }, "runtime")?.status).toBe("complete");
+  });
+
+  it("validates independent verification without interpreting its prose mechanically", () => {
+    expect(parseHzVerification({ object: "constal.horizon.verification", version: 1, stepId: "implement",
+      verdict: "passed", summary: "The specified behavior and replay proof passed.",
+      checks: [{ target: "Replay after interruption", outcome: "passed", evidence: "focused replay test passed" }],
+      unknowns: [], failureBrief: null, blockedReason: null }, "implement")?.verdict).toBe("passed");
+    expect(parseHzVerification({ object: "constal.horizon.verification", version: 1, stepId: "implement",
+      verdict: "failed", summary: "Replay still duplicates the effect.",
+      checks: [{ target: "Replay after interruption", outcome: "failed", evidence: "duplicate receipt observed" }],
+      unknowns: [], failureBrief: null, blockedReason: null }, "implement")).toBeNull();
   });
 });

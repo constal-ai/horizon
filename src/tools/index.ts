@@ -26,6 +26,10 @@ export const EXECUTOR_TOOL_NAMES = [
 
 export const RECONCILER_TOOL_NAMES = ["workspace_list", "workspace_search", "workspace_read", "workspace_diff"] as const;
 
+export const VERIFIER_TOOL_NAMES = [
+  "workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_diff",
+] as const;
+
 function requiredBindings(tool: Tool): string[] {
   const catalog = tool as Tool & { catalog?: { binding?: unknown } };
   return [...new Set([

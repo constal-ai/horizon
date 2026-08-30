@@ -1,5 +1,5 @@
 import { agent } from "@constal/sdk";
-import { discoveryFramer, executor, investigator, planner, reconciler } from "./tasks/index.js";
+import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { TOOLS } from "./tools/index.js";
 import { runHorizon } from "./workflow.js";
 
@@ -9,10 +9,11 @@ export default agent({
   model: "model",
   mode: "script",
   tools: TOOLS,
-  subtasks: [discoveryFramer, investigator, planner, executor, reconciler],
+  subtasks: [discoveryFramer, investigator, planner, executor, verifier, reconciler],
   onMessage: runHorizon,
 });
 
-export { parseHzPlan, parseHzReconciliation, parseHzRequest, parseHzStepResult } from "./contracts.js";
+export { parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzReconciliation, parseHzRequest,
+  parseHzStepResult, parseHzVerification } from "./contracts.js";
 export { EvidencePlateauDetector } from "./react-loop.js";
 export { runHorizon } from "./workflow.js";
