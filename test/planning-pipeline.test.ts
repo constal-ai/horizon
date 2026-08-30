@@ -136,4 +136,32 @@ describe("Horizon multi-loop planner", () => {
       { milestoneId: "proof", acceptedSteps: [step] },
     ]);
   });
+
+  it("routes an evidence-insoluble semantic decision to a durable user question", async () => {
+    const userFinding: HzPlanCritique = { ...accepted, verdict: "repair", summary: "A product decision remains.",
+      findings: [{ id: "public-contract", owner: "user", severity: "blocking",
+        issue: "Should the public contract preserve v1 or adopt v2?", evidence: ["Both contracts exist."],
+        repair: "Obtain the user's intended compatibility boundary." }] };
+    const needsInput: HzPlan = { ...finalPlan, status: "needs-input",
+      question: userFinding.findings[0]!.issue, blockedReason: null };
+    const fixture = planningContext([userFinding], [design], { finalPlan: needsInput });
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+    expect(result.plan.status).toBe("needs-input");
+    expect(result.plan.question).toBe(userFinding.findings[0]!.issue);
+    expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-route");
+  });
+
+  it("blocks when owner-routed planning repair leaves the artifacts unchanged", async () => {
+    const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Assertion proof is incomplete.",
+      findings: [{ id: "negative-proof", owner: "assertions", severity: "blocking",
+        issue: "The negative path is not independently proven.", evidence: ["Current assertion set."],
+        repair: "Add executable negative-path proof." }] };
+    const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
+      blockedReason: "Planning repair plateaued without changing the affected artifacts." };
+    const fixture = planningContext([repair], [design], { finalPlan: blocked });
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+    expect(result.plan.status).toBe("blocked");
+    expect(result.planningRuns).toBe(8);
+    expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
+  });
 });
