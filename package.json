@@ -1,0 +1,19 @@
+{
+  "name": "@constal/horizon",
+  "version": "0.1.0",
+  "description": "Constal's long-horizon software agent.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@constal/sdk": "2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
