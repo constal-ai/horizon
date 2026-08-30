@@ -20,6 +20,15 @@ export function normalizeWorkspacePath(path: string, cwd = "/workspace"): string
   return normalized;
 }
 
+export function normalizeRepositoryPath(path: string, cwd: string): string {
+  const root = normalizeWorkspacePath(cwd);
+  const normalized = normalizeWorkspacePath(path, root);
+  if (normalized !== root && !normalized.startsWith(`${root}/`)) {
+    throw new TypeError("repository path is outside the selected repository");
+  }
+  return normalized === root ? "." : normalized.slice(root.length + 1);
+}
+
 async function workspace(ctx: Ctx): Promise<Sandbox> {
   const resource = ctx.resources.sandbox;
   if (!resource) throw new TypeError("Horizon requires a bound Sandbox Pool");
@@ -92,8 +101,9 @@ const list: Tool = {
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false }, maxEffect: "read-only",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
-    const selected = await workspace(ctx);
-    return command(selected, "git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...(args.paths ?? [])], args.cwd ?? "/workspace");
+    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
+    return command(selected, "git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...paths], cwd);
   },
 };
 
@@ -104,8 +114,9 @@ const search: Tool = {
     paths: pathsProperty, maximumMatches: { type: "integer", minimum: 1, maximum: 500 } }, required: ["query"], additionalProperties: false },
   maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { query: string; cwd?: string; paths?: string[]; maximumMatches?: number }, ctx) {
-    const selected = await workspace(ctx); const maximum = args.maximumMatches ?? 200;
-    return command(selected, "rg", ["--line-number", "--no-heading", "--color", "never", "--max-count", String(maximum), "--", args.query, ...(args.paths ?? ["."])], args.cwd ?? "/workspace");
+    const selected = await workspace(ctx); const maximum = args.maximumMatches ?? 200; const cwd = args.cwd ?? "/workspace";
+    const paths = (args.paths ?? ["."]).map((path) => normalizeRepositoryPath(path, cwd));
+    return command(selected, "rg", ["--line-number", "--no-heading", "--color", "never", "--max-count", String(maximum), "--", args.query, ...paths], cwd);
   },
 };
 
@@ -183,8 +194,9 @@ const diff: Tool = {
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false },
   maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
-    const selected = await workspace(ctx);
-    return command(selected, "git", ["diff", "--no-ext-diff", "--", ...(args.paths ?? [])], args.cwd ?? "/workspace");
+    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
+    return command(selected, "git", ["diff", "--no-ext-diff", "--", ...paths], cwd);
   },
 };
 
@@ -198,8 +210,9 @@ const pack: Tool = {
     if (args.paths.length === 0) throw new TypeError("workspace_package requires at least one path");
     const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
     const output = normalizeWorkspacePath(args.output ?? "/workspace/.constal/horizon-artifact.tar.gz", cwd);
+    const paths = args.paths.map((path) => normalizeRepositoryPath(path, cwd));
     await requireCommand(selected, "mkdir", ["-p", "--", output.slice(0, output.lastIndexOf("/"))]);
-    const result = await command(selected, "tar", ["-czf", output, "--", ...args.paths], cwd, { outputs: [output] });
+    const result = await command(selected, "tar", ["-czf", output, "--", ...paths], cwd, { outputs: [output] });
     if (!succeeded(result)) throw new Error(`workspace package failed (${result.status}, exit ${result.exitCode ?? "unknown"})`);
     const artifact = result.outputs.find(({ path }) => path === output);
     if (!artifact) throw new Error("workspace package completed without its declared output");

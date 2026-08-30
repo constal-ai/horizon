@@ -1,12 +1,12 @@
-import { hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
 import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES,
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 
-const MAX_PLAN_REVISIONS = 8;
-const MAX_WORKFLOW_TRANSITIONS = 384;
+const MAX_PLAN_REVISIONS = 64;
+const MAX_WORKFLOW_TRANSITIONS = 1_024;
 
 function attenuation(names: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
   return { bindings: bindingsForTools(names, ctx), tools: [...names].sort() };
@@ -20,6 +20,30 @@ function nextStep(plan: HzPlan, completed: readonly HzStepResult[]): HzPlan["ste
 function updateCompleted(completed: HzStepResult[], result: HzStepResult, verified: boolean): HzStepResult[] {
   if (result.status !== "complete" || !verified) return completed;
   return [...completed.filter(({ stepId }) => stepId !== result.stepId), result];
+}
+
+export function reconcileCompletedForPlan(previous: HzPlan, next: HzPlan, completed: HzStepResult[]): {
+  completed: HzStepResult[];
+  invalidated: string[];
+} {
+  const previousSteps = new Map(previous.steps.map((step) => [step.id, step]));
+  const nextSteps = new Map(next.steps.map((step) => [step.id, step]));
+  const previousAssertions = new Map(previous.assertions.map((entry) => [entry.stepId, entry]));
+  const nextAssertions = new Map(next.assertions.map((entry) => [entry.stepId, entry]));
+  const invalidated: string[] = [];
+  const retained = completed.filter((result) => {
+    const nextStep = nextSteps.get(result.stepId);
+    if (!nextStep) return true;
+    const priorStep = previousSteps.get(result.stepId);
+    const previousAssertion = previousAssertions.get(result.stepId); const nextAssertion = nextAssertions.get(result.stepId);
+    const unchanged = priorStep !== undefined && canonicalJson({ step: priorStep,
+      assertions: previousAssertion ? { stepId: previousAssertion.stepId, assertions: previousAssertion.assertions } : null })
+      === canonicalJson({ step: nextStep,
+        assertions: nextAssertion ? { stepId: nextAssertion.stepId, assertions: nextAssertion.assertions } : null });
+    if (!unchanged) invalidated.push(result.stepId);
+    return unchanged;
+  });
+  return { completed: retained, invalidated: [...new Set(invalidated)].sort() };
 }
 
 function unknownFrontier(unknowns: readonly HzPlan["unknowns"][number][]): unknown[] {
@@ -74,18 +98,28 @@ async function answerQuestion(question: string, revision: number, ctx: Ctx): Pro
   return answer;
 }
 
-async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<HzRunResult["artifact"]> {
-  if (!plan.workspaceRoot || !ctx.resources.sandbox) return null;
-  const selected = await ctx.sandboxPool(ctx.resources.sandbox).createSandbox(ctx.run.agent.crn, ctx.run.session);
-  const output = "/workspace/.constal/horizon-final.tar.gz";
-  const mkdir = await Promise.resolve(selected.exec({ cmd: "mkdir", args: ["-p", "/workspace/.constal"],
-    cwd: "/workspace", timeoutMs: 600_000 }, { timeoutMs: 600_000 }));
-  if (mkdir.status !== "completed" || mkdir.exitCode !== 0) return null;
-  const packed = await Promise.resolve(selected.exec({ cmd: "tar", args: ["-czf", output, "--", "."],
-    cwd: plan.workspaceRoot, outputs: [output], timeoutMs: 600_000 }, { timeoutMs: 600_000 }));
-  if (packed.status !== "completed" || packed.exitCode !== 0) return null;
-  const artifact = packed.outputs.find(({ path }) => path === output);
-  return artifact ? { ref: artifact.ref, bytes: artifact.bytes, path: artifact.path } : null;
+async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzRunResult["artifact"]; error: string | null }> {
+  if (!plan.workspaceRoot || !ctx.resources.sandbox) return { artifact: null, error: "A governed workspace is unavailable." };
+  try {
+    const selected = await ctx.sandboxPool(ctx.resources.sandbox).createSandbox(ctx.run.agent.crn, ctx.run.session);
+    const output = "/workspace/.constal/horizon-final.tar.gz";
+    const mkdir = await Promise.resolve(selected.exec({ cmd: "mkdir", args: ["-p", "/workspace/.constal"],
+      cwd: "/workspace", timeoutMs: 600_000 }, { timeoutMs: 600_000 }));
+    if (mkdir.status !== "completed" || mkdir.exitCode !== 0) {
+      return { artifact: null, error: `Artifact directory creation failed (${mkdir.status}, exit ${mkdir.exitCode ?? "unknown"}).` };
+    }
+    const packed = await Promise.resolve(selected.exec({ cmd: "tar", args: ["-czf", output, "--", "."],
+      cwd: plan.workspaceRoot, outputs: [output], timeoutMs: 600_000 }, { timeoutMs: 600_000 }));
+    if (packed.status !== "completed" || packed.exitCode !== 0) {
+      return { artifact: null, error: `Workspace packaging failed (${packed.status}, exit ${packed.exitCode ?? "unknown"}).` };
+    }
+    const artifact = packed.outputs.find(({ path }) => path === output);
+    return artifact
+      ? { artifact: { ref: artifact.ref, bytes: artifact.bytes, path: artifact.path }, error: null }
+      : { artifact: null, error: "Workspace packaging completed without its declared artifact." };
+  } catch (error) {
+    return { artifact: null, error: error instanceof Error ? error.message.slice(0, 4_096) : "Workspace packaging failed." };
+  }
 }
 
 function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[], summary: string,
@@ -168,10 +202,13 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       }
       answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
       const previous = current.plan;
-      current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
+      const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
         revision: previous.revision + 1, previousPlan: previous, completed,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
-      remainingUnknowns = current.plan.unknowns;
+      const reconciled = reconcileCompletedForPlan(previous, next.plan, completed);
+      if (reconciled.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
+        previousPlanFact: current.fact, nextPlanFact: next.fact, steps: reconciled.invalidated }, { tier: "audit" });
+      completed = reconciled.completed; current = next; remainingUnknowns = current.plan.unknowns;
       specialistRuns += current.planningRuns; replans++;
       continue;
     }
@@ -180,13 +217,20 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     if (!step) {
       const done = new Set(completed.filter(({ status }) => status === "complete").map(({ stepId }) => stepId));
       if (current.plan.steps.every(({ id }) => done.has(id))) {
-        const artifact = await packageWorkspace(current.plan, ctx);
+        const packaged = await packageWorkspace(current.plan, ctx);
+        if (!packaged.artifact) {
+          await ctx.commit({ kind: "horizon.package-failed", planFact: current.fact,
+            reason: packaged.error ?? "Workspace packaging failed." }, { tier: "audit" });
+          return blockedResult(current.plan, current.fact, completed,
+            `Every work unit passed independent verification, but Horizon could not create the immutable final artifact: ${packaged.error ?? "unknown packaging failure"}`,
+            remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+        }
         const result: HzRunResult = {
           object: "constal.horizon.result", version: 1, status: "complete", summary: current.plan.summary,
           plan: { revision: current.plan.revision, fact: current.fact },
           completedSteps: completed.map(({ stepId, status, summary }) => ({ id: stepId, status, summary })),
           remainingUnknowns: remainingUnknowns.filter(({ state }) => !["resolved", "assumed"].includes(state)),
-          artifact,
+          artifact: packaged.artifact,
           longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles: plateau.stableCycles },
         };
         const final = await ctx.commit({ kind: "horizon.result", result }, { tier: "audit" });
@@ -258,10 +302,13 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     }
     if (decision.action === "ask") answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
     const previous = current.plan;
-    current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
+    const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
       revision: previous.revision + 1, previousPlan: previous, completed,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
-    remainingUnknowns = current.plan.unknowns;
+    const planReconciliation = reconcileCompletedForPlan(previous, next.plan, completed);
+    if (planReconciliation.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
+      previousPlanFact: current.fact, nextPlanFact: next.fact, steps: planReconciliation.invalidated }, { tier: "audit" });
+    completed = planReconciliation.completed; current = next; remainingUnknowns = current.plan.unknowns;
     specialistRuns += current.planningRuns; replans++;
   }
   return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",

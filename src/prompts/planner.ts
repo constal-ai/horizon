@@ -38,5 +38,5 @@ Map critique state exactly: accepted becomes ready, needs-input becomes needs-in
   "blockedReason":"specific unavailable capability or null"
 }
 
-Use the revision supplied in context. A ready plan requires a workspaceRoot, at least one ordered step, and exactly one assertion artifact for every step. needs-input requires one question. blocked requires one blockedReason. JSON fields are a transport envelope; put the actual plan in specification and each work unit's specification.`,
+Use the revision supplied in context and copy the original request objective exactly into objective. A ready plan requires a workspaceRoot, at least one ordered step, and exactly one assertion artifact for every step. needs-input requires one question. blocked requires one blockedReason. JSON fields are a transport envelope; put the actual plan in specification and each work unit's specification.`,
 });

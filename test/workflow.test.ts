@@ -1,7 +1,7 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzPlan, HzStepResult } from "../src/contracts.js";
-import { attemptProgressDigest, runHorizon } from "../src/workflow.js";
+import { attemptProgressDigest, reconcileCompletedForPlan, runHorizon } from "../src/workflow.js";
 
 const plan: HzPlan = {
   object: "constal.horizon.plan", version: 1, revision: 1, status: "ready", objective: "Implement durable behavior",
@@ -61,6 +61,15 @@ describe("Horizon workflow", () => {
     expect(failed).not.toBe(first);
   });
 
+  it("preserves completed proof across an unchanged revision and invalidates changed work", () => {
+    const next: HzPlan = { ...plan, revision: 2,
+      assertions: plan.assertions.map((entry) => ({ ...entry, revision: 2 })) };
+    expect(reconcileCompletedForPlan(plan, next, [stepResult])).toEqual({ completed: [stepResult], invalidated: [] });
+    const changed: HzPlan = { ...next,
+      steps: next.steps.map((entry) => ({ ...entry, specification: "A materially changed responsibility." })) };
+    expect(reconcileCompletedForPlan(plan, changed, [stepResult])).toEqual({ completed: [], invalidated: ["implement"] });
+  });
+
   it("commits an immutable plan, delegates one work unit, reconciles, and packages the result", async () => {
     const committed: unknown[] = []; let sequence = 0;
     const ctx = {
@@ -95,6 +104,40 @@ describe("Horizon workflow", () => {
       "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
       "horizon.verification", "horizon.progress", "horizon.reconciliation", "horizon.result",
     ]);
+  });
+
+  it("does not report complete when the immutable final artifact cannot be created", async () => {
+    const committed: Array<{ kind?: string }> = []; let sequence = 0;
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: { kind?: string }) => {
+        committed.push(artifact); sequence++;
+        return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
+      },
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
+        if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
+        if (task.id === "horizon-reconciler") return handle({ reconciliation: {
+          object: "constal.horizon.reconciliation", version: 1, action: "complete", summary: "All work is proven.",
+          remainingUnknowns: [], replanBrief: null, question: null, blockedReason: null,
+        }, toolEvidence: [] });
+        throw new Error(`unexpected task ${task.id}`);
+      },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: (input: { cmd: string }) => input.cmd === "tar"
+        ? handle({ status: "failed", exitCode: 2, outputs: [] })
+        : handle({ status: "completed", exitCode: 0, outputs: [] }) }) }),
+    } as unknown as Ctx;
+
+    const result = await runHorizon(plan.objective, ctx);
+    expect(result.status).toBe("blocked");
+    expect(result.summary).toContain("could not create the immutable final artifact");
+    expect(committed.map(({ kind }) => kind)).toContain("horizon.package-failed");
+    expect(committed.map(({ kind }) => kind)).not.toContain("horizon.result");
   });
 
   it("preserves failed evidence and creates a new immutable plan revision before retrying", async () => {

@@ -1,4 +1,4 @@
-import { subtask } from "@constal/sdk";
+import { canonicalJson, subtask } from "@constal/sdk";
 import { parseHzDesign, parseHzPlan, parseHzPlanCritique, parseHzRubric, parseHzStepAssertions, parseHzWorkPlan,
   type HzDesign, type HzPlan, type HzPlanCritique, type HzPlanInput, type HzRubric, type HzStepAssertions,
   type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
@@ -104,7 +104,13 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlan>>({
       tools: [], model: "model", stream: true, maxRounds: 4,
       parse(value) {
         const plan = parseHzPlan(value);
-        return plan?.revision === input.planning.revision && plan.objective === input.planning.request.objective ? plan : null;
+        const expectedStatus = input.critique.verdict === "accepted" ? "ready"
+          : input.critique.verdict === "needs-input" ? "needs-input" : "blocked";
+        return plan?.revision === input.planning.revision && plan.objective === input.planning.request.objective
+          && plan.status === expectedStatus && canonicalJson(plan.steps) === canonicalJson(input.workPlan.steps)
+          && canonicalJson(plan.assertions) === canonicalJson(input.assertions)
+          && plan.workspaceRoot === input.planning.discoveryPlan.workspaceRoot
+          && (expectedStatus !== "needs-input" || plan.question === input.critique.question) ? plan : null;
       } }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
