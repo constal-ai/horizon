@@ -1,4 +1,5 @@
 import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { storeArtifact } from "./artifacts.js";
 import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
@@ -135,9 +136,13 @@ function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[]
 
 async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPlan; fact: string; planningRuns: number }> {
   const tools = availableTools(PLANNER_TOOL_NAMES, ctx);
-  const result = await ctx.spawn(planner, { ...input, tools }, {
+  const planningInput = await storeArtifact(ctx, { ...input, tools });
+  const baseAttenuation = attenuation(tools, ctx);
+  const plannerAttenuation = { ...baseAttenuation,
+    bindings: [...new Set([...baseAttenuation.bindings, "cas"])].sort() };
+  const result = await ctx.spawn(planner, planningInput, {
     retries: 1, dedupe: "specHash", budget: { turns: 64, microUsd: 100_000_000, wallMs: 14_400_000 },
-    attenuation: attenuation(tools, ctx),
+    attenuation: plannerAttenuation,
   });
   const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan,
     previousRevision: input.previousPlan?.revision ?? null, toolEvidence: result.toolEvidence }, { tier: "audit" });

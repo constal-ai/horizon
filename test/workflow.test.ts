@@ -49,6 +49,21 @@ function handle<T>(value: T): Handle<T> {
   return promise as Handle<T>;
 }
 
+function casRuntime(onStore?: (value: unknown) => void) {
+  const values = new Map<string, string>(); let sequence = 0;
+  return async (_resource: unknown, operation: string, args: { text?: string; ref?: string }) => {
+    if (operation === "putText" && typeof args.text === "string") {
+      onStore?.(JSON.parse(args.text) as unknown);
+      const ref = `cas-${++sequence}`; values.set(ref, args.text);
+      return { ref, bytes: new TextEncoder().encode(args.text).byteLength };
+    }
+    if (operation === "getText" && typeof args.ref === "string" && values.has(args.ref)) {
+      const text = values.get(args.ref)!; return { ref: args.ref, text, bytes: new TextEncoder().encode(text).byteLength };
+    }
+    throw new Error(`unexpected CAS operation ${operation}`);
+  };
+}
+
 describe("Horizon workflow", () => {
   it("fingerprints observed progress independently of self-report wording", async () => {
     const first = await attemptProgressDigest({ execution: stepResult, executionTools: [], verification,
@@ -80,6 +95,7 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
+      invoke: casRuntime(),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
@@ -116,6 +132,7 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
+      invoke: casRuntime(),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
@@ -160,6 +177,7 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
+      invoke: casRuntime(),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
@@ -202,7 +220,7 @@ describe("Horizon workflow", () => {
 
   it("durably waits for a material user decision and synthesizes a new plan revision", async () => {
     const committed: Array<{ kind?: string; plan?: HzPlan }> = []; let sequence = 0; let plannerRuns = 0;
-    const plannerInputs: Array<{ answer?: string | null }> = [];
+    const planningAnswers: Array<string | null> = [];
     const needsInput: HzPlan = { ...plan, status: "needs-input", revision: 1, steps: [], assertions: [],
       question: "Should the public contract preserve v1 behavior or adopt v2?",
       unknowns: [{ id: "contract-version", question: "Which public contract is intended?", state: "needs-input",
@@ -218,12 +236,16 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
+      invoke: casRuntime((value) => {
+        const stored = value && typeof value === "object" && !Array.isArray(value) ? value as { answer?: unknown } : null;
+        if (stored && Object.hasOwn(stored, "answer")) planningAnswers.push(typeof stored.answer === "string" ? stored.answer : null);
+      }),
       await: () => handle({ answer: "Adopt v2." }),
-      spawn: (task: { id: string }, input: { answer?: string | null }) => {
+      spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
-          plannerInputs.push(input); plannerRuns++;
+          plannerRuns++;
           return handle({ plan: plannerRuns === 1 ? needsInput : revised, toolEvidence: [], planningRuns: 7 });
         }
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
@@ -242,7 +264,7 @@ describe("Horizon workflow", () => {
     expect(result.status).toBe("complete");
     expect(result.plan.revision).toBe(2);
     expect(result.longHorizon).toMatchObject({ specialistRuns: 19, replans: 1 });
-    expect(plannerInputs.map(({ answer }) => answer ?? null)).toEqual([null, "Adopt v2."]);
+    expect(planningAnswers).toEqual([null, "Adopt v2."]);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.answer");
   });
 
@@ -262,6 +284,7 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
+      invoke: casRuntime(),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });

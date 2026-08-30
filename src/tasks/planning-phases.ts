@@ -1,4 +1,5 @@
 import { canonicalJson, subtask } from "@constal/sdk";
+import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzDesign, parseHzPlan, parseHzPlanCritique, parseHzRubric, parseHzStepAssertions, parseHzWorkPlan,
   type HzDesign, type HzPlan, type HzPlanCritique, type HzPlanInput, type HzRubric, type HzStepAssertions,
   type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
@@ -31,7 +32,8 @@ function context(planning: HzPlanInput): Record<string, unknown> {
 
 export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
   id: "horizon-rubric", version: "1",
-  async run(input: RubricInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<RubricInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "rubric", system: RUBRIC_SYSTEM,
       objective: "Define the evidence-grounded success rubric.",
       context: { ...context(input.planning), priorRubric: input.prior, critique: input.critique },
@@ -43,7 +45,8 @@ export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
 
 export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
   id: "horizon-design", version: "1",
-  async run(input: DesignInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<DesignInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "design", system: DESIGN_SYSTEM,
       objective: "Close architecture decisions and define delivery milestones.",
       context: { ...context(input.planning), rubric: input.rubric, priorDesign: input.prior, critique: input.critique },
@@ -55,7 +58,8 @@ export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
 
 export const decompositionAgent = subtask<PlanningPhaseResult<HzWorkPlan>>({
   id: "horizon-decomposition", version: "1",
-  async run(input: DecompositionInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<DecompositionInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "decomposition", system: DECOMPOSITION_SYSTEM,
       objective: "Decompose milestones into ordered specialist agentic loops.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
@@ -68,7 +72,8 @@ export const decompositionAgent = subtask<PlanningPhaseResult<HzWorkPlan>>({
 
 export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
   id: "horizon-assertions", version: "1",
-  async run(input: AssertionInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<AssertionInput>(ctx, envelope);
     const step = input.workPlan.steps.find(({ id }) => id === input.stepId);
     if (!step) throw new TypeError("assertion phase received an unknown work unit");
     const loop = await runReactLoop({ role: `assertions-${input.stepId}`, system: ASSERTION_SYSTEM,
@@ -83,7 +88,8 @@ export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
 
 export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
   id: "horizon-plan-critique", version: "1",
-  async run(input: CritiqueInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<CritiqueInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,
       objective: "Reconcile all planning artifacts and decide whether the plan can become immutable.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
@@ -96,7 +102,8 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
 
 export const planFinalizer = subtask<PlanningPhaseResult<HzPlan>>({
   id: "horizon-plan-finalizer", version: "1",
-  async run(input: FinalizerInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<FinalizerInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-finalizer", system: PLANNER_SYSTEM,
       objective: "Render the converged immutable execution specification.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,

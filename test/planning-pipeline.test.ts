@@ -44,9 +44,20 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
 
 function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design]) {
   const spawned: string[] = []; const committed: Array<{ kind?: string; phase?: string }> = [];
+  const artifacts = new Map<string, string>([["planning-input", JSON.stringify(input)]]); let artifactSequence = 0;
   let designIndex = 0; let criticIndex = 0;
   const ctx = {
-    resources: { model: "model" },
+    resources: { model: "model", cas: "cas" },
+    invoke: async (_resource: unknown, operation: string, args: { text?: string; ref?: string }) => {
+      if (operation === "putText" && typeof args.text === "string") {
+        const ref = `phase-${++artifactSequence}`; artifacts.set(ref, args.text);
+        return { ref, bytes: new TextEncoder().encode(args.text).byteLength };
+      }
+      if (operation === "getText" && typeof args.ref === "string" && artifacts.has(args.ref)) {
+        const text = artifacts.get(args.ref)!; return { ref: args.ref, text, bytes: new TextEncoder().encode(text).byteLength };
+      }
+      throw new Error(`unexpected CAS operation ${operation}`);
+    },
     spawn: (task: { id: string }) => {
       spawned.push(task.id);
       if (task.id === "horizon-rubric") return handle({ artifact: rubric, toolEvidence: [] });
@@ -62,13 +73,13 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
       return { hash: `fact-${committed.length}`, artifact, artifactHash: `artifact-${committed.length}` } as unknown as Fact<unknown>;
     },
   } as unknown as Ctx;
-  return { ctx, spawned, committed };
+  return { ctx, spawned, committed, envelope: { ref: "planning-input" } };
 }
 
 describe("Horizon multi-loop planner", () => {
   it("finalizes only after rubric, design, decomposition, assertions, and critique loops", async () => {
     const fixture = planningContext([accepted]);
-    const result = await planner.run(input, fixture.ctx);
+    const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan).toEqual(finalPlan);
     expect(result.planningRuns).toBe(7);
     expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-decomposition",
@@ -83,7 +94,7 @@ describe("Horizon multi-loop planner", () => {
         evidence: ["src/runtime.ts"], repair: "Close the ownership and lifecycle decision." }] };
     const revisedDesign: HzDesign = { ...design, summary: "Runtime owns recovery and its complete lifecycle." };
     const fixture = planningContext([repair, accepted], [design, revisedDesign]);
-    const result = await planner.run(input, fixture.ctx);
+    const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("ready");
     expect(result.planningRuns).toBe(11);
     expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-decomposition", "horizon-assertions",

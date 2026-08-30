@@ -1,4 +1,5 @@
-import { canonicalJson, hashValue, subtask, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
+import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { type HzDesign, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
@@ -8,7 +9,7 @@ import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, planFin
 const MAX_REPAIR_CYCLES = 4;
 
 function attenuation(tools: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
-  return { bindings: bindingsForTools(tools, ctx), tools: [...tools].sort() };
+  return { bindings: [...new Set([...bindingsForTools(tools, ctx), "cas"])].sort(), tools: [...tools].sort() };
 }
 
 function blockedCritique(input: HzPlanInput, summary: string): HzPlanCritique {
@@ -31,13 +32,15 @@ async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
 export const planner = subtask<HzPlannerResult>({
   id: "horizon-planner",
   version: "2",
-  async run(input: HzPlanInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<HzPlanInput>(ctx, envelope);
     const tools = input.tools; const childAttenuation = attenuation(tools, ctx);
     const evidence: HzToolEvidence[] = []; let planningRuns = 1; let repairCycle = 0;
     let critique: HzPlanCritique | null = null;
 
     const runRubric = async (prior: HzRubric | null): Promise<HzRubric> => {
-      const result = await ctx.spawn(rubricAgent, { planning: input, prior, critique, tools }, {
+      const phaseInput = await storeArtifact(ctx, { planning: input, prior, critique, tools });
+      const result = await ctx.spawn(rubricAgent, phaseInput, {
         retries: 1, dedupe: "specHash", budget: { turns: 24, microUsd: 8_000_000, wallMs: 2_400_000 },
         attenuation: childAttenuation,
       });
@@ -45,7 +48,8 @@ export const planner = subtask<HzPlannerResult>({
       return result.artifact;
     };
     const runDesign = async (rubric: HzRubric, prior: HzDesign | null): Promise<HzDesign> => {
-      const result = await ctx.spawn(designAgent, { planning: input, rubric, prior, critique, tools }, {
+      const phaseInput = await storeArtifact(ctx, { planning: input, rubric, prior, critique, tools });
+      const result = await ctx.spawn(designAgent, phaseInput, {
         retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
         attenuation: childAttenuation,
       });
@@ -53,7 +57,8 @@ export const planner = subtask<HzPlannerResult>({
       return result.artifact;
     };
     const runDecomposition = async (rubric: HzRubric, design: HzDesign, prior: HzWorkPlan | null): Promise<HzWorkPlan> => {
-      const result = await ctx.spawn(decompositionAgent, { planning: input, rubric, design, prior, critique, tools }, {
+      const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, prior, critique, tools });
+      const result = await ctx.spawn(decompositionAgent, phaseInput, {
         retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
         attenuation: childAttenuation,
       });
@@ -63,11 +68,14 @@ export const planner = subtask<HzPlannerResult>({
     const runAssertions = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
       prior: HzStepAssertions[]): Promise<HzStepAssertions[]> => {
       const priorByStep = new Map(prior.map((item) => [item.stepId, item]));
-      const handles = workPlan.steps.map((step) => ({ step, handle: ctx.spawn(assertionAgent, {
-        planning: input, rubric, design, workPlan, stepId: step.id,
-        prior: priorByStep.get(step.id) ?? null, critique, tools,
-      }, { retries: 1, dedupe: "specHash", budget: { turns: 20, microUsd: 5_000_000, wallMs: 2_400_000 },
-        attenuation: childAttenuation }) }));
+      const handles: Array<{ step: HzWorkPlan["steps"][number]; handle: Handle<PlanningPhaseResult<HzStepAssertions>> }> = [];
+      for (const step of workPlan.steps) {
+        const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, stepId: step.id,
+          prior: priorByStep.get(step.id) ?? null, critique, tools });
+        handles.push({ step, handle: ctx.spawn(assertionAgent, phaseInput,
+          { retries: 1, dedupe: "specHash", budget: { turns: 20, microUsd: 5_000_000, wallMs: 2_400_000 },
+            attenuation: childAttenuation }) });
+      }
       planningRuns += handles.length;
       const next: HzStepAssertions[] = [];
       for (const { step, handle } of handles) {
@@ -78,8 +86,9 @@ export const planner = subtask<HzPlannerResult>({
     };
     const runCritique = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
       assertions: HzStepAssertions[]): Promise<HzPlanCritique> => {
-      const result = await ctx.spawn(critiqueAgent, { planning: input, rubric, design, workPlan,
-        assertions, prior: critique, tools }, { retries: 1, dedupe: "specHash",
+      const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan,
+        assertions, prior: critique, tools });
+      const result = await ctx.spawn(critiqueAgent, phaseInput, { retries: 1, dedupe: "specHash",
         budget: { turns: 20, microUsd: 6_000_000, wallMs: 2_400_000 }, attenuation: childAttenuation });
       planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "critique", input.revision, result, repairCycle);
       return result.artifact;
@@ -127,9 +136,10 @@ export const planner = subtask<HzPlannerResult>({
       critique = blockedCritique(input, "Planning converged without a governed materialized repository workspace.");
     }
 
-    const finalized = await ctx.spawn(planFinalizer, { planning: input, rubric, design, workPlan, assertions,
-      prior: critique, critique, tools: [] }, { retries: 1, dedupe: "specHash",
-      budget: { turns: 8, microUsd: 5_000_000, wallMs: 1_200_000 }, attenuation: { bindings: ["model"], tools: [] } });
+    const finalizerInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, assertions,
+      prior: critique, critique, tools: [] });
+    const finalized = await ctx.spawn(planFinalizer, finalizerInput, { retries: 1, dedupe: "specHash",
+      budget: { turns: 8, microUsd: 5_000_000, wallMs: 1_200_000 }, attenuation: { bindings: ["cas", "model"], tools: [] } });
     planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
     const plan = finalized.artifact;
     const expectedStatus = critique.verdict === "accepted" ? "ready"
