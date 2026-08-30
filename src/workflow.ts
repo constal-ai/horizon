@@ -22,6 +22,35 @@ function updateCompleted(completed: HzStepResult[], result: HzStepResult, verifi
   return [...completed.filter(({ stepId }) => stepId !== result.stepId), result];
 }
 
+function unknownFrontier(unknowns: readonly HzPlan["unknowns"][number][]): unknown[] {
+  return [...unknowns].sort((left, right) => left.id.localeCompare(right.id)).map((unknown) => ({
+    id: unknown.id, question: unknown.question, state: unknown.state, resolution: unknown.resolution,
+    evidence: [...unknown.evidence].sort(),
+  }));
+}
+
+export async function attemptProgressDigest<V extends {
+  verdict: string;
+  checks: readonly { target: string; outcome: string }[];
+  unknowns: HzPlan["unknowns"];
+}>(input: {
+  execution: HzStepResult;
+  executionTools: readonly unknown[];
+  verification: V;
+  verificationTools: readonly unknown[];
+}): Promise<string> {
+  return hashValue({
+    execution: { status: input.execution.status, changedFiles: [...input.execution.changedFiles].sort(),
+      unknowns: unknownFrontier(input.execution.unknowns) },
+    executionTools: input.executionTools,
+    verification: { verdict: input.verification.verdict,
+      checks: [...input.verification.checks].map(({ target, outcome }) => ({ target, outcome }))
+        .sort((left, right) => left.target.localeCompare(right.target) || left.outcome.localeCompare(right.outcome)),
+      unknowns: unknownFrontier(input.verification.unknowns) },
+    verificationTools: input.verificationTools,
+  });
+}
+
 async function progressState(previous: HzPlateauState, completed: readonly HzStepResult[], resultDigests: readonly string[],
   remainingUnknowns: readonly unknown[]): Promise<HzPlateauState> {
   const fingerprint = await hashValue({
@@ -185,7 +214,9 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     specialistRuns++;
     const verificationFact = await ctx.commit({ kind: "horizon.verification", planFact: current.fact,
       stepFact: stepFact.hash, verification: verified.verification, toolEvidence: verified.toolEvidence }, { tier: "audit" });
-    const resultDigest = await hashValue({ execution: executed.result, verification: verified.verification });
+    const resultDigest = await attemptProgressDigest({ execution: executed.result,
+      executionTools: executed.toolEvidence, verification: verified.verification,
+      verificationTools: verified.toolEvidence });
     resultDigests = [...new Set([...resultDigests, resultDigest])];
     completed = updateCompleted(completed, executed.result, verified.verification.verdict === "passed");
 
@@ -207,6 +238,14 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
 
     const decision = reconciled.reconciliation;
     remainingUnknowns = decision.remainingUnknowns;
+    if (plateau.stableCycles >= 2 && (decision.action === "continue" || decision.action === "replan")) {
+      await ctx.commit({ kind: "horizon.plateau", planFact: current.fact, step: step.id,
+        stableCycles: plateau.stableCycles, fingerprint: plateau.fingerprint,
+        attemptedTransition: decision.action, remainingUnknowns }, { tier: "audit" });
+      return blockedResult(current.plan, current.fact, completed,
+        "Horizon stopped after repeated execution and verification produced no new evidence or resolved uncertainty.",
+        remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+    }
     if (decision.action === "continue") continue;
     if (decision.action === "blocked") {
       return blockedResult(current.plan, current.fact, completed, decision.blockedReason ?? decision.summary,
