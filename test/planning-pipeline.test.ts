@@ -164,4 +164,18 @@ describe("Horizon multi-loop planner", () => {
     expect(result.planningRuns).toBe(8);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
   });
+
+  it("detects an A to B to A planning repair cycle", async () => {
+    const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Design remains inconsistent.",
+      findings: [{ id: "design-cycle", owner: "design", severity: "blocking", issue: "Ownership is inconsistent.",
+        evidence: ["Design artifacts."], repair: "Reconcile ownership." }] };
+    const alternate: HzDesign = { ...design, summary: "Alternate ownership design." };
+    const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
+      blockedReason: "Planning repair returned to an already-observed artifact state." };
+    const fixture = planningContext([repair, repair], [design, alternate, design], { finalPlan: blocked });
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+    expect(result.plan.status).toBe("blocked");
+    expect(result.planningRuns).toBe(14);
+    expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
+  });
 });

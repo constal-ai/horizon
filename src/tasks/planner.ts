@@ -120,6 +120,7 @@ export const planner = subtask<HzPlannerResult>({
     let workPlan = await runDecomposition(rubric, design, null);
     let assertions = await runAssertions(rubric, design, workPlan, []);
     let fingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+    const seenFingerprints = new Set<string>([fingerprint]);
 
     for (;;) {
       critique = await runCritique(rubric, design, workPlan, assertions);
@@ -144,13 +145,13 @@ export const planner = subtask<HzPlannerResult>({
       }
       assertions = await runAssertions(rubric, design, workPlan, assertions);
       const nextFingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
-      if (nextFingerprint === fingerprint) {
-        critique = blockedCritique(input, "Planning repair plateaued without changing the affected artifacts.");
+      if (seenFingerprints.has(nextFingerprint)) {
+        critique = blockedCritique(input, "Planning repair returned to an already-observed artifact state.");
         await ctx.commit({ kind: "horizon.planning-plateau", revision: input.revision,
-          repairCycle, fingerprint, critique }, { tier: "audit" });
+          repairCycle, fingerprint: nextFingerprint, critique }, { tier: "audit" });
         break;
       }
-      fingerprint = nextFingerprint;
+      seenFingerprints.add(nextFingerprint); fingerprint = nextFingerprint;
     }
 
     if (critique.verdict === "accepted" && !input.discoveryPlan.workspaceRoot) {

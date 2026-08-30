@@ -99,6 +99,11 @@ async function answerQuestion(question: string, revision: number, ctx: Ctx): Pro
   return answer;
 }
 
+function questionKey(question: string, unknowns: readonly HzPlan["unknowns"][number][]): string {
+  const ids = unknowns.filter(({ state }) => state === "needs-input").map(({ id }) => id).sort();
+  return ids.length > 0 ? `unknowns:${ids.join("|")}` : `question:${question.trim()}`;
+}
+
 async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzRunResult["artifact"]; error: string | null }> {
   if (!plan.workspaceRoot || !ctx.resources.sandbox) return { artifact: null, error: "A governed workspace is unavailable." };
   try {
@@ -186,6 +191,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
   let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
   let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
+  const answeredQuestions = new Map<string, string>();
 
   const discovery = await discover(request, ctx);
   specialistRuns += discovery.specialistRuns;
@@ -205,7 +211,14 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
         return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling while user decisions remained open.",
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
       }
+      const key = questionKey(current.plan.question!, current.plan.unknowns);
+      if (answeredQuestions.has(key)) {
+        return blockedResult(current.plan, current.fact, completed,
+          "Horizon stopped because planning requested a user decision that this Run already resolved.",
+          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+      }
       answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
+      answeredQuestions.set(key, answer);
       const previous = current.plan;
       const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
         revision: previous.revision + 1, previousPlan: previous, completed,
@@ -305,7 +318,16 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
         decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
     }
-    if (decision.action === "ask") answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
+    if (decision.action === "ask") {
+      const key = questionKey(decision.question!, decision.remainingUnknowns);
+      if (answeredQuestions.has(key)) {
+        return blockedResult(current.plan, current.fact, completed,
+          "Horizon stopped because reconciliation requested a user decision that this Run already resolved.",
+          decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+      }
+      answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
+      answeredQuestions.set(key, answer);
+    }
     const previous = current.plan;
     const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
       revision: previous.revision + 1, previousPlan: previous, completed,

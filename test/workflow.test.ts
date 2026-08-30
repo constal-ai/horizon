@@ -268,6 +268,38 @@ describe("Horizon workflow", () => {
     expect(committed.map(({ kind }) => kind)).toContain("horizon.answer");
   });
 
+  it("does not ask the same stable unknown twice after the user answered it", async () => {
+    let plannerRuns = 0; let awaits = 0; let sequence = 0;
+    const first: HzPlan = { ...plan, status: "needs-input", steps: [], assertions: [],
+      question: "Should the public contract preserve v1 or adopt v2?",
+      unknowns: [{ id: "contract-version", question: "Which contract is intended?", state: "needs-input",
+        resolution: null, evidence: ["Two contracts exist."] }] };
+    const repeated: HzPlan = { ...first, revision: 2,
+      question: "Which of the two public contract versions should be used?" };
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: unknown) => ({ hash: `fact-${++sequence}`, artifact,
+        artifactHash: `artifact-${sequence}` }) as unknown as Fact<unknown>,
+      invoke: casRuntime(),
+      await: () => { awaits++; return handle({ answer: "Adopt v2." }); },
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") {
+          plannerRuns++; return handle({ plan: plannerRuns === 1 ? first : repeated, toolEvidence: [], planningRuns: 7 });
+        }
+        throw new Error(`unexpected task ${task.id}`);
+      },
+    } as unknown as Ctx;
+    const result = await runHorizon(plan.objective, ctx);
+    expect(result.status).toBe("blocked");
+    expect(result.summary).toContain("already resolved");
+    expect(awaits).toBe(1);
+    expect(result.longHorizon.replans).toBe(1);
+  });
+
   it("stops repeated replan cycles when execution and verification add no evidence", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0; let plannerRuns = 0;
     const failedExecution: HzStepResult = { ...stepResult, status: "failed", summary: "Attempt failed.", changedFiles: [],
