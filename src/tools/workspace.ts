@@ -2,7 +2,7 @@ import { hashValue, type Ctx, type Sandbox, type SandboxCommandResult, type Tool
 
 const TIMEOUT_MS = 600_000;
 
-function workspacePath(path: string, cwd = "/workspace"): string {
+export function normalizeWorkspacePath(path: string, cwd = "/workspace"): string {
   if (typeof path !== "string" || path.length === 0 || path.length > 4_096) throw new TypeError("workspace path is invalid");
   for (const character of path) {
     const code = character.codePointAt(0)!;
@@ -28,9 +28,9 @@ async function workspace(ctx: Ctx): Promise<Sandbox> {
 
 async function command(selected: Sandbox, cmd: string, args: string[], cwd = "/workspace",
   options: { stdin?: string; outputs?: string[]; timeoutMs?: number } = {}): Promise<SandboxCommandResult> {
-  return Promise.resolve(selected.exec({ cmd, args, cwd: workspacePath(cwd), timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
+  return Promise.resolve(selected.exec({ cmd, args, cwd: normalizeWorkspacePath(cwd), timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
     ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
-    ...(options.outputs === undefined ? {} : { outputs: options.outputs.map((path) => workspacePath(path, cwd)) }) },
+    ...(options.outputs === undefined ? {} : { outputs: options.outputs.map((path) => normalizeWorkspacePath(path, cwd)) }) },
   { timeoutMs: options.timeoutMs ?? TIMEOUT_MS }));
 }
 
@@ -122,7 +122,7 @@ const read: Tool = {
     return { path: value.path, ref: value.ref, bytes: value.bytes, text: text.slice(0, maximum), truncated: text.length > maximum };
   },
   async run(args: { path: string; maximumBytes?: number }, ctx) {
-    const selected = await workspace(ctx); const path = workspacePath(args.path);
+    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path);
     const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
     const value = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
       { ref: file.ref, maximumBytes: args.maximumBytes ?? 262_144 });
@@ -154,7 +154,7 @@ const write: Tool = {
     { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "putFile"] }],
   async run(args: { path: string; text: string; mode?: number }, ctx) {
     const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: args.text });
-    const selected = await workspace(ctx); const path = workspacePath(args.path);
+    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path);
     await Promise.resolve(selected.putFile(path, stored.ref, { ...(args.mode === undefined ? {} : { mode: args.mode }),
       invoke: { timeoutMs: TIMEOUT_MS } }));
     return { path, ref: stored.ref, bytes: stored.bytes, created: stored.created };
@@ -197,7 +197,7 @@ const pack: Tool = {
   async run(args: { cwd?: string; paths: string[]; output?: string }, ctx) {
     if (args.paths.length === 0) throw new TypeError("workspace_package requires at least one path");
     const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
-    const output = workspacePath(args.output ?? "/workspace/.constal/horizon-artifact.tar.gz", cwd);
+    const output = normalizeWorkspacePath(args.output ?? "/workspace/.constal/horizon-artifact.tar.gz", cwd);
     await requireCommand(selected, "mkdir", ["-p", "--", output.slice(0, output.lastIndexOf("/"))]);
     const result = await command(selected, "tar", ["-czf", output, "--", ...args.paths], cwd, { outputs: [output] });
     if (!succeeded(result)) throw new Error(`workspace package failed (${result.status}, exit ${result.exitCode ?? "unknown"})`);
