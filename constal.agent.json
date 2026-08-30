@@ -3,7 +3,7 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
@@ -35,8 +35,8 @@
     "web_fetch"
   ],
   "limits": {
-    "maxRunMicroUsd": 50000000,
-    "maxTurns": 256
+    "maxRunMicroUsd": 500000000,
+    "maxTurns": 2048
   },
   "expectedCurrentDeploymentRevision": null
 }

@@ -10,36 +10,51 @@ It is a standalone Agent package built with `@constal/sdk`. It uses Constal's ex
 User objective
       │
       ▼
-┌───────────────────────────────────────────────┐
-│ Planner ReAct                                │
-│ discover repository → resolve questions      │
-│ → divide semantic responsibilities           │
-└──────────────────────┬────────────────────────┘
-                       │ commit
-                       ▼
-              Immutable Plan Fact r1
+Discovery framer ReAct
+      │
+      ├── Investigation Agent · behavior / call flow
+      ├── Investigation Agent · architecture / ownership
+      ├── Investigation Agent · tests / verification
+      └── other objective-specific investigations
+      │
+      ▼
+Rubric Agent ──► Design + Milestone Agent
                        │
-             dependency-ready work unit
-                       ▼
-┌───────────────────────────────────────────────┐
-│ Execution specialist ReAct                   │
-│ inspect → decide → edit → test → inspect diff │
-└──────────────────────┬────────────────────────┘
-                       │ commit evidence
-                       ▼
-┌───────────────────────────────────────────────┐
-│ Reconciliation specialist                    │
-│ compare actual evidence with immutable intent │
-└───────┬────────────┬──────────┬─────────┬──────┘
-        │ continue   │ replan   │ ask     │ complete / blocked
-        │            │          │         │
-        │            ▼          ▼         ▼
-        │      Plan Fact r2   durable   immutable
-        │      (r1 remains)    await     CAS artifact
-        └────────────┴──────────┘
+                       ├── Milestone Decomposer Agent · milestone 1
+                       ├── Milestone Decomposer Agent · milestone 2
+                       └── accepted prerequisite work flows forward
+                                      │
+                                      ├── Assertion Agent · step A
+                                      ├── Assertion Agent · step B
+                                      └── Assertion Agent · step C
+                                                   │
+                                                   ▼
+                                         Cross-plan Critique Agent
+                                                   │
+                         blocking finding ──────────┤
+                         ▼                         │ accepted
+             rerun owning planning loop             ▼
+             + every dependent loop        Finalization Agent
+                         └───────────────►  Immutable Plan Fact r1
+                                                   │
+                                      dependency-ready work unit
+                                                   ▼
+                                          Execution Agent ReAct
+                                                   │
+                                          Independent Verifier
+                                                   │
+                                          Reconciliation Agent
+                         ┌────────────┬─────────────┼────────────┐
+                         │ continue   │ replan      │ ask        │ complete / blocked
+                         │            ▼             ▼            ▼
+                         │       Plan Fact r2    durable      immutable
+                         │       (r1 remains)     await       CAS artifact
+                         └────────────┴─────────────┘
 ```
 
-The Run can suspend and resume at every durable primitive. Plans, specialist results, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence.
+The Run can suspend and resume at every durable primitive. Discovery, every planning phase, plans, specialist results, independent verification, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence. Changed completed work is explicitly invalidated and rerun; unchanged completed proof is retained.
+
+Large planning handoffs move through content-addressed CAS envelopes rather than inline child-Run input. ReAct loops keep recent observations verbatim, commit complete older rounds, and retain a bounded deduplicated evidence projection after compaction.
 
 ## How Horizon decides to keep going
 
@@ -56,8 +71,16 @@ Its plateau detector compares canonical Tool arguments and observed results. It 
 
 | Role | Responsibility |
 | --- | --- |
-| Planner | Discovery-first repository understanding and the immutable natural-language specification |
+| Discovery framer | Establish the immutable source workspace and divide repository questions by evidence boundary |
+| Investigator | Resolve one bounded software question set without duplicating other investigations |
+| Rubric | Define observable success, constraints, non-goals, and material open questions |
+| Designer | Close architecture decisions and define dependency-ordered outcome milestones |
+| Milestone decomposer | Turn one milestone into specialist loops, consuming accepted prerequisite work |
+| Assertion writer | Define independent positive, negative-path, and invariant proof for one step |
+| Plan critic | Find cross-artifact contradictions and route repair to the earliest owning planning loop |
+| Finalizer | Render converged planning artifacts into the immutable natural-language specification |
 | Execution specialist | One coherent semantic responsibility, executed as its own ReAct loop |
+| Verifier | Independently inspect the diff and reproduce proof before a step can complete |
 | Reconciler | Evidence-based continue, replan, ask, complete, or blocked transition |
 
 Role prompts are stable and organized as Role, Task, Context, Rules, Tools, and Output. Request-specific state is supplied as turn context. Tool descriptions explain their behavioral contract and Resource boundary. JSON is used only for transport; semantic intent stays in natural-language specifications.

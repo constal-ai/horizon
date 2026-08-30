@@ -90,7 +90,7 @@ describe("Horizon workflow", () => {
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       commit: async (artifact: unknown) => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
@@ -127,7 +127,7 @@ describe("Horizon workflow", () => {
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       commit: async (artifact: { kind?: string }) => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
@@ -172,7 +172,7 @@ describe("Horizon workflow", () => {
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       commit: async (artifact: { kind?: string; plan?: HzPlan }) => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
@@ -231,7 +231,7 @@ describe("Horizon workflow", () => {
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       commit: async (artifact: { kind?: string; plan?: HzPlan }) => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
@@ -279,7 +279,7 @@ describe("Horizon workflow", () => {
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       commit: async (artifact: { kind?: string }) => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
