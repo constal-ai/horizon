@@ -41,4 +41,29 @@ describe("EvidencePlateauDetector", () => {
     expect(result.plateaued).toBe(true);
     expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
   });
+
+  it("keeps bounded compacted evidence available while committing complete older rounds", async () => {
+    const contexts: unknown[] = []; const commits: unknown[] = []; let turns = 0;
+    const ctx = {
+      turn: async (spec: { context?: unknown }) => {
+        contexts.push(spec.context); turns++;
+        if (turns <= 7) return { toolCalls: [call({ ref: `evidence-${turns}` })],
+          message: { role: "assistant", content: "Inspecting." }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" },
+          artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => {
+        commits.push(artifact);
+        return { hash: `fact-${commits.length}`, artifact, artifactHash: `artifact-${commits.length}` } as unknown as Fact<unknown>;
+      },
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+      tools: ["workspace_read"], maxRounds: 10,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(result.plateaued).toBe(false);
+    expect(commits).toHaveLength(1);
+    expect(contexts[7]).toMatchObject({ compacted: [{ fact: "fact-1", rounds: 4 }],
+      compactedEvidence: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
+  });
 });

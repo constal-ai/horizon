@@ -34,6 +34,16 @@ function bounded(value: unknown, depth = 0): unknown {
   return Object.fromEntries(Object.entries(source).slice(0, 96).map(([key, entry]) => [key, bounded(entry, depth + 1)]));
 }
 
+function compactBounded(value: unknown, depth = 0): unknown {
+  if (depth >= 4) return "[depth omitted]";
+  if (typeof value === "string") return value.length <= 2_048 ? value : `${value.slice(0, 2_048)}…`;
+  if (value === null || typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 32).map((entry) => compactBounded(entry, depth + 1));
+  const source = record(value);
+  if (!source) return String(value);
+  return Object.fromEntries(Object.entries(source).slice(0, 32).map(([key, entry]) => [key, compactBounded(entry, depth + 1)]));
+}
+
 function callValue(call: ToolCallRecord): unknown {
   if (call.preview !== undefined) return bounded(call.preview);
   if (call.result !== undefined) return bounded(call.result);
@@ -89,6 +99,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   const calls: ToolCallRecord[] = [];
   const recentRounds: unknown[][] = [];
   const compacted: Array<{ fact: string; rounds: number }> = [];
+  let compactedEvidence: unknown[] = [];
   const plateau = new EvidencePlateauDetector();
   let forcedPlateau = false;
 
@@ -102,7 +113,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
           objective: spec.objective,
           context: ordinal === 0
             ? spec.context
-            : { request: spec.context, compacted, recentRounds,
+            : { request: spec.context, compacted, compactedEvidence, recentRounds,
               ...(forcedPlateau ? { plateau: "Repeated Tool observations produced no new evidence. Resolve, ask, or block without another Tool call." } : {}) },
           tools: offered,
           ...(spec.model ? { model: spec.model } : {}),
@@ -135,9 +146,14 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
 
     if (recentRounds.length > 6) {
       const older = recentRounds.splice(0, recentRounds.length - 3);
+      const projected = older.flat().map(compactBounded);
+      const unique = new Map<string, unknown>();
+      for (const observation of [...compactedEvidence, ...projected]) unique.set(canonicalJson(observation), observation);
+      compactedEvidence = [...unique.values()].slice(-128);
       const fact = await ctx.commit({ kind: "horizon.react-compaction", role: spec.role, rounds: older.length,
-        observations: older.flat().slice(-128) }, { tier: "audit" });
+        observations: older.flat() }, { tier: "audit" });
       compacted.push({ fact: fact.hash, rounds: older.length });
+      if (compacted.length > 32) compacted.splice(0, compacted.length - 32);
     }
   }
   throw new TypeError(`${spec.role} exhausted its ReAct safety ceiling without a final artifact`);
