@@ -10,6 +10,9 @@ const plan: HzPlan = {
   steps: [{ id: "implement", title: "Implement", responsibility: "Implement the durable behavior.",
     specification: "Inspect, edit, and verify the existing implementation.", dependsOn: [], verification: ["focused test passes"],
     stopWhen: "The focused test passes." }],
+  assertions: [{ object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "implement",
+    assertions: [{ id: "focused-behavior", claim: "The focused behavior works.",
+      evidenceRequired: ["The focused test passes."], negativePath: false }] }],
 };
 
 const stepResult: HzStepResult = {
@@ -71,7 +74,7 @@ describe("Horizon workflow", () => {
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
-        if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [] });
+        if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [], planningRuns: 7 });
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
         if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
@@ -87,7 +90,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon({ objective: plan.objective }, ctx);
     expect(result.status).toBe("complete");
     expect(result.artifact?.ref).toBe("artifact-ref");
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 6, replans: 0 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 12, replans: 0 });
     expect((committed as Array<{ kind?: string }>).map(({ kind }) => kind)).toEqual([
       "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
       "horizon.verification", "horizon.progress", "horizon.reconciliation", "horizon.result",
@@ -98,6 +101,7 @@ describe("Horizon workflow", () => {
     const committed: Array<{ kind?: string; plan?: HzPlan }> = []; let sequence = 0;
     let plannerRuns = 0; let executorRuns = 0; let reconcilerRuns = 0;
     const revisedPlan: HzPlan = { ...plan, revision: 2,
+      assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 2 })),
       specification: "Preserve the first attempt as evidence and execute the corrected repository-native approach." };
     const failed: HzStepResult = { ...stepResult, status: "failed", summary: "The planned seam was stale.",
       changedFiles: [], verification: ["focused test exposed the stale seam"], unknowns: [{ id: "stale-seam",
@@ -118,7 +122,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
           plannerRuns++;
-          return handle({ plan: plannerRuns === 1 ? plan : revisedPlan, toolEvidence: [] });
+          return handle({ plan: plannerRuns === 1 ? plan : revisedPlan, toolEvidence: [], planningRuns: 7 });
         }
         if (task.id === "horizon-executor") {
           executorRuns++;
@@ -148,7 +152,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
     expect(result.plan.revision).toBe(2);
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 10, replans: 1 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 22, replans: 1 });
     expect(committed.filter(({ kind }) => kind === "horizon.plan").map(({ plan: committedPlan }) => committedPlan?.revision)).toEqual([1, 2]);
     expect(committed.filter(({ kind }) => kind === "horizon.step-result")).toHaveLength(2);
   });
@@ -156,11 +160,13 @@ describe("Horizon workflow", () => {
   it("durably waits for a material user decision and synthesizes a new plan revision", async () => {
     const committed: Array<{ kind?: string; plan?: HzPlan }> = []; let sequence = 0; let plannerRuns = 0;
     const plannerInputs: Array<{ answer?: string | null }> = [];
-    const needsInput: HzPlan = { ...plan, status: "needs-input", revision: 1, steps: [],
+    const needsInput: HzPlan = { ...plan, status: "needs-input", revision: 1, steps: [], assertions: [],
       question: "Should the public contract preserve v1 behavior or adopt v2?",
       unknowns: [{ id: "contract-version", question: "Which public contract is intended?", state: "needs-input",
         resolution: null, evidence: ["Both versions exist in source."] }] };
-    const revised: HzPlan = { ...plan, revision: 2, specification: "Adopt v2 as explicitly selected by the user." };
+    const revised: HzPlan = { ...plan, revision: 2,
+      assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 2 })),
+      specification: "Adopt v2 as explicitly selected by the user." };
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
@@ -175,7 +181,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
           plannerInputs.push(input); plannerRuns++;
-          return handle({ plan: plannerRuns === 1 ? needsInput : revised, toolEvidence: [] });
+          return handle({ plan: plannerRuns === 1 ? needsInput : revised, toolEvidence: [], planningRuns: 7 });
         }
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
         if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
@@ -192,7 +198,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
     expect(result.plan.revision).toBe(2);
-    expect(result.longHorizon).toMatchObject({ specialistRuns: 7, replans: 1 });
+    expect(result.longHorizon).toMatchObject({ specialistRuns: 19, replans: 1 });
     expect(plannerInputs.map(({ answer }) => answer ?? null)).toEqual([null, "Adopt v2."]);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.answer");
   });
@@ -218,7 +224,9 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
           plannerRuns++;
-          return handle({ plan: { ...plan, revision: plannerRuns }, toolEvidence: [] });
+          return handle({ plan: { ...plan, revision: plannerRuns,
+            assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: plannerRuns })) },
+          toolEvidence: [], planningRuns: 7 });
         }
         if (task.id === "horizon-executor") return handle({ result: failedExecution, toolEvidence: [] });
         if (task.id === "horizon-verifier") return handle({ verification: failedProof, toolEvidence: [] });
@@ -235,7 +243,7 @@ describe("Horizon workflow", () => {
     expect(result.status).toBe("blocked");
     expect(result.summary).toContain("no new evidence");
     expect(result.plan.revision).toBe(3);
-    expect(result.longHorizon).toMatchObject({ specialistRuns: 14, replans: 2, plateauCycles: 2 });
+    expect(result.longHorizon).toMatchObject({ specialistRuns: 32, replans: 2, plateauCycles: 2 });
     expect(committed.map(({ kind }) => kind)).toContain("horizon.plateau");
   });
 });

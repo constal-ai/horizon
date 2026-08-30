@@ -16,7 +16,7 @@ export const INVESTIGATOR_TOOL_NAMES = [
   "workspace_list", "workspace_search", "workspace_read", "web_search", "web_fetch",
 ] as const;
 
-export const PLANNER_TOOL_NAMES = DISCOVERY_TOOL_NAMES;
+export const PLANNER_TOOL_NAMES = INVESTIGATOR_TOOL_NAMES;
 
 export const EXECUTOR_TOOL_NAMES = [
   "github_repository", "github_tree", "github_file",

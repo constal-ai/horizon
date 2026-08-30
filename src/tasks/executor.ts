@@ -16,6 +16,7 @@ export const executor = subtask<HzExecutorResult>({
         plan: input.plan,
         planFact: input.planFact,
         assignedStep: input.step,
+        assertions: input.plan.assertions.find(({ stepId }) => stepId === input.step.id)?.assertions ?? [],
         completedDependencies: input.completed.filter(({ stepId }) => input.step.dependsOn.includes(stepId)),
       },
       tools: input.tools,
@@ -27,4 +28,3 @@ export const executor = subtask<HzExecutorResult>({
     return { result: conversation.artifact, toolEvidence: conversation.evidence };
   },
 });
-

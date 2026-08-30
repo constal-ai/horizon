@@ -42,6 +42,88 @@ export interface HzInvestigationResult {
   blockedReason: string | null;
 }
 
+export interface HzRubric {
+  object: "constal.horizon.rubric";
+  version: 1;
+  revision: number;
+  objective: string;
+  successCriteria: string[];
+  constraints: string[];
+  nonGoals: string[];
+  openQuestions: HzUnknown[];
+  verificationPrinciples: string[];
+}
+
+export interface HzDesignDecision {
+  id: string;
+  question: string;
+  decision: string;
+  rationale: string;
+  evidence: string[];
+}
+
+export interface HzMilestone {
+  id: string;
+  title: string;
+  outcome: string;
+  dependsOn: string[];
+  responsibilities: string[];
+  risks: string[];
+}
+
+export interface HzDesign {
+  object: "constal.horizon.design";
+  version: 1;
+  revision: number;
+  summary: string;
+  decisions: HzDesignDecision[];
+  milestones: HzMilestone[];
+}
+
+export interface HzWorkPlan {
+  object: "constal.horizon.work-plan";
+  version: 1;
+  revision: number;
+  steps: HzPlanStep[];
+}
+
+export interface HzAssertion {
+  id: string;
+  claim: string;
+  evidenceRequired: string[];
+  negativePath: boolean;
+}
+
+export interface HzStepAssertions {
+  object: "constal.horizon.step-assertions";
+  version: 1;
+  revision: number;
+  stepId: string;
+  assertions: HzAssertion[];
+}
+
+export type HzCritiqueOwner = "rubric" | "design" | "decomposition" | "assertions" | "user";
+
+export interface HzCritiqueFinding {
+  id: string;
+  owner: HzCritiqueOwner;
+  severity: "blocking" | "advisory";
+  issue: string;
+  evidence: string[];
+  repair: string;
+}
+
+export interface HzPlanCritique {
+  object: "constal.horizon.plan-critique";
+  version: 1;
+  revision: number;
+  verdict: "accepted" | "repair" | "needs-input" | "blocked";
+  summary: string;
+  findings: HzCritiqueFinding[];
+  question: string | null;
+  blockedReason: string | null;
+}
+
 export interface HzPlanStep {
   id: string;
   title: string;
@@ -63,6 +145,7 @@ export interface HzPlan {
   workspaceRoot: string | null;
   unknowns: HzUnknown[];
   steps: HzPlanStep[];
+  assertions: HzStepAssertions[];
   risks: string[];
   question: string | null;
   blockedReason: string | null;
@@ -157,6 +240,7 @@ export interface HzInvestigatorOutput {
 export interface HzPlannerResult {
   plan: HzPlan;
   toolEvidence: HzToolEvidence[];
+  planningRuns: number;
 }
 
 export interface HzExecutorInput {
@@ -326,6 +410,122 @@ export function parseHzInvestigationResult(value: unknown, expectedFocusId?: str
     unknowns: parsedUnknowns, planImplications, blockedReason };
 }
 
+function positiveRevision(value: unknown, expectedRevision?: number): number | null {
+  if (!Number.isInteger(value) || Number(value) < 1 || expectedRevision !== undefined && value !== expectedRevision) return null;
+  return Number(value);
+}
+
+export function parseHzRubric(value: unknown, expectedRevision?: number): HzRubric | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  const objective = string(source?.objective); const successCriteria = strings(source?.successCriteria, 128, 16_384);
+  const constraints = strings(source?.constraints, 128, 16_384); const nonGoals = strings(source?.nonGoals, 128, 16_384);
+  const openQuestions = unknowns(source?.openQuestions); const verificationPrinciples = strings(source?.verificationPrinciples, 128, 16_384);
+  if (!source || source.object !== "constal.horizon.rubric" || source.version !== 1 || revision === null || !objective
+    || !successCriteria || successCriteria.length === 0 || !constraints || !nonGoals || !openQuestions
+    || !verificationPrinciples || verificationPrinciples.length === 0) return null;
+  return { object: "constal.horizon.rubric", version: 1, revision, objective, successCriteria, constraints,
+    nonGoals, openQuestions, verificationPrinciples };
+}
+
+function parseHzDesignDecision(value: unknown): HzDesignDecision | null {
+  const source = item(value); const id = string(source?.id, 256); const question = string(source?.question, 16_384);
+  const decision = string(source?.decision, 32_768); const rationale = string(source?.rationale, 32_768);
+  const evidence = strings(source?.evidence, 128, 16_384);
+  return source && id && question && decision && rationale && evidence ? { id, question, decision, rationale, evidence } : null;
+}
+
+function parseHzMilestone(value: unknown): HzMilestone | null {
+  const source = item(value); const id = string(source?.id, 256); const title = string(source?.title, 1_024);
+  const outcome = string(source?.outcome, 32_768); const dependsOn = strings(source?.dependsOn, 64, 256);
+  const responsibilities = strings(source?.responsibilities, 128, 16_384); const risks = strings(source?.risks, 128, 16_384);
+  return source && id && title && outcome && dependsOn && responsibilities && responsibilities.length > 0 && risks
+    ? { id, title, outcome, dependsOn, responsibilities, risks } : null;
+}
+
+function graphIsAcyclic(nodes: readonly { id: string; dependsOn: string[] }[]): boolean {
+  const ids = new Set(nodes.map(({ id }) => id));
+  if (nodes.some(({ id, dependsOn }) => dependsOn.includes(id) || dependsOn.some((dependency) => !ids.has(dependency)))) return false;
+  const remaining = new Map(nodes.map((node) => [node.id, new Set(node.dependsOn)]));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [id, dependencies] of remaining) {
+      if (dependencies.size > 0) continue;
+      remaining.delete(id); for (const unresolved of remaining.values()) unresolved.delete(id); changed = true;
+    }
+  }
+  return remaining.size === 0;
+}
+
+export function parseHzDesign(value: unknown, expectedRevision?: number): HzDesign | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  const summary = string(source?.summary, 65_536);
+  if (!source || source.object !== "constal.horizon.design" || source.version !== 1 || revision === null || !summary
+    || !Array.isArray(source.decisions) || source.decisions.length > 128
+    || !Array.isArray(source.milestones) || source.milestones.length === 0 || source.milestones.length > 64) return null;
+  const decisions = source.decisions.map(parseHzDesignDecision); const milestones = source.milestones.map(parseHzMilestone);
+  if (!decisions.every((entry): entry is HzDesignDecision => entry !== null)
+    || !milestones.every((entry): entry is HzMilestone => entry !== null)
+    || new Set(decisions.map(({ id }) => id)).size !== decisions.length
+    || new Set(milestones.map(({ id }) => id)).size !== milestones.length || !graphIsAcyclic(milestones)) return null;
+  return { object: "constal.horizon.design", version: 1, revision, summary, decisions, milestones };
+}
+
+export function parseHzWorkPlan(value: unknown, expectedRevision?: number): HzWorkPlan | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  if (!source || source.object !== "constal.horizon.work-plan" || source.version !== 1 || revision === null
+    || !Array.isArray(source.steps) || source.steps.length === 0 || source.steps.length > 128) return null;
+  const steps = source.steps.map(parseHzPlanStep);
+  if (!steps.every((entry): entry is HzPlanStep => entry !== null)
+    || new Set(steps.map(({ id }) => id)).size !== steps.length || !graphIsAcyclic(steps)) return null;
+  return { object: "constal.horizon.work-plan", version: 1, revision, steps };
+}
+
+function parseHzAssertion(value: unknown): HzAssertion | null {
+  const source = item(value); const id = string(source?.id, 256); const claim = string(source?.claim, 16_384);
+  const evidenceRequired = strings(source?.evidenceRequired, 64, 16_384);
+  return source && id && claim && evidenceRequired && evidenceRequired.length > 0 && typeof source.negativePath === "boolean"
+    ? { id, claim, evidenceRequired, negativePath: source.negativePath } : null;
+}
+
+export function parseHzStepAssertions(value: unknown, expectedRevision?: number, expectedStepId?: string): HzStepAssertions | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  const stepId = string(source?.stepId, 256);
+  if (!source || source.object !== "constal.horizon.step-assertions" || source.version !== 1 || revision === null || !stepId
+    || expectedStepId !== undefined && stepId !== expectedStepId || !Array.isArray(source.assertions)
+    || source.assertions.length === 0 || source.assertions.length > 64) return null;
+  const assertions = source.assertions.map(parseHzAssertion);
+  if (!assertions.every((entry): entry is HzAssertion => entry !== null)
+    || new Set(assertions.map(({ id }) => id)).size !== assertions.length) return null;
+  return { object: "constal.horizon.step-assertions", version: 1, revision, stepId, assertions };
+}
+
+function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
+  const source = item(value); const id = string(source?.id, 256); const owner = source?.owner; const severity = source?.severity;
+  const issue = string(source?.issue, 32_768); const evidence = strings(source?.evidence, 128, 16_384);
+  const repair = string(source?.repair, 32_768);
+  if (!source || !id || !["rubric", "design", "decomposition", "assertions", "user"].includes(String(owner))
+    || !["blocking", "advisory"].includes(String(severity)) || !issue || !evidence || !repair) return null;
+  return { id, owner: owner as HzCritiqueOwner, severity: severity as HzCritiqueFinding["severity"], issue, evidence, repair };
+}
+
+export function parseHzPlanCritique(value: unknown, expectedRevision?: number): HzPlanCritique | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision); const verdict = source?.verdict;
+  const summary = string(source?.summary, 32_768); const question = nullableString(source?.question, 16_384);
+  const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.plan-critique" || source.version !== 1 || revision === null
+    || !["accepted", "repair", "needs-input", "blocked"].includes(String(verdict)) || !summary || question === undefined
+    || blockedReason === undefined || !Array.isArray(source.findings) || source.findings.length > 128) return null;
+  const findings = source.findings.map(parseHzCritiqueFinding);
+  if (!findings.every((entry): entry is HzCritiqueFinding => entry !== null)
+    || new Set(findings.map(({ id }) => id)).size !== findings.length) return null;
+  const blocking = findings.some(({ severity }) => severity === "blocking");
+  if (verdict === "accepted" && blocking || verdict === "repair" && !blocking
+    || verdict === "needs-input" && !question || verdict === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.plan-critique", version: 1, revision,
+    verdict: verdict as HzPlanCritique["verdict"], summary, findings, question, blockedReason };
+}
+
 export function parseHzPlanStep(value: unknown): HzPlanStep | null {
   const source = item(value);
   const id = string(source?.id, 256); const title = string(source?.title, 1_024);
@@ -334,21 +534,6 @@ export function parseHzPlanStep(value: unknown): HzPlanStep | null {
   const stopWhen = string(source?.stopWhen, 8_192);
   if (!source || !id || !title || !responsibility || !specification || !dependsOn || !verification || !stopWhen) return null;
   return { id, title, responsibility, specification, dependsOn, verification, stopWhen };
-}
-
-function dependenciesAreAcyclic(steps: readonly HzPlanStep[]): boolean {
-  const remaining = new Map(steps.map((step) => [step.id, new Set(step.dependsOn)]));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [id, dependencies] of remaining) {
-      if (dependencies.size > 0) continue;
-      remaining.delete(id);
-      for (const unresolved of remaining.values()) unresolved.delete(id);
-      changed = true;
-    }
-  }
-  return remaining.size === 0;
 }
 
 export function parseHzPlan(value: unknown): HzPlan | null {
@@ -362,17 +547,21 @@ export function parseHzPlan(value: unknown): HzPlan | null {
     || !Number.isInteger(revision) || Number(revision) < 1
     || !["ready", "needs-input", "blocked"].includes(String(status))
     || !objective || !summary || !specification || workspaceRoot === undefined || !parsedUnknowns || !risks
-    || question === undefined || blockedReason === undefined || !Array.isArray(source.steps) || source.steps.length > 128) return null;
+    || question === undefined || blockedReason === undefined || !Array.isArray(source.steps) || source.steps.length > 128
+    || !Array.isArray(source.assertions) || source.assertions.length > 128) return null;
   const steps = source.steps.map(parseHzPlanStep);
+  const assertions = source.assertions.map((entry) => parseHzStepAssertions(entry, Number(revision)));
   if (!steps.every((entry): entry is HzPlanStep => entry !== null)) return null;
+  if (!assertions.every((entry): entry is HzStepAssertions => entry !== null)
+    || new Set(assertions.map(({ stepId }) => stepId)).size !== assertions.length) return null;
   if (new Set(steps.map(({ id }) => id)).size !== steps.length) return null;
   const ids = new Set(steps.map(({ id }) => id));
-  if (steps.some(({ id, dependsOn }) => dependsOn.includes(id) || dependsOn.some((dependency) => !ids.has(dependency)))
-    || !dependenciesAreAcyclic(steps)) return null;
-  if (status === "ready" && (!workspaceRoot || steps.length === 0)) return null;
+  if (!graphIsAcyclic(steps)) return null;
+  if (status === "ready" && (!workspaceRoot || steps.length === 0
+    || assertions.length !== steps.length || assertions.some(({ stepId }) => !ids.has(stepId)))) return null;
   if (status === "needs-input" && !question || status === "blocked" && !blockedReason) return null;
   return { object: "constal.horizon.plan", version: 1, revision: Number(revision), status: status as HzPlanStatus,
-    objective, summary, specification, workspaceRoot, unknowns: parsedUnknowns, steps, risks, question, blockedReason };
+    objective, summary, specification, workspaceRoot, unknowns: parsedUnknowns, steps, assertions, risks, question, blockedReason };
 }
 
 export function parseHzStepResult(value: unknown, expectedStepId?: string): HzStepResult | null {

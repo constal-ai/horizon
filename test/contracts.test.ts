@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzReconciliation, parseHzRequest,
-  parseHzStepResult, parseHzVerification } from "../src/contracts.js";
+import { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzPlanCritique,
+  parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
+  parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
 const unknown = { id: "architecture-seam", question: "Which existing abstraction owns publication?", state: "resolved",
   resolution: "The deployment boundary owns it.", evidence: ["src/deploy.ts"] };
@@ -18,6 +19,14 @@ const plan = {
     { id: "verify", title: "Reconcile proof", responsibility: "Verify the completed behavior independently.",
       specification: "Review the diff and execute the relevant suite.", dependsOn: ["implement"],
       verification: ["The suite passes and the diff stays within scope."], stopWhen: "Proof is conclusive or honestly blocked." },
+  ],
+  assertions: [
+    { object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "implement",
+      assertions: [{ id: "implement-positive", claim: "The durable behavior is observable.",
+        evidenceRequired: ["Focused replay test passes."], negativePath: false }] },
+    { object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "verify",
+      assertions: [{ id: "verify-proof", claim: "Independent proof covers the changed behavior.",
+        evidenceRequired: ["The relevant suite and diff review pass."], negativePath: false }] },
   ],
 };
 
@@ -65,5 +74,20 @@ describe("Horizon transport contracts", () => {
       verdict: "failed", summary: "Replay still duplicates the effect.",
       checks: [{ target: "Replay after interruption", outcome: "failed", evidence: "duplicate receipt observed" }],
       unknowns: [], failureBrief: null, blockedReason: null }, "implement")).toBeNull();
+  });
+
+  it("validates every immutable planning phase as a structural handoff", () => {
+    expect(parseHzRubric({ object: "constal.horizon.rubric", version: 1, revision: 1,
+      objective: plan.objective, successCriteria: ["Replay proof passes."], constraints: ["Reuse the runtime."],
+      nonGoals: ["No new scheduler."], openQuestions: [], verificationPrinciples: ["Observe replay behavior."] }, 1)).not.toBeNull();
+    expect(parseHzDesign({ object: "constal.horizon.design", version: 1, revision: 1, summary: "Reuse runtime ownership.",
+      decisions: [{ id: "runtime-owner", question: "Who owns recovery?", decision: "The runtime.",
+        rationale: "It already owns the ledger.", evidence: ["src/runtime.ts"] }],
+      milestones: [{ id: "behavior", title: "Durable behavior", outcome: "Replay succeeds.", dependsOn: [],
+        responsibilities: ["Implement recovery."], risks: ["Duplicate effect."] }] }, 1)).not.toBeNull();
+    expect(parseHzWorkPlan({ object: "constal.horizon.work-plan", version: 1, revision: 1, steps: plan.steps }, 1)).not.toBeNull();
+    expect(parseHzStepAssertions(plan.assertions[0], 1, "implement")).not.toBeNull();
+    expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
+      verdict: "accepted", summary: "The artifacts converge.", findings: [], question: null, blockedReason: null }, 1)).not.toBeNull();
   });
 });

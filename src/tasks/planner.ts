@@ -1,50 +1,145 @@
-import { subtask } from "@constal/sdk";
-import { parseHzPlan, type HzPlanInput, type HzPlannerResult } from "../contracts.js";
-import { PLANNER_SYSTEM } from "../prompts/planner.js";
-import { runReactLoop } from "../react-loop.js";
+import { canonicalJson, hashValue, subtask, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { type HzDesign, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
+  type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
+import { bindingsForTools } from "../tools/index.js";
+import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, planFinalizer, rubricAgent,
+  type PlanningPhaseResult } from "./planning-phases.js";
 
-function observedWorkspaceRoot(result: Awaited<ReturnType<typeof runReactLoop>>): string | null {
-  for (const evidence of [...result.evidence].reverse()) {
-    if (evidence.name !== "workspace_import" || !["ok", "repeated", "substituted"].includes(evidence.status)) continue;
-    const item = evidence.result && typeof evidence.result === "object" && !Array.isArray(evidence.result)
-      ? evidence.result as Record<string, unknown> : null;
-    if (typeof item?.path === "string" && item.path.length > 0) return item.path;
-  }
-  return null;
+const MAX_REPAIR_CYCLES = 4;
+
+function attenuation(tools: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
+  return { bindings: bindingsForTools(tools, ctx), tools: [...tools].sort() };
+}
+
+function blockedCritique(input: HzPlanInput, summary: string): HzPlanCritique {
+  return { object: "constal.horizon.plan-critique", version: 1, revision: input.revision,
+    verdict: "blocked", summary, findings: [], question: null, blockedReason: summary };
+}
+
+function planningFingerprint(rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
+  assertions: HzStepAssertions[]): Promise<string> {
+  return hashValue({ rubric, design, workPlan,
+    assertions: [...assertions].sort((left, right) => left.stepId.localeCompare(right.stepId)) });
+}
+
+async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
+  result: PlanningPhaseResult<T>, repairCycle: number): Promise<void> {
+  await ctx.commit({ kind: "horizon.planning-phase", phase, revision, repairCycle,
+    artifact: result.artifact, toolEvidence: result.toolEvidence }, { tier: "audit" });
 }
 
 export const planner = subtask<HzPlannerResult>({
   id: "horizon-planner",
-  version: "1",
+  version: "2",
   async run(input: HzPlanInput, ctx) {
-    const conversation = await runReactLoop({
-      role: "planner",
-      system: PLANNER_SYSTEM,
-      objective: input.previousPlan ? "Reconcile the immutable execution plan with new evidence." : "Create the immutable execution plan.",
-      context: {
-        request: input.request,
-        discoveryPlan: input.discoveryPlan,
-        investigations: input.investigations,
-        revision: input.revision,
-        previousPlan: input.previousPlan,
-        completed: input.completed,
-        replanBrief: input.replanBrief,
-        answer: input.answer,
-      },
-      tools: input.tools,
-      model: "model",
-      stream: true,
-      maxRounds: 32,
-      parse(value) {
-        const plan = parseHzPlan(value);
-        return plan?.revision === input.revision && plan.objective === input.request.objective ? plan : null;
-      },
-    }, ctx);
-    const workspaceRoot = observedWorkspaceRoot(conversation) ?? input.discoveryPlan.workspaceRoot
-      ?? input.previousPlan?.workspaceRoot ?? null;
-    if (conversation.artifact.status === "ready" && conversation.artifact.workspaceRoot !== workspaceRoot) {
-      throw new TypeError("ready Horizon plan did not use the workspace root established by governed evidence");
+    const tools = input.tools; const childAttenuation = attenuation(tools, ctx);
+    const evidence: HzToolEvidence[] = []; let planningRuns = 1; let repairCycle = 0;
+    let critique: HzPlanCritique | null = null;
+
+    const runRubric = async (prior: HzRubric | null): Promise<HzRubric> => {
+      const result = await ctx.spawn(rubricAgent, { planning: input, prior, critique, tools }, {
+        retries: 1, dedupe: "specHash", budget: { turns: 24, microUsd: 8_000_000, wallMs: 2_400_000 },
+        attenuation: childAttenuation,
+      });
+      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "rubric", input.revision, result, repairCycle);
+      return result.artifact;
+    };
+    const runDesign = async (rubric: HzRubric, prior: HzDesign | null): Promise<HzDesign> => {
+      const result = await ctx.spawn(designAgent, { planning: input, rubric, prior, critique, tools }, {
+        retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
+        attenuation: childAttenuation,
+      });
+      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "design", input.revision, result, repairCycle);
+      return result.artifact;
+    };
+    const runDecomposition = async (rubric: HzRubric, design: HzDesign, prior: HzWorkPlan | null): Promise<HzWorkPlan> => {
+      const result = await ctx.spawn(decompositionAgent, { planning: input, rubric, design, prior, critique, tools }, {
+        retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
+        attenuation: childAttenuation,
+      });
+      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "decomposition", input.revision, result, repairCycle);
+      return result.artifact;
+    };
+    const runAssertions = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
+      prior: HzStepAssertions[]): Promise<HzStepAssertions[]> => {
+      const priorByStep = new Map(prior.map((item) => [item.stepId, item]));
+      const handles = workPlan.steps.map((step) => ({ step, handle: ctx.spawn(assertionAgent, {
+        planning: input, rubric, design, workPlan, stepId: step.id,
+        prior: priorByStep.get(step.id) ?? null, critique, tools,
+      }, { retries: 1, dedupe: "specHash", budget: { turns: 20, microUsd: 5_000_000, wallMs: 2_400_000 },
+        attenuation: childAttenuation }) }));
+      planningRuns += handles.length;
+      const next: HzStepAssertions[] = [];
+      for (const { step, handle } of handles) {
+        const result = await Promise.resolve(handle); next.push(result.artifact); evidence.push(...result.toolEvidence);
+        await commitPhase(ctx, `assertions:${step.id}`, input.revision, result, repairCycle);
+      }
+      return next;
+    };
+    const runCritique = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
+      assertions: HzStepAssertions[]): Promise<HzPlanCritique> => {
+      const result = await ctx.spawn(critiqueAgent, { planning: input, rubric, design, workPlan,
+        assertions, prior: critique, tools }, { retries: 1, dedupe: "specHash",
+        budget: { turns: 20, microUsd: 6_000_000, wallMs: 2_400_000 }, attenuation: childAttenuation });
+      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "critique", input.revision, result, repairCycle);
+      return result.artifact;
+    };
+
+    let rubric = await runRubric(null);
+    let design = await runDesign(rubric, null);
+    let workPlan = await runDecomposition(rubric, design, null);
+    let assertions = await runAssertions(rubric, design, workPlan, []);
+    let fingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+
+    for (;;) {
+      critique = await runCritique(rubric, design, workPlan, assertions);
+      if (critique.verdict !== "repair") break;
+      const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
+      const userFinding = blocking.find(({ owner }) => owner === "user");
+      if (userFinding) {
+        critique = { ...critique, verdict: "needs-input", question: userFinding.issue };
+        await ctx.commit({ kind: "horizon.planning-route", revision: input.revision,
+          from: "repair", to: "needs-input", finding: userFinding.id }, { tier: "audit" });
+        break;
+      }
+      if (repairCycle >= MAX_REPAIR_CYCLES) {
+        critique = blockedCritique(input, "Planning repair exceeded its convergence safety ceiling."); break;
+      }
+      repairCycle++;
+      const owners = new Set(blocking.map(({ owner }) => owner));
+      if (owners.has("rubric")) rubric = await runRubric(rubric);
+      if (owners.has("rubric") || owners.has("design")) design = await runDesign(rubric, design);
+      if (owners.has("rubric") || owners.has("design") || owners.has("decomposition")) {
+        workPlan = await runDecomposition(rubric, design, workPlan);
+      }
+      assertions = await runAssertions(rubric, design, workPlan, assertions);
+      const nextFingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+      if (nextFingerprint === fingerprint) {
+        critique = blockedCritique(input, "Planning repair plateaued without changing the affected artifacts.");
+        await ctx.commit({ kind: "horizon.planning-plateau", revision: input.revision,
+          repairCycle, fingerprint, critique }, { tier: "audit" });
+        break;
+      }
+      fingerprint = nextFingerprint;
     }
-    return { plan: conversation.artifact, toolEvidence: conversation.evidence };
+
+    if (critique.verdict === "accepted" && !input.discoveryPlan.workspaceRoot) {
+      critique = blockedCritique(input, "Planning converged without a governed materialized repository workspace.");
+    }
+
+    const finalized = await ctx.spawn(planFinalizer, { planning: input, rubric, design, workPlan, assertions,
+      prior: critique, critique, tools: [] }, { retries: 1, dedupe: "specHash",
+      budget: { turns: 8, microUsd: 5_000_000, wallMs: 1_200_000 }, attenuation: { bindings: ["model"], tools: [] } });
+    planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
+    const plan = finalized.artifact;
+    const expectedStatus = critique.verdict === "accepted" ? "ready"
+      : critique.verdict === "needs-input" ? "needs-input" : "blocked";
+    if (plan.status !== expectedStatus || canonicalJson(plan.steps) !== canonicalJson(workPlan.steps)
+      || canonicalJson(plan.assertions) !== canonicalJson(assertions)
+      || plan.workspaceRoot !== input.discoveryPlan.workspaceRoot
+      || expectedStatus === "needs-input" && plan.question !== critique.question) {
+      throw new TypeError("Horizon finalization changed or misrepresented the converged planning artifacts");
+    }
+    return { plan, toolEvidence: evidence, planningRuns };
   },
 });

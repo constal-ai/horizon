@@ -99,15 +99,15 @@ function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[]
   };
 }
 
-async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPlan; fact: string }> {
+async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPlan; fact: string; planningRuns: number }> {
   const tools = availableTools(PLANNER_TOOL_NAMES, ctx);
   const result = await ctx.spawn(planner, { ...input, tools }, {
-    retries: 1, dedupe: "specHash", budget: { turns: 36, microUsd: 15_000_000, wallMs: 3_600_000 },
+    retries: 1, dedupe: "specHash", budget: { turns: 64, microUsd: 100_000_000, wallMs: 14_400_000 },
     attenuation: attenuation(tools, ctx),
   });
   const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan,
     previousRevision: input.previousPlan?.revision ?? null, toolEvidence: result.toolEvidence }, { tier: "audit" });
-  return { plan: result.plan, fact: fact.hash };
+  return { plan: result.plan, fact: fact.hash, planningRuns: result.planningRuns };
 }
 
 async function discover(request: HzRequest, ctx: Ctx): Promise<{
@@ -154,7 +154,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     investigations: discovery.investigations, revision: 1, previousPlan: null,
     completed, replanBrief: null, answer, tools: [] }, ctx);
   remainingUnknowns = current.plan.unknowns;
-  specialistRuns++;
+  specialistRuns += current.planningRuns;
 
   while (transitions++ < MAX_WORKFLOW_TRANSITIONS) {
     if (current.plan.status === "blocked") {
@@ -172,7 +172,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
         revision: previous.revision + 1, previousPlan: previous, completed,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
       remainingUnknowns = current.plan.unknowns;
-      specialistRuns++; replans++;
+      specialistRuns += current.planningRuns; replans++;
       continue;
     }
 
@@ -262,7 +262,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       revision: previous.revision + 1, previousPlan: previous, completed,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
     remainingUnknowns = current.plan.unknowns;
-    specialistRuns++; replans++;
+    specialistRuns += current.planningRuns; replans++;
   }
   return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",
     current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);

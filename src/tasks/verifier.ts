@@ -11,11 +11,12 @@ export const verifier = subtask<HzVerifierResult>({
       role: `verifier-${input.step.id}`, system: VERIFIER_SYSTEM,
       objective: `Verify work unit ${input.step.id}: ${input.step.stopWhen}`,
       context: { request: input.request, plan: input.plan, planFact: input.planFact,
-        assignedStep: input.step, executorReport: input.execution },
+        assignedStep: input.step,
+        assertions: input.plan.assertions.find(({ stepId }) => stepId === input.step.id)?.assertions ?? [],
+        executorReport: input.execution },
       tools: input.tools, model: "model", maxRounds: 20,
       parse: (value) => parseHzVerification(value, input.step.id),
     }, ctx);
     return { verification: conversation.artifact, toolEvidence: conversation.evidence };
   },
 });
-
