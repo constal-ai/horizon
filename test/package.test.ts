@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import agent from "../src/index.js";
+import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_STANDARD_LOOP_TURNS } from "../src/limits.js";
 
 async function json(path: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as Record<string, unknown>;
@@ -39,5 +40,7 @@ describe("Horizon managed Agent package", () => {
       search: "crn:constal:production:platform:default:service/constal-search",
     });
     expect(manifest.limits).toEqual({ maxRunMicroUsd: 500_000_000, maxTurns: 2_048 });
+    expect({ standard: HORIZON_STANDARD_LOOP_TURNS, execution: HORIZON_EXECUTION_LOOP_TURNS })
+      .toEqual({ standard: 500, execution: 1_000 });
   });
 });

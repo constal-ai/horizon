@@ -94,7 +94,7 @@ function roundContext(calls: readonly ToolCallRecord[]): unknown[] {
 }
 
 export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise<ReactLoopResult<T>> {
-  const maximum = Math.max(1, Math.min(spec.maxRounds, 64));
+  const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
   let enabledTools = [...new Set(spec.tools)];
   const calls: ToolCallRecord[] = [];
   const recentRounds: unknown[][] = [];

@@ -2,6 +2,7 @@ import { subtask } from "@constal/sdk";
 import { parseHzReconciliation, type HzReconcilerInput, type HzReconcilerResult } from "../contracts.js";
 import { RECONCILER_SYSTEM } from "../prompts/reconciler.js";
 import { runReactLoop } from "../react-loop.js";
+import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const reconciler = subtask<HzReconcilerResult>({
   id: "horizon-reconciler",
@@ -25,7 +26,7 @@ export const reconciler = subtask<HzReconcilerResult>({
       },
       tools: input.tools,
       model: "model",
-      maxRounds: 10,
+      maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse(value) {
         const result = parseHzReconciliation(value);
         if (!result) return null;

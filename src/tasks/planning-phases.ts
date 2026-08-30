@@ -6,6 +6,7 @@ import { parseHzDesign, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, 
 import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM, RUBRIC_SYSTEM } from "../prompts/planning.js";
 import { PLANNER_SYSTEM } from "../prompts/planner.js";
 import { runReactLoop } from "../react-loop.js";
+import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export interface PlanningPhaseResult<T> {
   artifact: T;
@@ -37,7 +38,7 @@ export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
     const loop = await runReactLoop({ role: "rubric", system: RUBRIC_SYSTEM,
       objective: "Define the evidence-grounded success rubric.",
       context: { ...context(input.planning), priorRubric: input.prior, critique: input.critique },
-      tools: input.tools, model: "model", maxRounds: 20,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzRubric(value, input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
@@ -50,7 +51,7 @@ export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
     const loop = await runReactLoop({ role: "design", system: DESIGN_SYSTEM,
       objective: "Close architecture decisions and define delivery milestones.",
       context: { ...context(input.planning), rubric: input.rubric, priorDesign: input.prior, critique: input.critique },
-      tools: input.tools, model: "model", maxRounds: 24,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzDesign(value, input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
@@ -67,7 +68,7 @@ export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>(
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         assignedMilestone: milestone,
         acceptedPrerequisiteSteps: input.acceptedSteps, priorMilestoneSteps: input.prior, critique: input.critique },
-      tools: input.tools, model: "model", maxRounds: 24,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzMilestoneWork(value, input.planning.revision, input.milestoneId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
@@ -83,7 +84,7 @@ export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
       objective: `Define independent proof for ${step.title}.`,
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assignedStep: step, priorAssertions: input.prior, critique: input.critique },
-      tools: input.tools, model: "model", maxRounds: 16,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzStepAssertions(value, input.planning.revision, input.stepId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
@@ -97,7 +98,7 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
       objective: "Reconcile all planning artifacts and decide whether the plan can become immutable.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, priorCritique: input.prior },
-      tools: input.tools, model: "model", maxRounds: 16,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzPlanCritique(value, input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
@@ -111,7 +112,7 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlan>>({
       objective: "Render the converged immutable execution specification.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, critique: input.critique },
-      tools: [], model: "model", stream: true, maxRounds: 4,
+      tools: [], model: "model", stream: true, maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse(value) {
         const plan = parseHzPlan(value);
         const expectedStatus = input.critique.verdict === "accepted" ? "ready"

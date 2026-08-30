@@ -67,6 +67,8 @@ An agentic loop exists to reduce uncertainty. Horizon treats the following as pr
 
 Its plateau detector compares canonical Tool arguments and observed results. It does not classify English prose, grep for semantic keywords, or infer correctness from field counts. Two repeated evidence rounds force the role to resolve, replan, ask, or block without making another Tool call. A separate workflow fingerprint prevents identical failed work from looking like progress across replans.
 
+Standard ReAct roles have a 500-model-turn emergency ceiling; execution specialists have 1,000. The shared runner ceiling is 1,000. These are deliberately Hz-scale backstops—the evidence plateau, repeated-state, question-deduplication, and convergence guards are expected to terminate normal work earlier.
+
 ## Agent roles
 
 | Role | Responsibility |

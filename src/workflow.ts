@@ -5,6 +5,8 @@ import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type 
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES,
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
+import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
+  HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
 
 const MAX_PLAN_REVISIONS = 64;
 const MAX_WORKFLOW_TRANSITIONS = 1_024;
@@ -146,7 +148,8 @@ async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPla
   const plannerAttenuation = { ...baseAttenuation,
     bindings: [...new Set([...baseAttenuation.bindings, "cas"])].sort() };
   const result = await ctx.spawn(planner, planningInput, {
-    retries: 1, dedupe: "specHash", budget: { turns: 64, microUsd: 100_000_000, wallMs: 14_400_000 },
+    retries: 1, dedupe: "specHash", budget: { turns: HORIZON_EXECUTION_LOOP_TURNS,
+      microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: plannerAttenuation,
   });
   const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan,
@@ -161,7 +164,8 @@ async function discover(request: HzRequest, ctx: Ctx): Promise<{
 }> {
   const discoveryTools = availableTools(DISCOVERY_TOOL_NAMES, ctx);
   const framed = await ctx.spawn(discoveryFramer, { request, tools: discoveryTools }, {
-    retries: 1, dedupe: "specHash", budget: { turns: 32, microUsd: 12_000_000, wallMs: 3_600_000 },
+    retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+      microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: attenuation(discoveryTools, ctx),
   });
   const discoveryFact = await ctx.commit({ kind: "horizon.discovery-plan", discoveryPlan: framed.discoveryPlan,
@@ -170,7 +174,8 @@ async function discover(request: HzRequest, ctx: Ctx): Promise<{
   const handles = framed.discoveryPlan.focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
     request, discoveryPlan: framed.discoveryPlan, focus, tools: investigationTools,
   }, {
-    retries: 1, dedupe: "specHash", budget: { turns: 32, microUsd: 8_000_000, wallMs: 3_600_000 },
+    retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+      microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: attenuation(investigationTools, ctx),
   }) }));
   const investigations: HzInvestigationResult[] = [];
@@ -261,7 +266,8 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     const executorTools = availableTools(EXECUTOR_TOOL_NAMES, ctx);
     const executed = await ctx.spawn(executor, { request, plan: current.plan, planFact: current.fact, step, completed,
       tools: executorTools }, {
-      retries: 1, dedupe: "specHash", budget: { turns: 44, microUsd: 20_000_000, wallMs: 7_200_000 },
+      retries: 1, dedupe: "specHash", budget: { turns: HORIZON_EXECUTION_LOOP_TURNS,
+        microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(executorTools, ctx),
     });
     specialistRuns++;
@@ -270,7 +276,8 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     const verifierTools = availableTools(VERIFIER_TOOL_NAMES, ctx);
     const verified = await ctx.spawn(verifier, { request, plan: current.plan, planFact: current.fact, step,
       execution: executed.result, tools: verifierTools }, {
-      retries: 1, dedupe: "specHash", budget: { turns: 24, microUsd: 8_000_000, wallMs: 3_600_000 },
+      retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+        microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(verifierTools, ctx),
     });
     specialistRuns++;
@@ -290,7 +297,8 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     const reconcilerTools = availableTools(RECONCILER_TOOL_NAMES, ctx);
     const reconciled = await ctx.spawn(reconciler, { request, plan: current.plan, planFact: current.fact,
       completed, latest: executed.result, verification: verified.verification, plateau, tools: reconcilerTools }, {
-      retries: 1, dedupe: "specHash", budget: { turns: 12, microUsd: 5_000_000, wallMs: 1_800_000 },
+      retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+        microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(reconcilerTools, ctx),
     });
     specialistRuns++;

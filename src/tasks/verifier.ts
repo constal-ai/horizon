@@ -2,6 +2,7 @@ import { subtask } from "@constal/sdk";
 import { parseHzVerification, type HzVerifierInput, type HzVerifierResult } from "../contracts.js";
 import { VERIFIER_SYSTEM } from "../prompts/verifier.js";
 import { runReactLoop } from "../react-loop.js";
+import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const verifier = subtask<HzVerifierResult>({
   id: "horizon-verifier",
@@ -14,7 +15,7 @@ export const verifier = subtask<HzVerifierResult>({
         assignedStep: input.step,
         assertions: input.plan.assertions.find(({ stepId }) => stepId === input.step.id)?.assertions ?? [],
         executorReport: input.execution },
-      tools: input.tools, model: "model", maxRounds: 20,
+      tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzVerification(value, input.step.id),
     }, ctx);
     return { verification: conversation.artifact, toolEvidence: conversation.evidence };

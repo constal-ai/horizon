@@ -2,6 +2,7 @@ import { subtask } from "@constal/sdk";
 import { parseHzDiscoveryPlan, type HzDiscoveryInput, type HzDiscoveryResult } from "../contracts.js";
 import { DISCOVERY_SYSTEM } from "../prompts/discovery.js";
 import { runReactLoop } from "../react-loop.js";
+import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const discoveryFramer = subtask<HzDiscoveryResult>({
   id: "horizon-discovery-framer",
@@ -10,7 +11,8 @@ export const discoveryFramer = subtask<HzDiscoveryResult>({
     const conversation = await runReactLoop({
       role: "discovery-framer", system: DISCOVERY_SYSTEM,
       objective: "Establish the repository and frame focused software investigations.",
-      context: { request: input.request }, tools: input.tools, model: "model", stream: true, maxRounds: 28,
+      context: { request: input.request }, tools: input.tools, model: "model", stream: true,
+      maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: parseHzDiscoveryPlan,
     }, ctx);
     const imported = [...conversation.evidence].reverse().find((entry) => {

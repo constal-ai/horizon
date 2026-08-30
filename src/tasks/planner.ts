@@ -3,6 +3,7 @@ import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts
 import { parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
+import { HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS, HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, planFinalizer, rubricAgent,
   type PlanningPhaseResult } from "./planning-phases.js";
 
@@ -53,7 +54,8 @@ export const planner = subtask<HzPlannerResult>({
     const runRubric = async (prior: HzRubric | null): Promise<HzRubric> => {
       const phaseInput = await storeArtifact(ctx, { planning: input, prior, critique, tools });
       const result = await ctx.spawn(rubricAgent, phaseInput, {
-        retries: 1, dedupe: "specHash", budget: { turns: 24, microUsd: 8_000_000, wallMs: 2_400_000 },
+        retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+          microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
         attenuation: childAttenuation,
       });
       planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "rubric", input.revision, result, repairCycle);
@@ -62,7 +64,8 @@ export const planner = subtask<HzPlannerResult>({
     const runDesign = async (rubric: HzRubric, prior: HzDesign | null): Promise<HzDesign> => {
       const phaseInput = await storeArtifact(ctx, { planning: input, rubric, prior, critique, tools });
       const result = await ctx.spawn(designAgent, phaseInput, {
-        retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
+        retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+          microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
         attenuation: childAttenuation,
       });
       planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "design", input.revision, result, repairCycle);
@@ -74,7 +77,8 @@ export const planner = subtask<HzPlannerResult>({
         const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, milestoneId: milestone.id,
           acceptedSteps, prior: prior?.steps.filter((step) => step.milestoneId === milestone.id) ?? [], critique, tools });
         const result = await ctx.spawn(decompositionAgent, phaseInput, {
-          retries: 1, dedupe: "specHash", budget: { turns: 28, microUsd: 10_000_000, wallMs: 3_000_000 },
+          retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+            microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
           attenuation: childAttenuation,
         });
         planningRuns++; evidence.push(...result.toolEvidence);
@@ -94,7 +98,8 @@ export const planner = subtask<HzPlannerResult>({
         const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, stepId: step.id,
           prior: priorByStep.get(step.id) ?? null, critique, tools });
         handles.push({ step, handle: ctx.spawn(assertionAgent, phaseInput,
-          { retries: 1, dedupe: "specHash", budget: { turns: 20, microUsd: 5_000_000, wallMs: 2_400_000 },
+          { retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+              microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
             attenuation: childAttenuation }) });
       }
       planningRuns += handles.length;
@@ -110,7 +115,8 @@ export const planner = subtask<HzPlannerResult>({
       const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan,
         assertions, prior: critique, tools });
       const result = await ctx.spawn(critiqueAgent, phaseInput, { retries: 1, dedupe: "specHash",
-        budget: { turns: 20, microUsd: 6_000_000, wallMs: 2_400_000 }, attenuation: childAttenuation });
+        budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
+          wallMs: HORIZON_LOOP_WALL_MS }, attenuation: childAttenuation });
       planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "critique", input.revision, result, repairCycle);
       return result.artifact;
     };
@@ -161,7 +167,8 @@ export const planner = subtask<HzPlannerResult>({
     const finalizerInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, assertions,
       prior: critique, critique, tools: [] });
     const finalized = await ctx.spawn(planFinalizer, finalizerInput, { retries: 1, dedupe: "specHash",
-      budget: { turns: 8, microUsd: 5_000_000, wallMs: 1_200_000 }, attenuation: { bindings: ["cas", "model"], tools: [] } });
+      budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
+        wallMs: HORIZON_LOOP_WALL_MS }, attenuation: { bindings: ["cas", "model"], tools: [] } });
     planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
     const plan = finalized.artifact;
     const expectedStatus = critique.verdict === "accepted" ? "ready"

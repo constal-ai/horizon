@@ -2,6 +2,7 @@ import { subtask } from "@constal/sdk";
 import { parseHzStepResult, type HzExecutorInput, type HzExecutorResult } from "../contracts.js";
 import { EXECUTOR_SYSTEM } from "../prompts/executor.js";
 import { runReactLoop } from "../react-loop.js";
+import { HORIZON_EXECUTION_LOOP_TURNS } from "../limits.js";
 
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
@@ -22,7 +23,7 @@ export const executor = subtask<HzExecutorResult>({
       tools: input.tools,
       model: "model",
       stream: true,
-      maxRounds: 40,
+      maxRounds: HORIZON_EXECUTION_LOOP_TURNS,
       parse: (value) => parseHzStepResult(value, input.step.id),
     }, ctx);
     return { result: conversation.artifact, toolEvidence: conversation.evidence };
