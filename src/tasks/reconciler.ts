@@ -29,6 +29,7 @@ export const reconciler = subtask<HzReconcilerResult>({
         const result = parseHzReconciliation(value);
         if (!result) return null;
         if (result.action === "complete" && pending.length > 0) return null;
+        if (result.action === "complete" && result.remainingUnknowns.some(({ state }) => !["resolved", "assumed"].includes(state))) return null;
         if (result.action === "continue" && (pending.length === 0 || input.latest.status !== "complete")) return null;
         return result;
       },
@@ -36,4 +37,3 @@ export const reconciler = subtask<HzReconcilerResult>({
     return { reconciliation: conversation.artifact, toolEvidence: conversation.evidence };
   },
 });
-

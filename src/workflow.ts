@@ -21,11 +21,11 @@ function updateCompleted(completed: HzStepResult[], result: HzStepResult): HzSte
   return [...completed.filter(({ stepId }) => stepId !== result.stepId), result];
 }
 
-async function progressState(previous: HzPlateauState, completed: readonly HzStepResult[], evidenceFacts: readonly string[],
+async function progressState(previous: HzPlateauState, completed: readonly HzStepResult[], resultDigests: readonly string[],
   remainingUnknowns: readonly unknown[]): Promise<HzPlateauState> {
   const fingerprint = await hashValue({
     completed: completed.filter(({ status }) => status === "complete").map(({ stepId }) => stepId).sort(),
-    evidenceFacts: [...new Set(evidenceFacts)].sort(),
+    resultDigests: [...new Set(resultDigests)].sort(),
     remainingUnknowns,
   });
   return { fingerprint, stableCycles: previous.fingerprint === fingerprint ? previous.stableCycles + 1 : 0 };
@@ -84,11 +84,13 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
   const request: HzRequest = parseHzRequest(message);
   await ctx.commit({ kind: "horizon.request", request }, { tier: "audit" });
   let completed: HzStepResult[] = [];
-  let evidenceFacts: string[] = [];
+  let resultDigests: string[] = [];
+  let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
   let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
 
   let current = await planRevision({ request, revision: 1, previousPlan: null, completed, replanBrief: null, answer, tools: [] }, ctx);
+  remainingUnknowns = current.plan.unknowns;
   specialistRuns++;
 
   while (transitions++ < MAX_WORKFLOW_TRANSITIONS) {
@@ -105,6 +107,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       const previous = current.plan;
       current = await planRevision({ request, revision: previous.revision + 1, previousPlan: previous, completed,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
+      remainingUnknowns = current.plan.unknowns;
       specialistRuns++; replans++;
       continue;
     }
@@ -118,7 +121,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
           object: "constal.horizon.result", version: 1, status: "complete", summary: current.plan.summary,
           plan: { revision: current.plan.revision, fact: current.fact },
           completedSteps: completed.map(({ stepId, status, summary }) => ({ id: stepId, status, summary })),
-          remainingUnknowns: current.plan.unknowns.filter(({ state }) => !["resolved", "assumed"].includes(state)),
+          remainingUnknowns: remainingUnknowns.filter(({ state }) => !["resolved", "assumed"].includes(state)),
           artifact,
           longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles: plateau.stableCycles },
         };
@@ -138,10 +141,11 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     specialistRuns++;
     const stepFact = await ctx.commit({ kind: "horizon.step-result", planFact: current.fact, result: executed.result,
       toolEvidence: executed.toolEvidence }, { tier: "audit" });
-    evidenceFacts = [...new Set([...evidenceFacts, stepFact.hash])];
+    const resultDigest = await hashValue(executed.result);
+    resultDigests = [...new Set([...resultDigests, resultDigest])];
     completed = updateCompleted(completed, executed.result);
 
-    plateau = await progressState(plateau, completed, evidenceFacts, executed.result.unknowns);
+    plateau = await progressState(plateau, completed, resultDigests, executed.result.unknowns);
     await ctx.commit({ kind: "horizon.progress", planFact: current.fact, step: step.id, plateau }, { tier: "audit" });
 
     const reconcilerTools = availableTools(RECONCILER_TOOL_NAMES, ctx);
@@ -155,6 +159,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       reconciliation: reconciled.reconciliation, toolEvidence: reconciled.toolEvidence }, { tier: "audit" });
 
     const decision = reconciled.reconciliation;
+    remainingUnknowns = decision.remainingUnknowns;
     if (decision.action === "continue") continue;
     if (decision.action === "blocked") {
       return blockedResult(current.plan, current.fact, completed, decision.blockedReason ?? decision.summary,
@@ -169,9 +174,9 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     const previous = current.plan;
     current = await planRevision({ request, revision: previous.revision + 1, previousPlan: previous, completed,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
+    remainingUnknowns = current.plan.unknowns;
     specialistRuns++; replans++;
   }
   return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",
     current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
 }
-
