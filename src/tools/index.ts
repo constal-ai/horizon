@@ -19,17 +19,25 @@ export const EXECUTOR_TOOL_NAMES = [
 
 export const RECONCILER_TOOL_NAMES = ["workspace_list", "workspace_search", "workspace_read", "workspace_diff"] as const;
 
+function requiredBindings(tool: Tool): string[] {
+  const catalog = tool as Tool & { catalog?: { binding?: unknown } };
+  return [...new Set([
+    ...(tool.needs ?? []).map(({ binding }) => binding),
+    ...(typeof catalog.catalog?.binding === "string" ? [catalog.catalog.binding] : []),
+  ])];
+}
+
 export function availableTools(names: readonly string[], ctx: Pick<Ctx, "resources">): string[] {
   return names.filter((name) => {
     const tool = TOOLS[name];
-    return tool !== undefined && (tool.needs ?? []).every(({ binding }) => typeof ctx.resources[binding] === "string");
+    return tool !== undefined && requiredBindings(tool).every((binding) => typeof ctx.resources[binding] === "string");
   });
 }
 
 export function bindingsForTools(names: readonly string[], ctx: Pick<Ctx, "resources">): string[] {
   const bindings = new Set<string>(["model"]);
-  for (const name of names) for (const need of TOOLS[name]?.needs ?? []) {
-    if (typeof ctx.resources[need.binding] === "string") bindings.add(need.binding);
+  for (const name of names) for (const binding of requiredBindings(TOOLS[name]!)) {
+    if (typeof ctx.resources[binding] === "string") bindings.add(binding);
   }
   return [...bindings].sort();
 }

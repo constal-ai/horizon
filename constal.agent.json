@@ -7,11 +7,12 @@
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
-    "model": "crn:constal:production:platform:default:model/openai/gpt-5.6-sol",
+    "model": "crn:constal:production:platform:default:model/gpt-5.6-sol",
     "sandbox": "crn:constal:production:platform:default:sandbox-pool/constal",
-    "cas": "crn:constal:production:platform:default:cas/artifacts",
+    "cas": "crn:constal:production:platform:default:cas/constal",
     "github": "crn:constal:production:platform:default:service/github",
-    "web": "crn:constal:production:platform:default:web/standard"
+    "web": "crn:constal:production:platform:default:web/constal",
+    "search": "crn:constal:production:platform:default:service/constal-search"
   },
   "policies": [],
   "tools": [
@@ -39,4 +40,3 @@
   },
   "expectedCurrentDeploymentRevision": null
 }
-

@@ -57,4 +57,55 @@ describe("Horizon workflow", () => {
       "horizon.request", "horizon.plan", "horizon.step-result", "horizon.progress", "horizon.reconciliation", "horizon.result",
     ]);
   });
+
+  it("preserves failed evidence and creates a new immutable plan revision before retrying", async () => {
+    const committed: Array<{ kind?: string; plan?: HzPlan }> = []; let sequence = 0;
+    let plannerRuns = 0; let executorRuns = 0; let reconcilerRuns = 0;
+    const revisedPlan: HzPlan = { ...plan, revision: 2,
+      specification: "Preserve the first attempt as evidence and execute the corrected repository-native approach." };
+    const failed: HzStepResult = { ...stepResult, status: "failed", summary: "The planned seam was stale.",
+      changedFiles: [], verification: ["focused test exposed the stale seam"], unknowns: [{ id: "stale-seam",
+        question: "Which live boundary replaces the planned seam?", state: "open", resolution: null, evidence: ["test failure"] }] };
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: { kind?: string; plan?: HzPlan }) => {
+        committed.push(artifact); sequence++;
+        return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
+      },
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-planner") {
+          plannerRuns++;
+          return handle({ plan: plannerRuns === 1 ? plan : revisedPlan, toolEvidence: [] });
+        }
+        if (task.id === "horizon-executor") {
+          executorRuns++;
+          return handle({ result: executorRuns === 1 ? failed : stepResult, toolEvidence: [] });
+        }
+        if (task.id === "horizon-reconciler") {
+          reconcilerRuns++;
+          return handle({ reconciliation: reconcilerRuns === 1 ? {
+            object: "constal.horizon.reconciliation", version: 1, action: "replan",
+            summary: "The live seam invalidates the remaining implementation approach.", remainingUnknowns: failed.unknowns,
+            replanBrief: "Preserve the failed attempt as evidence and rewrite the work unit around the observed live boundary.",
+            question: null, blockedReason: null,
+          } : {
+            object: "constal.horizon.reconciliation", version: 1, action: "complete", summary: "The revised work is proven.",
+            remainingUnknowns: [], replanBrief: null, question: null, blockedReason: null,
+          }, toolEvidence: [] });
+        }
+        throw new Error(`unexpected task ${task.id}`);
+      },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
+    } as unknown as Ctx;
+
+    const result = await runHorizon(plan.objective, ctx);
+    expect(result.status).toBe("complete");
+    expect(result.plan.revision).toBe(2);
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 6, replans: 1 });
+    expect(committed.filter(({ kind }) => kind === "horizon.plan").map(({ plan: committedPlan }) => committedPlan?.revision)).toEqual([1, 2]);
+    expect(committed.filter(({ kind }) => kind === "horizon.step-result")).toHaveLength(2);
+  });
 });
