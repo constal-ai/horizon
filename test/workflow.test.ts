@@ -18,6 +18,20 @@ const stepResult: HzStepResult = {
   unknowns: [], blockedReason: null,
 };
 
+const discoveryPlan = {
+  object: "constal.horizon.discovery-plan" as const, version: 1 as const, status: "ready" as const,
+  summary: "The repository is ready for focused investigation.", workspaceRoot: plan.workspaceRoot,
+  focuses: [{ id: "implementation", title: "Implementation seam", mission: "Find the existing implementation seam.",
+    questions: ["Which abstraction owns the behavior?"], evidenceNeeded: ["Source and focused tests"],
+    stopWhen: "The owner and proof surface are known." }], unknowns: [], blockedReason: null,
+};
+
+const investigation = {
+  object: "constal.horizon.investigation" as const, version: 1 as const, focusId: "implementation",
+  status: "complete" as const, summary: "The existing seam is identified.", findings: ["The runtime owns the behavior."],
+  evidence: ["src/index.ts"], unknowns: [], planImplications: ["Reuse the runtime seam."], blockedReason: null,
+};
+
 function handle<T>(value: T): Handle<T> {
   const promise = Promise.resolve(value) as Promise<T> & Partial<Handle<T>>;
   Object.assign(promise, { id: "handle", resolved: true, seq: 1, outcome: null, result: value, error: undefined,
@@ -37,6 +51,8 @@ describe("Horizon workflow", () => {
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
       spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [] });
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
@@ -52,9 +68,10 @@ describe("Horizon workflow", () => {
     const result = await runHorizon({ objective: plan.objective }, ctx);
     expect(result.status).toBe("complete");
     expect(result.artifact?.ref).toBe("artifact-ref");
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 3, replans: 0 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 5, replans: 0 });
     expect((committed as Array<{ kind?: string }>).map(({ kind }) => kind)).toEqual([
-      "horizon.request", "horizon.plan", "horizon.step-result", "horizon.progress", "horizon.reconciliation", "horizon.result",
+      "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
+      "horizon.progress", "horizon.reconciliation", "horizon.result",
     ]);
   });
 
@@ -75,6 +92,8 @@ describe("Horizon workflow", () => {
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
       spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
           plannerRuns++;
           return handle({ plan: plannerRuns === 1 ? plan : revisedPlan, toolEvidence: [] });
@@ -104,7 +123,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
     expect(result.plan.revision).toBe(2);
-    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 6, replans: 1 });
+    expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 8, replans: 1 });
     expect(committed.filter(({ kind }) => kind === "horizon.plan").map(({ plan: committedPlan }) => committedPlan?.revision)).toEqual([1, 2]);
     expect(committed.filter(({ kind }) => kind === "horizon.step-result")).toHaveLength(2);
   });

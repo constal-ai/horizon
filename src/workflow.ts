@@ -1,8 +1,9 @@
 import { hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
-import { parseHzRequest, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
+import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
-import { executor, planner, reconciler } from "./tasks/index.js";
-import { availableTools, bindingsForTools, EXECUTOR_TOOL_NAMES, PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES } from "./tools/index.js";
+import { discoveryFramer, executor, investigator, planner, reconciler } from "./tasks/index.js";
+import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES,
+  PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES } from "./tools/index.js";
 
 const MAX_PLAN_REVISIONS = 8;
 const MAX_WORKFLOW_TRANSITIONS = 384;
@@ -80,6 +81,35 @@ async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPla
   return { plan: result.plan, fact: fact.hash };
 }
 
+async function discover(request: HzRequest, ctx: Ctx): Promise<{
+  discoveryPlan: HzDiscoveryPlan;
+  investigations: HzInvestigationResult[];
+  specialistRuns: number;
+}> {
+  const discoveryTools = availableTools(DISCOVERY_TOOL_NAMES, ctx);
+  const framed = await ctx.spawn(discoveryFramer, { request, tools: discoveryTools }, {
+    retries: 1, dedupe: "specHash", budget: { turns: 32, microUsd: 12_000_000, wallMs: 3_600_000 },
+    attenuation: attenuation(discoveryTools, ctx),
+  });
+  const discoveryFact = await ctx.commit({ kind: "horizon.discovery-plan", discoveryPlan: framed.discoveryPlan,
+    toolEvidence: framed.toolEvidence }, { tier: "audit" });
+  const investigationTools = availableTools(INVESTIGATOR_TOOL_NAMES, ctx);
+  const handles = framed.discoveryPlan.focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
+    request, discoveryPlan: framed.discoveryPlan, focus, tools: investigationTools,
+  }, {
+    retries: 1, dedupe: "specHash", budget: { turns: 32, microUsd: 8_000_000, wallMs: 3_600_000 },
+    attenuation: attenuation(investigationTools, ctx),
+  }) }));
+  const investigations: HzInvestigationResult[] = [];
+  for (const { focus, handle } of handles) {
+    const result = await Promise.resolve(handle);
+    investigations.push(result.investigation);
+    await ctx.commit({ kind: "horizon.investigation", discoveryFact: discoveryFact.hash,
+      focus: focus.id, investigation: result.investigation, toolEvidence: result.toolEvidence }, { tier: "audit" });
+  }
+  return { discoveryPlan: framed.discoveryPlan, investigations, specialistRuns: 1 + investigations.length };
+}
+
 export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResult> {
   const request: HzRequest = parseHzRequest(message);
   await ctx.commit({ kind: "horizon.request", request }, { tier: "audit" });
@@ -89,7 +119,11 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
   let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
 
-  let current = await planRevision({ request, revision: 1, previousPlan: null, completed, replanBrief: null, answer, tools: [] }, ctx);
+  const discovery = await discover(request, ctx);
+  specialistRuns += discovery.specialistRuns;
+  let current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
+    investigations: discovery.investigations, revision: 1, previousPlan: null,
+    completed, replanBrief: null, answer, tools: [] }, ctx);
   remainingUnknowns = current.plan.unknowns;
   specialistRuns++;
 
@@ -105,7 +139,8 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       }
       answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
       const previous = current.plan;
-      current = await planRevision({ request, revision: previous.revision + 1, previousPlan: previous, completed,
+      current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
+        revision: previous.revision + 1, previousPlan: previous, completed,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
       remainingUnknowns = current.plan.unknowns;
       specialistRuns++; replans++;
@@ -172,7 +207,8 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     }
     if (decision.action === "ask") answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
     const previous = current.plan;
-    current = await planRevision({ request, revision: previous.revision + 1, previousPlan: previous, completed,
+    current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
+      revision: previous.revision + 1, previousPlan: previous, completed,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
     remainingUnknowns = current.plan.unknowns;
     specialistRuns++; replans++;

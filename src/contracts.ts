@@ -9,6 +9,39 @@ export interface HzUnknown {
   evidence: string[];
 }
 
+export interface HzDiscoveryFocus {
+  id: string;
+  title: string;
+  mission: string;
+  questions: string[];
+  evidenceNeeded: string[];
+  stopWhen: string;
+}
+
+export interface HzDiscoveryPlan {
+  object: "constal.horizon.discovery-plan";
+  version: 1;
+  status: "ready" | "partial" | "blocked";
+  summary: string;
+  workspaceRoot: string | null;
+  focuses: HzDiscoveryFocus[];
+  unknowns: HzUnknown[];
+  blockedReason: string | null;
+}
+
+export interface HzInvestigationResult {
+  object: "constal.horizon.investigation";
+  version: 1;
+  focusId: string;
+  status: "complete" | "partial" | "blocked";
+  summary: string;
+  findings: string[];
+  evidence: string[];
+  unknowns: HzUnknown[];
+  planImplications: string[];
+  blockedReason: string | null;
+}
+
 export interface HzPlanStep {
   id: string;
   title: string;
@@ -71,12 +104,36 @@ export interface HzRequest {
 
 export interface HzPlanInput {
   request: HzRequest;
+  discoveryPlan: HzDiscoveryPlan;
+  investigations: HzInvestigationResult[];
   revision: number;
   previousPlan: HzPlan | null;
   completed: HzStepResult[];
   replanBrief: string | null;
   answer: string | null;
   tools: string[];
+}
+
+export interface HzDiscoveryInput {
+  request: HzRequest;
+  tools: string[];
+}
+
+export interface HzDiscoveryResult {
+  discoveryPlan: HzDiscoveryPlan;
+  toolEvidence: HzToolEvidence[];
+}
+
+export interface HzInvestigatorInput {
+  request: HzRequest;
+  discoveryPlan: HzDiscoveryPlan;
+  focus: HzDiscoveryFocus;
+  tools: string[];
+}
+
+export interface HzInvestigatorOutput {
+  investigation: HzInvestigationResult;
+  toolEvidence: HzToolEvidence[];
 }
 
 export interface HzPlannerResult {
@@ -193,6 +250,47 @@ function unknowns(value: unknown): HzUnknown[] | null {
   if (!parsed.every((entry): entry is HzUnknown => entry !== null)) return null;
   if (new Set(parsed.map(({ id }) => id)).size !== parsed.length) return null;
   return parsed;
+}
+
+export function parseHzDiscoveryFocus(value: unknown): HzDiscoveryFocus | null {
+  const source = item(value); const id = string(source?.id, 256); const title = string(source?.title, 1_024);
+  const mission = string(source?.mission, 32_768); const questions = strings(source?.questions, 64, 8_192);
+  const evidenceNeeded = strings(source?.evidenceNeeded, 64, 8_192); const stopWhen = string(source?.stopWhen, 8_192);
+  if (!source || !id || !title || !mission || !questions || !evidenceNeeded || !stopWhen) return null;
+  return { id, title, mission, questions, evidenceNeeded, stopWhen };
+}
+
+export function parseHzDiscoveryPlan(value: unknown): HzDiscoveryPlan | null {
+  const source = item(value); const status = source?.status; const summary = string(source?.summary, 32_768);
+  const workspaceRoot = nullableString(source?.workspaceRoot, 4_096); const parsedUnknowns = unknowns(source?.unknowns);
+  const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.discovery-plan" || source.version !== 1
+    || !["ready", "partial", "blocked"].includes(String(status)) || !summary || workspaceRoot === undefined
+    || !parsedUnknowns || blockedReason === undefined || !Array.isArray(source.focuses)
+    || source.focuses.length === 0 || source.focuses.length > 16) return null;
+  const focuses = source.focuses.map(parseHzDiscoveryFocus);
+  if (!focuses.every((focus): focus is HzDiscoveryFocus => focus !== null)
+    || new Set(focuses.map(({ id }) => id)).size !== focuses.length) return null;
+  if (status === "ready" && !workspaceRoot || status === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.discovery-plan", version: 1,
+    status: status as HzDiscoveryPlan["status"], summary, workspaceRoot, focuses,
+    unknowns: parsedUnknowns, blockedReason };
+}
+
+export function parseHzInvestigationResult(value: unknown, expectedFocusId?: string): HzInvestigationResult | null {
+  const source = item(value); const focusId = string(source?.focusId, 256); const status = source?.status;
+  const summary = string(source?.summary, 32_768); const findings = strings(source?.findings, 128, 16_384);
+  const evidence = strings(source?.evidence, 128, 16_384); const parsedUnknowns = unknowns(source?.unknowns);
+  const planImplications = strings(source?.planImplications, 128, 16_384);
+  const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.investigation" || source.version !== 1 || !focusId
+    || expectedFocusId !== undefined && focusId !== expectedFocusId
+    || !["complete", "partial", "blocked"].includes(String(status)) || !summary || !findings || !evidence
+    || !parsedUnknowns || !planImplications || blockedReason === undefined
+    || status === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.investigation", version: 1, focusId,
+    status: status as HzInvestigationResult["status"], summary, findings, evidence,
+    unknowns: parsedUnknowns, planImplications, blockedReason };
 }
 
 export function parseHzPlanStep(value: unknown): HzPlanStep | null {

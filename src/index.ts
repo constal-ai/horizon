@@ -1,5 +1,5 @@
 import { agent } from "@constal/sdk";
-import { executor, planner, reconciler } from "./tasks/index.js";
+import { discoveryFramer, executor, investigator, planner, reconciler } from "./tasks/index.js";
 import { TOOLS } from "./tools/index.js";
 import { runHorizon } from "./workflow.js";
 
@@ -9,7 +9,7 @@ export default agent({
   model: "model",
   mode: "script",
   tools: TOOLS,
-  subtasks: [planner, executor, reconciler],
+  subtasks: [discoveryFramer, investigator, planner, executor, reconciler],
   onMessage: runHorizon,
 });
 

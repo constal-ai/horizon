@@ -23,6 +23,8 @@ export const planner = subtask<HzPlannerResult>({
       objective: input.previousPlan ? "Reconcile the immutable execution plan with new evidence." : "Create the immutable execution plan.",
       context: {
         request: input.request,
+        discoveryPlan: input.discoveryPlan,
+        investigations: input.investigations,
         revision: input.revision,
         previousPlan: input.previousPlan,
         completed: input.completed,
@@ -38,11 +40,11 @@ export const planner = subtask<HzPlannerResult>({
         return plan?.revision === input.revision && plan.objective === input.request.objective ? plan : null;
       },
     }, ctx);
-    const workspaceRoot = observedWorkspaceRoot(conversation) ?? input.previousPlan?.workspaceRoot ?? null;
+    const workspaceRoot = observedWorkspaceRoot(conversation) ?? input.discoveryPlan.workspaceRoot
+      ?? input.previousPlan?.workspaceRoot ?? null;
     if (conversation.artifact.status === "ready" && conversation.artifact.workspaceRoot !== workspaceRoot) {
       throw new TypeError("ready Horizon plan did not use the workspace root established by governed evidence");
     }
     return { plan: conversation.artifact, toolEvidence: conversation.evidence };
   },
 });
-

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseHzPlan, parseHzReconciliation, parseHzRequest, parseHzStepResult } from "../src/contracts.js";
+import { parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzPlan, parseHzReconciliation, parseHzRequest,
+  parseHzStepResult } from "../src/contracts.js";
 
 const unknown = { id: "architecture-seam", question: "Which existing abstraction owns publication?", state: "resolved",
   resolution: "The deployment boundary owns it.", evidence: ["src/deploy.ts"] };
@@ -41,5 +42,17 @@ describe("Horizon transport contracts", () => {
       replanBrief: "Preserve completed work and replace the remaining API assumption with the observed contract.",
       question: null, blockedReason: null })?.action).toBe("replan");
   });
-});
 
+  it("validates decomposed discovery and focused investigation envelopes", () => {
+    const discovery = { object: "constal.horizon.discovery-plan", version: 1, status: "ready",
+      summary: "The source is materialized and two decisions need focused evidence.", workspaceRoot: "/workspace/repositories/source",
+      focuses: [{ id: "runtime", title: "Runtime ownership", mission: "Trace the runtime boundary.",
+        questions: ["Which component owns recovery?"], evidenceNeeded: ["Runtime source and tests"],
+        stopWhen: "Ownership and recovery invariants are proven." }], unknowns: [unknown], blockedReason: null };
+    expect(parseHzDiscoveryPlan(discovery)).toEqual(discovery);
+    expect(parseHzInvestigationResult({ object: "constal.horizon.investigation", version: 1, focusId: "runtime",
+      status: "complete", summary: "The coordinator owns recovery.", findings: ["Recovery is ledger-driven."],
+      evidence: ["src/runtime.ts"], unknowns: [unknown], planImplications: ["Keep recovery in the coordinator."],
+      blockedReason: null }, "runtime")?.status).toBe("complete");
+  });
+});
