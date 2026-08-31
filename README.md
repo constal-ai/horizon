@@ -10,6 +10,13 @@ It is a standalone Agent package built with `@constal/sdk`. It uses Constal's ex
 User objective
       │
       ▼
+Source Resolver ReAct (only when source is ambiguous)
+      │
+      ▼
+Deterministic workspace controller
+      │ archive → environment digest → cached image fork or base preparation
+      │ runner verification → synthetic Git baseline → WorkspaceReady Fact
+      ▼
 Discovery framer ReAct
       │
       ├── Investigation Agent · behavior / call flow
@@ -52,7 +59,9 @@ Rubric Agent ──► Design + Milestone Agent
                          └────────────┴─────────────┘
 ```
 
-The Run can suspend and resume at every durable primitive. Discovery, every planning phase, plans, specialist results, independent verification, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence. Changed completed work is explicitly invalidated and rerun; unchanged completed proof is retained.
+One Horizon mission is one Constal Session and one logical Sandbox. Every child Run inherits that Session and therefore sees the same workspace. Provider standby snapshots preserve the live Session between active periods. Verified steps additionally publish immutable provider images with durable checkpoint receipts, while the original source archive, workspace identity, and final outputs remain content-addressed artifacts.
+
+The Run can suspend and resume at every durable primitive. Source identity, WorkspaceReady, Discovery, every planning phase, plans, specialist results, independent verification, workspace checkpoints, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence. Changed completed work is explicitly invalidated and rerun; unchanged completed proof is retained.
 
 Large planning handoffs move through content-addressed CAS envelopes rather than inline child-Run input. ReAct loops keep recent observations verbatim, commit complete older rounds, and retain a bounded deduplicated evidence projection after compaction.
 
@@ -73,7 +82,9 @@ Standard ReAct roles have a 500-model-turn emergency ceiling; execution speciali
 
 | Role | Responsibility |
 | --- | --- |
-| Discovery framer | Establish the immutable source workspace and divide repository questions by evidence boundary |
+| Source resolver | Resolve one authenticated repository and revision when the request does not supply an exact source |
+| Workspace controller | Archive source, fork or prepare the Session environment, verify the runner, and commit the immutable baseline |
+| Discovery framer | Divide prepared-repository questions by evidence boundary |
 | Investigator | Resolve one bounded software question set without duplicating other investigations |
 | Rubric | Define observable success, constraints, non-goals, and material open questions |
 | Designer | Close architecture decisions and define dependency-ordered outcome milestones |
@@ -94,8 +105,18 @@ Horizon accepts either a string objective or a structured request:
 ```json
 {
   "objective": "Add resumable repository imports and prove replay after interruption.",
-  "context": {
-    "repository": "constal-ai/example"
+  "source": {
+    "kind": "github",
+    "owner": "constal-ai",
+    "repository": "example",
+    "ref": "main"
+  },
+  "environment": {
+    "name": "node",
+    "cache": true,
+    "setup": [
+      { "cmd": "npm", "args": ["ci", "--ignore-scripts"], "cwd": "/workspace/repo", "timeoutMs": 600000 }
+    ]
   },
   "constraints": [
     "Reuse the existing CAS and Sandbox abstractions.",
@@ -104,13 +125,15 @@ Horizon accepts either a string objective or a structured request:
 }
 ```
 
-Repository access is resolved through the Run's bound GitHub Resource. Credential material never enters Horizon's code or model context.
+`source` may instead be an authorized immutable `tar.gz` artifact reference. When it is omitted, a focused Source Resolver uses the Run's bound GitHub Resource and asks only if authenticated evidence leaves multiple plausible repositories. The environment cache key includes the exact source archive, runner digest, setup specification, and Sandbox Pool revision. Credential material never enters Horizon's code, image, snapshot, or model context.
 
 ## Output
 
 The final result reports:
 
 - the current immutable plan revision and Fact;
+- the durable WorkspaceReady receipt and whether its prepared image was reused;
+- provider snapshot receipts for every independently verified step;
 - every completed specialist responsibility;
 - remaining unknowns, if blocked;
 - the immutable CAS package produced from the governed workspace;
@@ -124,3 +147,5 @@ npm run check
 ```
 
 The package root is directly deployable through Constal's managed Agent deployment flow after its manifest bindings are selected for the target namespace.
+
+Build the code Sandbox base with `docker build --platform linux/amd64 -t <registry>/constal-horizon-sandbox:<version> sandbox`. Configure the platform `sandbox-pool/constal-code` Resource with the published immutable image digest before deploying Horizon. See [docs/execution-architecture.md](docs/execution-architecture.md) for lifecycle and recovery invariants.

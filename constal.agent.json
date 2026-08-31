@@ -3,7 +3,7 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
@@ -20,7 +20,6 @@
     "github_repository",
     "github_tree",
     "github_file",
-    "github_archive",
     "workspace_list",
     "workspace_search",
     "workspace_read",

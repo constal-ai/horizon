@@ -24,7 +24,7 @@ export const PLANNER_TOOL_NAMES = INVESTIGATOR_TOOL_NAMES;
 
 export const EXECUTOR_TOOL_NAMES = [
   "github_repository", "github_tree", "github_file",
-  "workspace_open", "workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_write",
+  "workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_write",
   "workspace_patch", "workspace_diff", "workspace_package", "web_search", "web_fetch",
 ] as const;
 

@@ -9,9 +9,6 @@ const tools = [
     description: "Read a bounded Git tree at an exact branch, tag, or commit. Use it to discover repository structure before requesting individual files." }),
   opTool("github", "repository.file", { name: "github_file",
     description: "Read one bounded repository file at an exact or default revision. Use it for instructions, manifests, configuration, and focused source evidence; do not invent paths." }),
-  opTool("github", "repository.archive", { name: "github_archive",
-    description: "Store one exact repository revision as an immutable CAS archive without exposing GitHub credentials. Use this only after repository identity and revision are confirmed, then pass the returned ref to workspace_import on a later Turn." }),
 ];
 
 export const GITHUB_TOOLS: Record<string, Tool> = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
-
