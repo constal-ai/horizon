@@ -70,7 +70,7 @@ Provider snapshots accelerate resume and branching. The source archive, natural-
 ## Release sequence
 
 1. Build and test the base image for the provider architecture.
-2. Publish it and record the immutable image digest.
+2. Run `node scripts/release-sandbox-image.mjs --publish <registry>/constal-horizon-sandbox:<release>` and record the returned immutable image digest.
 3. Deploy Sandbox Driver v18 and the Sandbox Driver service.
 4. Update the platform's immutable Sandbox Driver reference.
 5. set `PLATFORM_CODE_SANDBOX_IMAGE` to the published digest and provision platform catalog generation 33.

@@ -7,7 +7,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "sandbox:check": "node scripts/release-sandbox-image.mjs",
+    "sandbox:build": "node scripts/release-sandbox-image.mjs --build constal-horizon-sandbox:dev"
   },
   "dependencies": {
     "@constal/sdk": "2.0.0"
