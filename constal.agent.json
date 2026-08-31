@@ -35,5 +35,5 @@
     "maxRunMicroUsd": 500000000,
     "maxTurns": 2048
   },
-  "expectedCurrentDeploymentRevision": null
+  "expectedCurrentDeploymentRevision": "03dbaf37-deed-48ed-83bd-444a5c45f735"
 }
