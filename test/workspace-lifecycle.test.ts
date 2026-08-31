@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool } from "@constal/sdk";
+import type { CRN, CreateSandboxOptions, Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzRequest, HzWorkspaceReceipt } from "../src/contracts.js";
 import { captureWorkspaceCheckpoint, prepareWorkspace } from "../src/workspace/lifecycle.js";
@@ -31,7 +31,7 @@ class FakeBackend {
   readonly pool: SandboxPool = {
     resource: "crn:constal:production:platform:default:sandbox-pool/constal-code" as never,
     createImage: async () => { throw new Error("lifecycle publishes through the governed operation"); },
-    createSandbox: async (agent, session, options) => {
+    createSandbox: async (agent: CRN, session: string, options?: CreateSandboxOptions) => {
       const existing = this.sandboxes.get(session);
       if (existing) return existing;
       const source = options?.image ? this.images.get(options.image.id) : undefined;
@@ -39,7 +39,7 @@ class FakeBackend {
       this.sandboxes.set(session, sandbox); this.current = sandbox;
       return sandbox;
     },
-  } as SandboxPool;
+  } as unknown as SandboxPool;
 
   context(session: string): Ctx {
     let facts = 0;
