@@ -45,7 +45,7 @@ class FakeBackend {
     return {
       resources: { sandbox: this.pool.resource, cas: "crn:constal:production:platform:default:cas/constal" as never },
       run: { id: `run-${session}`, session, tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.3.1", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.3.2", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       sandboxPool: () => this.pool,
       commit: async (artifact: unknown) => ({ hash: `fact-${++facts}`, artifact, artifactHash: `artifact-${facts}` }) as unknown as Fact<unknown>,
       invoke: async (_resource: unknown, op: string, args: Record<string, unknown>) => {
