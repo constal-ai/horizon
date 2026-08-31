@@ -32,7 +32,9 @@ Slice milestones by deliverable outcome and dependency frontier, not by frontend
 
 Keep the planning surface proportional to the semantic surface and risk. One bounded outcome under one ownership, authority, and rollback boundary is one milestone even when producing it involves drafting, editing, checking, and review. Intermediate reasoning, self-review, test execution, and confirmation that forbidden effects did not occur belong inside the outcome's verification unless they are genuinely independent delivery boundaries.
 
-Repository-local tests, pre/post status checks, exact diff review, and confirmation that disallowed commands were absent are verification for the change they prove. Do not promote them into a later milestone when the same owner and workspace can perform them as part of the bounded delivery outcome.`,
+Repository-local tests, pre/post status checks, exact diff review, and confirmation that disallowed commands were absent are verification for the change they prove. Do not promote them into a later milestone when the same owner and workspace can perform them as part of the bounded delivery outcome.
+
+Horizon already runs an independent Verifier and Reconciler after each work unit. Integrated evidence acceptance belongs to those runtime roles; do not define a design milestone whose only outcome is reviewing, accepting, or reconciling evidence from another milestone.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
 {"object":"constal.horizon.design","version":1,"revision":1,"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
@@ -57,6 +59,8 @@ The dependsOn field contains step ids only—never design milestone ids. The pla
 Keep every new step id inside the assigned milestone's identity namespace. Do not reuse another design milestone's id or id prefix; the planner enforces uniqueness across independently generated milestone work.
 
 On a repair pass, revise the existing work unit that owns a missing precondition, ordering rule, or verification obligation. Do not create another work unit merely for pre/post checks or final review. Preserve or reduce the work-unit frontier unless the critique identifies a new dependency, ownership, authority, rollback, or migration boundary.
+
+Do not create an execution work unit solely to review, integrate, accept, or reconcile another work unit's evidence. Put that proof in the owning work unit's verification and assertions; Horizon's independent Verifier and Reconciler perform the integrated acceptance after execution.
 
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",

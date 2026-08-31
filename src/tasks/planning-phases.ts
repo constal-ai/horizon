@@ -46,7 +46,7 @@ export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
 });
 
 export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
-  id: "horizon-design", version: "3",
+  id: "horizon-design", version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DesignInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "design", system: DESIGN_SYSTEM,
@@ -59,7 +59,7 @@ export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
 });
 
 export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>({
-  id: "horizon-milestone-decomposition", version: "3",
+  id: "horizon-milestone-decomposition", version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DecompositionInput>(ctx, envelope);
     const milestone = input.design.milestones.find(({ id }) => id === input.milestoneId);
