@@ -9,7 +9,7 @@ The first evaluation layer is deliberately deterministic:
 - `horizon-efficiency` contains a bounded single-file mission whose planning and execution must remain proportional to its semantic surface.
 - `horizon-complete-contract` checks the durable result, plan, workspace, artifact, resolved-unknown, and convergence contract.
 - `horizon-blocked-contract` checks honest terminal failure shape without requiring a plan or workspace that could not have been created.
-- `horizon-proportional-small-task` checks that a small mission completes in at most two work units and twenty specialist Runs, allowing one genuine planning repair without accepting decomposition sprawl.
+- `horizon-proportional-small-task` checks that a small mission completes in at most two work units and forty-eight specialist Runs. Planning may repair distinct semantic gaps while execution cannot expand into review-only work.
 
 Every repository case pins source commit `fb0b2def8ef6c373fb205befee061167faed756e`. Publishing a Dataset version therefore freezes both the case and the repository world it describes.
 
@@ -36,7 +36,7 @@ The exact published Resources and tested Agent identity are recorded in `pins.js
 
 ```json
 {
-  "id": "horizon-capability-0-3-25-luna-v1",
+  "id": "horizon-capability-0-3-28-luna-v1",
   "dataset": { "crn": "DATASET_CRN", "version": "1", "hash": "DATASET_HASH" },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
@@ -61,7 +61,7 @@ Review case errors separately from Scorer failures. An execution error is not a 
 | Case | Capability under evaluation |
 | --- | --- |
 | `single-file-documentation` | Repository investigation, one bounded edit, verification, packaging |
-| `single-file-proportionality` | A bounded edit remains within two work units and twenty specialist Runs |
+| `single-file-proportionality` | A bounded edit remains within two work units and forty-eight specialist Runs |
 | `multi-file-consistency` | Cross-file planning, dependency ordering, consistent terminology |
 | `already-satisfied` | Evidence-based no-op rather than gratuitous editing |
 | `code-and-test` | Source/test responsibility split and independent test reproduction |
