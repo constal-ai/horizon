@@ -18,7 +18,7 @@ export default agent({
   onMessage: runHorizon,
 });
 
-export { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique,
+export { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzPlanNarrative,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzVerification, parseHzWorkPlan } from "./contracts.js";
 export { EvidencePlateauDetector } from "./react-loop.js";

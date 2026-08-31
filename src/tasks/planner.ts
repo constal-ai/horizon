@@ -1,6 +1,6 @@
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
+import { parseHzPlan, parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
 import { HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS, HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
@@ -44,7 +44,7 @@ async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
 
 export const planner = subtask<HzPlannerResult>({
   id: "horizon-planner",
-  version: "3",
+  version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<HzPlanInput>(ctx, envelope);
     const tools = input.tools; const childAttenuation = attenuation(tools, ctx);
@@ -170,7 +170,9 @@ export const planner = subtask<HzPlannerResult>({
       budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
         wallMs: HORIZON_LOOP_WALL_MS }, attenuation: { bindings: ["cas", "model"], tools: [] } });
     planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
-    const plan = finalized.artifact;
+    const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan",
+      steps: workPlan.steps, assertions });
+    if (!plan) throw new TypeError("Horizon finalization did not produce one valid immutable plan");
     const expectedStatus = critique.verdict === "accepted" ? "ready"
       : critique.verdict === "needs-input" ? "needs-input" : "blocked";
     if (plan.status !== expectedStatus || canonicalJson(plan.steps) !== canonicalJson(workPlan.steps)

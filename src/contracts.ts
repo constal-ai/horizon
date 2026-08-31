@@ -160,6 +160,21 @@ export interface HzPlan {
   blockedReason: string | null;
 }
 
+export interface HzPlanNarrative {
+  object: "constal.horizon.plan-narrative";
+  version: 1;
+  revision: number;
+  status: HzPlanStatus;
+  objective: string;
+  summary: string;
+  specification: string;
+  workspaceRoot: string | null;
+  unknowns: HzUnknown[];
+  risks: string[];
+  question: string | null;
+  blockedReason: string | null;
+}
+
 export type HzStepStatus = "complete" | "failed" | "blocked";
 
 export interface HzStepResult {
@@ -721,6 +736,21 @@ export function parseHzPlan(value: unknown): HzPlan | null {
   if (status === "needs-input" && !question || status === "blocked" && !blockedReason) return null;
   return { object: "constal.horizon.plan", version: 1, revision: Number(revision), status: status as HzPlanStatus,
     objective, summary, specification, workspaceRoot, unknowns: parsedUnknowns, steps, assertions, risks, question, blockedReason };
+}
+
+export function parseHzPlanNarrative(value: unknown, expectedRevision?: number, expectedObjective?: string): HzPlanNarrative | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision); const status = source?.status;
+  const objective = string(source?.objective); const summary = string(source?.summary, 32_768);
+  const specification = string(source?.specification, 262_144); const workspaceRoot = nullableString(source?.workspaceRoot, 4_096);
+  const parsedUnknowns = unknowns(source?.unknowns); const risks = strings(source?.risks, 128, 8_192);
+  const question = nullableString(source?.question, 16_384); const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.plan-narrative" || source.version !== 1 || revision === null
+    || !["ready", "needs-input", "blocked"].includes(String(status)) || !objective
+    || expectedObjective !== undefined && objective !== expectedObjective || !summary || !specification
+    || workspaceRoot === undefined || !parsedUnknowns || !risks || question === undefined || blockedReason === undefined) return null;
+  if (status === "ready" && !workspaceRoot || status === "needs-input" && !question || status === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.plan-narrative", version: 1, revision, status: status as HzPlanStatus,
+    objective, summary, specification, workspaceRoot, unknowns: parsedUnknowns, risks, question, blockedReason };
 }
 
 export function parseHzStepResult(value: unknown, expectedStepId?: string): HzStepResult | null {

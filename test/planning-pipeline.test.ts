@@ -1,6 +1,6 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
-import type { HzDesign, HzPlan, HzPlanInput, HzPlanCritique, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
+import type { HzDesign, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
 import { planner } from "../src/tasks/planner.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -32,6 +32,11 @@ const finalPlan: HzPlan = { object: "constal.horizon.plan", version: 1, revision
   objective: rubric.objective, summary: "Implement and prove durable behavior.", specification: "Reuse runtime recovery and prove replay.",
   workspaceRoot: "/workspace/repositories/source", unknowns: [], steps: [step], assertions: [assertions],
   risks: design.milestones[0]!.risks, question: null, blockedReason: null };
+
+function narrative(plan: HzPlan): HzPlanNarrative {
+  const { steps: _steps, assertions: _assertions, ...rest } = plan;
+  return { ...rest, object: "constal.horizon.plan-narrative" };
+}
 const input: HzPlanInput = { request: { objective: rubric.objective, context: null, constraints: [], source: null,
   environment: { name: "default", cache: true, setup: [] } },
   discoveryPlan: { object: "constal.horizon.discovery-plan", version: 1, status: "ready",
@@ -79,7 +84,7 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
         return handle({ artifact: options.assertionsByStep?.[phase.stepId] ?? assertions, toolEvidence: [] });
       }
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
-      if (task.id === "horizon-plan-finalizer") return handle({ artifact: options.finalPlan ?? finalPlan, toolEvidence: [] });
+      if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });
       throw new Error(`unexpected task ${task.id}`);
     },
     commit: async (artifact: { kind?: string; phase?: string }) => {

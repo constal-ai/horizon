@@ -1,7 +1,7 @@
-import { canonicalJson, subtask } from "@constal/sdk";
+import { subtask } from "@constal/sdk";
 import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { parseHzDesign, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzRubric, parseHzStepAssertions,
-  type HzDesign, type HzMilestoneWork, type HzPlan, type HzPlanCritique, type HzPlanInput, type HzPlanStep,
+import { parseHzDesign, parseHzMilestoneWork, parseHzPlanCritique, parseHzPlanNarrative, parseHzRubric, parseHzStepAssertions,
+  type HzDesign, type HzMilestoneWork, type HzPlanCritique, type HzPlanInput, type HzPlanNarrative, type HzPlanStep,
   type HzRubric, type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM, RUBRIC_SYSTEM } from "../prompts/planning.js";
 import { PLANNER_SYSTEM } from "../prompts/planner.js";
@@ -104,8 +104,8 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
   },
 });
 
-export const planFinalizer = subtask<PlanningPhaseResult<HzPlan>>({
-  id: "horizon-plan-finalizer", version: "1",
+export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
+  id: "horizon-plan-finalizer", version: "2",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<FinalizerInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-finalizer", system: PLANNER_SYSTEM,
@@ -114,13 +114,10 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlan>>({
         workPlan: input.workPlan, assertions: input.assertions, critique: input.critique },
       tools: [], model: "model", stream: true, maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse(value) {
-        const plan = parseHzPlan(value);
+        const plan = parseHzPlanNarrative(value, input.planning.revision, input.planning.request.objective);
         const expectedStatus = input.critique.verdict === "accepted" ? "ready"
           : input.critique.verdict === "needs-input" ? "needs-input" : "blocked";
-        return plan?.revision === input.planning.revision && plan.objective === input.planning.request.objective
-          && plan.status === expectedStatus && canonicalJson(plan.steps) === canonicalJson(input.workPlan.steps)
-          && canonicalJson(plan.assertions) === canonicalJson(input.assertions)
-          && plan.workspaceRoot === input.planning.discoveryPlan.workspaceRoot
+        return plan?.status === expectedStatus && plan.workspaceRoot === input.planning.discoveryPlan.workspaceRoot
           && (expectedStatus !== "needs-input" || plan.question === input.critique.question) ? plan : null;
       } }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
