@@ -3,6 +3,8 @@ import { storeArtifact } from "./artifacts.js";
 import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
+import { approvalInterpreter, parseApprovalDecision } from "./tasks/approval.js";
+import { horizonRoutedEvent, type HorizonRoutedEvent } from "./behaviors.js";
 import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_NAMES, INVESTIGATOR_TOOL_NAMES,
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
@@ -23,34 +25,65 @@ export interface HorizonPlanDecision {
 
 export interface HorizonExecutionOptions { requirePlanApproval?: boolean }
 
-function planDecision(value: unknown, planFact: string): HorizonPlanDecision | null {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-  if (!source || source.object !== "constal.horizon.plan-decision" || source.version !== 1 || source.planFact !== planFact
-    || !["approve", "revise", "cancel"].includes(String(source.decision))
-    || source.guidance !== null && (typeof source.guidance !== "string" || !source.guidance.trim() || source.guidance.length > 65_536)
-    || source.decision === "revise" && source.guidance === null
-    || source.decision !== "revise" && source.guidance !== null) return null;
-  return { object: "constal.horizon.plan-decision", version: 1, planFact,
-    decision: source.decision as HorizonPlanDecision["decision"],
-    guidance: source.guidance === null ? null : source.guidance.trim() };
+function eventContext(event: HorizonRoutedEvent): { owner: string; repository: string; sender: string; permissions: string[] } | null {
+  const context = event.context && typeof event.context === "object" && !Array.isArray(event.context)
+    ? event.context as Record<string, unknown> : null;
+  const repository = typeof context?.repository === "string" ? context.repository.split("/") : [];
+  const sender = context?.sender && typeof context.sender === "object" && !Array.isArray(context.sender)
+    ? context.sender as Record<string, unknown> : null;
+  const approval = context?.approval && typeof context.approval === "object" && !Array.isArray(context.approval)
+    ? context.approval as Record<string, unknown> : null;
+  const permissions = Array.isArray(approval?.permissions) ? approval.permissions.filter((item): item is string => typeof item === "string") : [];
+  return repository.length === 2 && typeof sender?.login === "string" && sender.login && permissions.length > 0
+    ? { owner: repository[0]!, repository: repository[1]!, sender: sender.login, permissions } : null;
+}
+
+async function approvalAuthorized(event: HorizonRoutedEvent, ctx: Ctx): Promise<{ authorized: boolean; permission: string }> {
+  const target = eventContext(event);
+  if (!target || !ctx.resources.github) return { authorized: false, permission: "unknown" };
+  const result = await ctx.invoke<{ permission?: unknown }>(ctx.resources.github, "repository.permission.get",
+    { owner: target.owner, repository: target.repository, username: target.sender });
+  const permission = typeof result.permission === "string" ? result.permission : "unknown";
+  return { authorized: target.permissions.includes(permission), permission };
 }
 
 async function awaitPlanDecision(plan: HzPlan, planFact: string, ctx: Ctx): Promise<HorizonPlanDecision> {
   await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
     instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
-  const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}`, {
-    maxBytes: 65_536, afterRun: "ignore",
-    schema: { type: "object", additionalProperties: false,
-      required: ["object", "version", "planFact", "decision", "guidance"], properties: {
-        object: { const: "constal.horizon.plan-decision" }, version: { const: 1 }, planFact: { const: planFact },
-        decision: { enum: ["approve", "revise", "cancel"] },
-        guidance: { anyOf: [{ type: "null" }, { type: "string", minLength: 1, maxLength: 65_536 }] },
-      } },
-  });
-  const decision = planDecision(response, planFact);
-  if (!decision) throw new TypeError("Horizon plan approval response is invalid or stale");
-  await ctx.commit({ kind: "horizon.approval-decision", planFact, decision }, { tier: "audit" });
-  return decision;
+  for (let attempt = 1; attempt <= 64; attempt++) {
+    const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}-${attempt}`, {
+      maxBytes: 65_536, afterRun: "message",
+      schema: { anyOf: [
+        { type: "object", additionalProperties: false,
+          required: ["object", "version", "planFact", "decision", "guidance"], properties: {
+            object: { const: "constal.horizon.plan-decision" }, version: { const: 1 }, planFact: { const: planFact },
+            decision: { enum: ["approve", "revise", "cancel"] },
+            guidance: { anyOf: [{ type: "null" }, { type: "string", minLength: 1, maxLength: 65_536 }] },
+          } },
+        { type: "object", required: ["object", "version", "behavior", "eventClass", "objective"],
+          properties: { object: { const: "constal.horizon.event" }, version: { const: 1 },
+            behavior: { enum: ["operate", "issue-work"] }, eventClass: { type: "string" }, objective: { type: "string" } } },
+      ] },
+    });
+    let decision = parseApprovalDecision(response, planFact);
+    const event = decision ? null : horizonRoutedEvent(response);
+    if (!decision && event) decision = await ctx.spawn(approvalInterpreter, { plan, planFact, event }, {
+      retries: 1, dedupe: "specHash", budget: { turns: 8, microUsd: 1_000_000, wallMs: 600_000 },
+      attenuation: { bindings: ["model"], tools: [] },
+    });
+    if (!decision) throw new TypeError("Horizon plan approval response is invalid or stale");
+    if (decision.decision === "approve" && event) {
+      const authorization = await approvalAuthorized(event, ctx);
+      if (!authorization.authorized) {
+        await ctx.commit({ kind: "horizon.approval-denied", planFact, eventClass: event.eventClass,
+          permission: authorization.permission, reason: "The GitHub sender does not have a configured approval permission." }, { tier: "audit" });
+        continue;
+      }
+    }
+    await ctx.commit({ kind: "horizon.approval-decision", planFact, decision }, { tier: "audit" });
+    return decision;
+  }
+  throw new TypeError("Horizon plan approval remained unresolved after the bounded conversation limit");
 }
 
 function attenuation(names: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
@@ -131,13 +164,18 @@ async function progressState(previous: HzPlateauState, completed: readonly HzSte
 }
 
 async function answerQuestion(question: string, revision: number, ctx: Ctx): Promise<string> {
-  const response = await ctx.await<{ answer: string }>(`horizon-plan-${revision}`, {
-    schema: { type: "object", properties: { answer: { type: "string", minLength: 1, maxLength: 65_536 } },
-      required: ["answer"], additionalProperties: false },
-    maxBytes: 65_536,
-    afterRun: "ignore",
+  const response = await ctx.await<unknown>(`horizon-plan-${revision}`, {
+    schema: { anyOf: [
+      { type: "object", properties: { answer: { type: "string", minLength: 1, maxLength: 65_536 } },
+        required: ["answer"], additionalProperties: false },
+      { type: "object", required: ["object", "version", "objective"], properties: {
+        object: { const: "constal.horizon.event" }, version: { const: 1 }, objective: { type: "string", minLength: 1, maxLength: 65_536 },
+      } },
+    ] }, maxBytes: 65_536, afterRun: "message",
   });
-  const answer = response.answer.trim();
+  const direct = response && typeof response === "object" && !Array.isArray(response) && typeof (response as { answer?: unknown }).answer === "string"
+    ? (response as { answer: string }).answer : horizonRoutedEvent(response)?.objective;
+  const answer = direct?.trim() ?? "";
   if (!answer) throw new TypeError("Horizon question was resolved without an answer");
   await ctx.commit({ kind: "horizon.answer", revision, question, answer }, { tier: "audit" });
   return answer;

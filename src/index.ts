@@ -1,6 +1,6 @@
 import { agent } from "@constal/sdk";
 import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, discoveryFramer, executor, investigator,
-  planFinalizer, planner, reconciler, rubricAgent, verifier } from "./tasks/index.js";
+  planFinalizer, planner, reconciler, rubricAgent, verifier, approvalInterpreter } from "./tasks/index.js";
 import { sourceResolver } from "./tasks/source.js";
 import { TOOLS } from "./tools/index.js";
 import { horizonProgress } from "./views/progress.js";
@@ -25,7 +25,7 @@ export default agent({
   tools: TOOLS,
   views: [horizonProgress],
   subtasks: [sourceResolver, discoveryFramer, investigator, planner, rubricAgent, designAgent, decompositionAgent,
-    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler],
+    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler, approvalInterpreter],
   onMessage: routeHorizon,
 });
 

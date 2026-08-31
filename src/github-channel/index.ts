@@ -154,7 +154,7 @@ export default channel({
           objective: objective(eventClass, payload, issueValue),
           context: { provider: "github", repository: repo.fullName, issue: issueValue.number,
             installation: String(installation.id ?? ""), sender: { id: String(sender.id ?? ""), login: boundedText(sender.login, 100) },
-            action: boundedText(payload.action, 128), delivery },
+            approval: { permissions: selected.approverPermissions }, action: boundedText(payload.action, 128), delivery },
           source: { kind: "github", owner: repo.owner, repository: repo.name, ref: repo.defaultBranch },
           constraints: [`Work only in ${repo.fullName}.`, `Relate the result to GitHub issue #${issueValue.number}.`],
         },

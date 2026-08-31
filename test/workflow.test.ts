@@ -148,17 +148,23 @@ describe("Horizon workflow", () => {
         committed.push(artifact); fact++;
         return { hash: `fact-${fact}`, artifact, artifactHash: `artifact-${fact}` } as unknown as Fact<unknown>;
       },
-      invoke: casRuntime(),
+      invoke: async (resource: unknown, operation: string, args: { text?: string; ref?: string }) => operation === "repository.permission.get"
+        ? { permission: "write" } : casRuntime()(resource, operation, args),
       await: (label: string) => {
         sequence.push(`await:${label}`);
-        const planFact = committed.findLast(({ kind }) => kind === "horizon.approval-request")?.planFact;
-        return handle({ object: "constal.horizon.plan-decision", version: 1, planFact, decision: "approve", guidance: null });
+        return handle({ object: "constal.horizon.event", version: 1, behavior: "operate", eventClass: "github.issue.comment",
+          objective: "This plan looks good. Please go ahead.", context: { repository: "constal-ai/horizon",
+            sender: { login: "reviewer" }, approval: { permissions: ["write", "maintain", "admin"] } } });
       },
       spawn: (task: { id: string }) => {
         sequence.push(`spawn:${task.id}`);
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-approval-interpreter") {
+          const planFact = committed.findLast(({ kind }) => kind === "horizon.approval-request")?.planFact;
+          return handle({ object: "constal.horizon.plan-decision", version: 1, planFact, decision: "approve", guidance: null });
+        }
         if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
         if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
@@ -173,7 +179,7 @@ describe("Horizon workflow", () => {
 
     const result = await runHorizon({ objective: plan.objective }, ctx, { requirePlanApproval: true });
     expect(result.status).toBe("complete");
-    const approval = sequence.indexOf("await:horizon-approval-1");
+    const approval = sequence.indexOf("await:horizon-approval-1-1");
     const execution = sequence.indexOf("spawn:horizon-executor");
     expect(approval).toBeGreaterThan(-1);
     expect(execution).toBeGreaterThan(approval);
