@@ -55,6 +55,36 @@ describe("EvidencePlateauDetector", () => {
     expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
   });
 
+  it("narrows an executor inspection plateau to action Tools before forcing termination", async () => {
+    const offered: string[][] = []; let turns = 0;
+    const patchCall = { ...call({ applied: true }), name: "workspace_patch", maxEffect: "reconcilable" as const,
+      effectObserved: "reconcilable" as const, args: { patch: "change" } };
+    const ctx = {
+      turn: async (spec: { tools?: string[] }) => {
+        offered.push(spec.tools ?? []); turns++;
+        if (turns <= 3) return { toolCalls: [call({ ref: "unchanged" })],
+          message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        if (turns === 4) return { toolCalls: [patchCall],
+          message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" },
+          artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
+      tools: ["workspace_read", "workspace_patch"], actionTools: ["workspace_patch"], maxRounds: 8,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(result.plateaued).toBe(false);
+    expect(offered).toEqual([
+      ["workspace_read", "workspace_patch"],
+      ["workspace_read", "workspace_patch"],
+      ["workspace_read", "workspace_patch"],
+      ["workspace_patch"],
+      ["workspace_read", "workspace_patch"],
+    ]);
+  });
+
   it("propagates Tool availability failures instead of silently degrading the role", async () => {
     const ctx = { turn: async () => { throw new ToolUnavailable("workspace_patch"); } } as unknown as Ctx;
     await expect(runReactLoop({ role: "test", system: "test", objective: "test", context: {},
