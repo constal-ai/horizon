@@ -29,5 +29,15 @@
       "version": "1",
       "hash": "035ed65f895282f76d3ce987791887742472bafd29cac5ce4d4dcbdbbd74c787"
     }
+  },
+  "results": {
+    "boundariesLuna": {
+      "suite": "horizon-boundaries-0-3-11-luna-v1",
+      "hash": "aff6035afdd3c8ef9d5c29792bf4da39339b8546b81d1977b77300ff5828f304",
+      "completed": 3,
+      "errored": 0,
+      "passRate": 1,
+      "costMicroUsd": 18504
+    }
   }
 }
