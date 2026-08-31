@@ -94,7 +94,11 @@ Treat discovery and investigation artifacts as historical snapshots, not mutable
 
 Assign repair to the earliest planning artifact that is both currently deficient and actually mutable in this pipeline. Discovery is not a repair owner here. When a later design decision already closes an earlier repository-answerable unknown with evidence, accept that handoff instead of repeatedly routing the same historical state to design.
 
-Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.`,
+Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.
+
+Judge the plan together with Horizon's stable role contracts. Execution specialists preserve unrelated changes, report observed operation and check failures honestly, and cannot deploy or publish unless the assigned specification explicitly authorizes it. Verifiers are read-only, reproduce proof, and return failed when an assertion is not satisfied. Do not require every work unit to restate these ambient invariants or exhaustively rehearse generic failure handling. Require task-specific recovery only when the objective needs behavior beyond those contracts.
+
+Inspect the complete current planning state and report every presently visible blocking finding in the same critique. Do not stop after the first defect when another material contradiction, dependency gap, authority issue, or unverifiable claim is already observable.`,
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
 {"object":"constal.horizon.plan-critique","version":1,"revision":1,"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":"one material user decision or null","blockedReason":"specific reason or null"}
