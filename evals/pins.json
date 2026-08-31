@@ -32,13 +32,13 @@
   },
   "results": {
     "boundariesLuna": {
-      "suite": "horizon-boundaries-0-3-12-luna-v1",
-      "hash": "3e39d7cc515b4c855293d610be375de1603086abb1db170a43faee33316e83a8",
-      "bundleHash": "57fff211366badacbbd1ab8c624576b5928e0fd9aff775038fee815fe7a0af35",
+      "suite": "horizon-boundaries-0-3-13-luna-v1",
+      "hash": "3503f43c72df370608b573e3d94798a42bc503ccc940fc1c23aeaeca6265650d",
+      "bundleHash": "012f7ea6e81ebf97dd59a7e60aeb47811dda7961080c871efa94528bf902eb56",
       "completed": 3,
       "errored": 0,
       "passRate": 1,
-      "costMicroUsd": 18528
+      "costMicroUsd": 19092
     }
   }
 }
