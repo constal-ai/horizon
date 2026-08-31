@@ -11,6 +11,8 @@ COPY constal-workspace-runner.mjs /usr/local/bin/constal-workspace-runner
 COPY --from=blaxel-sandbox-api /sandbox-api /usr/local/bin/sandbox-api
 RUN chmod 0555 /usr/local/bin/constal-workspace-runner \
     /usr/local/bin/sandbox-api \
+    && mkdir -p /blaxel/app \
+    && ln -s /blaxel/app /workspace \
     && /usr/local/bin/constal-workspace-runner probe
-WORKDIR /workspace
+WORKDIR /blaxel/app
 ENTRYPOINT ["/usr/local/bin/sandbox-api"]
