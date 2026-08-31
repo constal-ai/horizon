@@ -1,12 +1,27 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HzPlan, HzStepResult } from "../src/contracts.js";
 import { attemptProgressDigest, reconcileCompletedForPlan, runHorizon } from "../src/workflow.js";
+
+vi.mock("../src/workspace/lifecycle.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/workspace/lifecycle.js")>();
+  return { ...original,
+    prepareWorkspace: async () => ({ receiptRef: "workspace-receipt", receipt: {
+      object: "constal.horizon.workspace-ready" as const, version: 1 as const, session: "session", sandbox: "sandbox-id",
+      root: "/workspace/repo" as const, cache: { key: "c".repeat(64), hit: true, image: "image-id" },
+      runner: { protocol: "constal.workspace-runner" as const, version: 1 as const, digest: "d".repeat(64) },
+      source: { kind: "artifact" as const, archive: { ref: "source-ref", bytes: 1, format: "tar.gz" as const }, github: null },
+      baseline: { commit: "commit", tree: "tree" }, setup: { name: "default", cache: true, setup: [] },
+    } }),
+    captureWorkspaceCheckpoint: async (input: { stepId: string }) => ({ receiptRef: `checkpoint-${input.stepId}`,
+      checkpoint: { image: `image-${input.stepId}`, tree: `tree-${input.stepId}` } }),
+  };
+});
 
 const plan: HzPlan = {
   object: "constal.horizon.plan", version: 1, revision: 1, status: "ready", objective: "Implement durable behavior",
   summary: "Implement and verify one durable behavior.", specification: "Use the existing seam and prove durable execution.",
-  workspaceRoot: "/workspace/repositories/source", unknowns: [], risks: [], question: null, blockedReason: null,
+  workspaceRoot: "/workspace/repo", unknowns: [], risks: [], question: null, blockedReason: null,
   steps: [{ id: "implement", milestoneId: "behavior", title: "Implement", responsibility: "Implement the durable behavior.",
     specification: "Inspect, edit, and verify the existing implementation.", dependsOn: [], verification: ["focused test passes"],
     stopWhen: "The focused test passes." }],
@@ -212,7 +227,7 @@ describe("Horizon workflow", () => {
 
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
-    expect(result.plan.revision).toBe(2);
+    expect(result.plan?.revision).toBe(2);
     expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 22, replans: 1 });
     expect(committed.filter(({ kind }) => kind === "horizon.plan").map(({ plan: committedPlan }) => committedPlan?.revision)).toEqual([1, 2]);
     expect(committed.filter(({ kind }) => kind === "horizon.step-result")).toHaveLength(2);
@@ -262,7 +277,7 @@ describe("Horizon workflow", () => {
 
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("complete");
-    expect(result.plan.revision).toBe(2);
+    expect(result.plan?.revision).toBe(2);
     expect(result.longHorizon).toMatchObject({ specialistRuns: 19, replans: 1 });
     expect(planningAnswers).toEqual([null, "Adopt v2."]);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.answer");
@@ -340,7 +355,7 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
     expect(result.status).toBe("blocked");
     expect(result.summary).toContain("no new evidence");
-    expect(result.plan.revision).toBe(3);
+    expect(result.plan?.revision).toBe(3);
     expect(result.longHorizon).toMatchObject({ specialistRuns: 32, replans: 2, plateauCycles: 2 });
     expect(committed.map(({ kind }) => kind)).toContain("horizon.plateau");
   });

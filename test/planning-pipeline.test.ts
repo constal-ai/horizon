@@ -32,7 +32,8 @@ const finalPlan: HzPlan = { object: "constal.horizon.plan", version: 1, revision
   objective: rubric.objective, summary: "Implement and prove durable behavior.", specification: "Reuse runtime recovery and prove replay.",
   workspaceRoot: "/workspace/repositories/source", unknowns: [], steps: [step], assertions: [assertions],
   risks: design.milestones[0]!.risks, question: null, blockedReason: null };
-const input: HzPlanInput = { request: { objective: rubric.objective, context: null, constraints: [] },
+const input: HzPlanInput = { request: { objective: rubric.objective, context: null, constraints: [], source: null,
+  environment: { name: "default", cache: true, setup: [] } },
   discoveryPlan: { object: "constal.horizon.discovery-plan", version: 1, status: "ready",
     summary: "Source ready.", workspaceRoot: finalPlan.workspaceRoot,
     focuses: [{ id: "runtime", title: "Runtime", mission: "Trace recovery.", questions: ["Who owns recovery?"],

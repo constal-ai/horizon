@@ -22,7 +22,7 @@ describe("Horizon managed Agent package", () => {
     expect([...tools].sort()).toEqual(Object.keys(agent.tools ?? {}).sort());
     expect(new Set(tools).size).toBe(tools.length);
     expect(agent.subtasks?.map(({ id }) => id)).toEqual([
-      "horizon-discovery-framer", "horizon-investigator", "horizon-planner", "horizon-rubric", "horizon-design",
+      "horizon-source-resolver", "horizon-discovery-framer", "horizon-investigator", "horizon-planner", "horizon-rubric", "horizon-design",
       "horizon-milestone-decomposition", "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer",
       "horizon-executor", "horizon-verifier", "horizon-reconciler",
     ]);
@@ -33,7 +33,7 @@ describe("Horizon managed Agent package", () => {
     const manifest = await json("../constal.agent.json");
     expect(manifest.bindings).toEqual({
       model: "crn:constal:production:platform:default:model/gpt-5.6-sol",
-      sandbox: "crn:constal:production:platform:default:sandbox-pool/constal",
+      sandbox: "crn:constal:production:platform:default:sandbox-pool/constal-code",
       cas: "crn:constal:production:platform:default:cas/constal",
       github: "crn:constal:production:platform:default:service/github",
       web: "crn:constal:production:platform:default:web/constal",

@@ -5,9 +5,13 @@ import { WORKSPACE_TOOLS } from "./workspace.js";
 
 export const TOOLS: Record<string, Tool> = { ...GITHUB_TOOLS, ...WORKSPACE_TOOLS, ...WEB_TOOLS };
 
+export const SOURCE_RESOLVER_TOOL_NAMES = [
+  "github_repositories", "github_repository", "github_tree", "github_file",
+] as const;
+
 export const DISCOVERY_TOOL_NAMES = [
-  "github_repositories", "github_repository", "github_tree", "github_file", "github_archive",
-  "workspace_open", "workspace_import", "workspace_list", "workspace_search", "workspace_read",
+  "github_repository", "github_tree", "github_file",
+  "workspace_list", "workspace_search", "workspace_read",
   "web_search", "web_fetch",
 ] as const;
 

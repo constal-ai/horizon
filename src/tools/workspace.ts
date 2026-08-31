@@ -1,4 +1,5 @@
-import { hashValue, type Ctx, type Sandbox, type SandboxCommandResult, type Tool } from "@constal/sdk";
+import { type Ctx, type Sandbox, type SandboxCommandResult, type Tool } from "@constal/sdk";
+import { HORIZON_RUNNER_PATH, HORIZON_WORKSPACE_ROOT } from "../workspace/runner-source.js";
 
 const TIMEOUT_MS = 600_000;
 
@@ -29,6 +30,14 @@ export function normalizeRepositoryPath(path: string, cwd: string): string {
   return normalized === root ? "." : normalized.slice(root.length + 1);
 }
 
+function repositoryCwd(value?: string): string {
+  const cwd = normalizeWorkspacePath(value ?? HORIZON_WORKSPACE_ROOT);
+  if (cwd !== HORIZON_WORKSPACE_ROOT && !cwd.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
+    throw new TypeError("repository working directory is outside /workspace/repo");
+  }
+  return cwd;
+}
+
 async function workspace(ctx: Ctx): Promise<Sandbox> {
   const resource = ctx.resources.sandbox;
   if (!resource) throw new TypeError("Horizon requires a bound Sandbox Pool");
@@ -37,7 +46,9 @@ async function workspace(ctx: Ctx): Promise<Sandbox> {
 
 async function command(selected: Sandbox, cmd: string, args: string[], cwd = "/workspace",
   options: { stdin?: string; outputs?: string[]; timeoutMs?: number } = {}): Promise<SandboxCommandResult> {
-  return Promise.resolve(selected.exec({ cmd, args, cwd: normalizeWorkspacePath(cwd), timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
+  const root = normalizeWorkspacePath(cwd);
+  return Promise.resolve(selected.exec({ cmd: "node", args: [HORIZON_RUNNER_PATH, "exec", "--cwd", root, "--", cmd, ...args],
+    cwd: "/workspace", timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
     ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
     ...(options.outputs === undefined ? {} : { outputs: options.outputs.map((path) => normalizeWorkspacePath(path, cwd)) }) },
   { timeoutMs: options.timeoutMs ?? TIMEOUT_MS }));
@@ -54,46 +65,8 @@ async function requireCommand(selected: Sandbox, cmd: string, args: string[], cw
   return result;
 }
 
-const emptyObjectSchema = { type: "object", properties: {}, additionalProperties: false } as const;
 const pathProperty = { type: "string", minLength: 1, maxLength: 4_096 } as const;
 const pathsProperty = { type: "array", maxItems: 256, items: pathProperty } as const;
-
-const open: Tool = {
-  name: "workspace_open", version: "1",
-  description: "Create or recover Horizon's durable Session workspace. Call this before workspace inspection when no imported repository has been observed.",
-  schema: emptyObjectSchema, maxEffect: "idempotent",
-  needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox"] }],
-  async run(_args, ctx) { const selected = await workspace(ctx); return { sandbox: selected.id, session: selected.session }; },
-};
-
-const importArchive: Tool = {
-  name: "workspace_import", version: "1",
-  description: "Materialize one immutable CAS repository archive into a content-derived directory in the durable Session workspace. Pass only a ref returned by github_archive or an authorized source; repeated imports reconcile to the same directory.",
-  schema: { type: "object", properties: { ref: { type: "string", minLength: 1, maxLength: 1_024 } }, required: ["ref"], additionalProperties: false },
-  maxEffect: "reconcilable",
-  needs: [{ binding: "cas", kind: "cas", ops: ["importArtifact", "putText"] },
-    { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec", "putFile"] }],
-  async run(args: { ref: string }, ctx) {
-    const adopted = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "importArtifact", { ref: args.ref });
-    const selected = await workspace(ctx); const sourceId = (await hashValue({ ref: adopted.ref })).slice(0, 32);
-    const root = `/workspace/repositories/${sourceId}`; const marker = `${root}/.constal-source-ref`;
-    if (succeeded(await command(selected, "test", ["-f", marker]))) {
-      return { sandbox: selected.id, path: root, ref: adopted.ref, bytes: adopted.bytes, alreadyMaterialized: true };
-    }
-    if (succeeded(await command(selected, "test", ["-e", root]))) throw new Error("workspace import destination is incomplete");
-    const staging = `/workspace/.constal/staging/${sourceId}`; const archive = `/workspace/.constal/imports/${sourceId}.tar.gz`;
-    await requireCommand(selected, "rm", ["-rf", "--", staging]);
-    await requireCommand(selected, "mkdir", ["-p", "--", "/workspace/.constal/imports", staging, "/workspace/repositories"]);
-    await Promise.resolve(selected.putFile(archive, adopted.ref, { invoke: { timeoutMs: TIMEOUT_MS } }));
-    await requireCommand(selected, "tar", ["-xzf", archive, "-C", staging, "--strip-components=1", "--no-same-owner", "--no-same-permissions"]);
-    const markerArtifact = await ctx.invoke<{ ref: string }>(ctx.resources.cas!, "putText", { text: `${adopted.ref}\n` });
-    await Promise.resolve(selected.putFile(`${staging}/.constal-source-ref`, markerArtifact.ref,
-      { mode: 0o444, invoke: { timeoutMs: TIMEOUT_MS } }));
-    await requireCommand(selected, "mv", ["--", staging, root]);
-    await requireCommand(selected, "rm", ["-f", "--", archive]);
-    return { sandbox: selected.id, path: root, ref: adopted.ref, bytes: adopted.bytes, alreadyMaterialized: false };
-  },
-};
 
 const list: Tool = {
   name: "workspace_list", version: "1",
@@ -101,7 +74,7 @@ const list: Tool = {
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false }, maxEffect: "read-only",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
-    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
     return command(selected, "git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...paths], cwd);
   },
@@ -114,7 +87,7 @@ const search: Tool = {
     paths: pathsProperty, maximumMatches: { type: "integer", minimum: 1, maximum: 500 } }, required: ["query"], additionalProperties: false },
   maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { query: string; cwd?: string; paths?: string[]; maximumMatches?: number }, ctx) {
-    const selected = await workspace(ctx); const maximum = args.maximumMatches ?? 200; const cwd = args.cwd ?? "/workspace";
+    const selected = await workspace(ctx); const maximum = args.maximumMatches ?? 200; const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? ["."]).map((path) => normalizeRepositoryPath(path, cwd));
     return command(selected, "rg", ["--line-number", "--no-heading", "--color", "never", "--max-count", String(maximum), "--", args.query, ...paths], cwd);
   },
@@ -133,7 +106,10 @@ const read: Tool = {
     return { path: value.path, ref: value.ref, bytes: value.bytes, text: text.slice(0, maximum), truncated: text.length > maximum };
   },
   async run(args: { path: string; maximumBytes?: number }, ctx) {
-    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path);
+    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
+    if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
+      throw new TypeError("workspace read path is outside /workspace/repo");
+    }
     const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
     const value = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
       { ref: file.ref, maximumBytes: args.maximumBytes ?? 262_144 });
@@ -151,7 +127,8 @@ const exec: Tool = {
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cmd: string; args?: string[]; cwd?: string; stdin?: string; timeoutMs?: number }, ctx) {
     const selected = await workspace(ctx);
-    return command(selected, args.cmd, args.args ?? [], args.cwd ?? "/workspace",
+    const cwd = repositoryCwd(args.cwd);
+    return command(selected, args.cmd, args.args ?? [], cwd,
       { ...(args.stdin === undefined ? {} : { stdin: args.stdin }), timeoutMs: args.timeoutMs ?? TIMEOUT_MS });
   },
 };
@@ -165,7 +142,10 @@ const write: Tool = {
     { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "putFile"] }],
   async run(args: { path: string; text: string; mode?: number }, ctx) {
     const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: args.text });
-    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path);
+    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
+    if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
+      throw new TypeError("workspace write path is outside /workspace/repo");
+    }
     await Promise.resolve(selected.putFile(path, stored.ref, { ...(args.mode === undefined ? {} : { mode: args.mode }),
       invoke: { timeoutMs: TIMEOUT_MS } }));
     return { path, ref: stored.ref, bytes: stored.bytes, created: stored.created };
@@ -179,7 +159,7 @@ const patch: Tool = {
     required: ["patch"], additionalProperties: false }, maxEffect: "idempotent",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { patch: string; cwd?: string }, ctx) {
-    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const check = await command(selected, "git", ["apply", "--check", "--whitespace=error-all", "-"], cwd, { stdin: args.patch });
     if (!succeeded(check)) throw new Error(`workspace patch validation failed (${check.status}, exit ${check.exitCode ?? "unknown"})`);
     const applied = await command(selected, "git", ["apply", "--whitespace=error-all", "-"], cwd, { stdin: args.patch });
@@ -194,7 +174,7 @@ const diff: Tool = {
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false },
   maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
-    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
     return command(selected, "git", ["diff", "--no-ext-diff", "--", ...paths], cwd);
   },
@@ -208,7 +188,7 @@ const pack: Tool = {
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths: string[]; output?: string }, ctx) {
     if (args.paths.length === 0) throw new TypeError("workspace_package requires at least one path");
-    const selected = await workspace(ctx); const cwd = args.cwd ?? "/workspace";
+    const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const output = normalizeWorkspacePath(args.output ?? "/workspace/.constal/horizon-artifact.tar.gz", cwd);
     const paths = args.paths.map((path) => normalizeRepositoryPath(path, cwd));
     await requireCommand(selected, "mkdir", ["-p", "--", output.slice(0, output.lastIndexOf("/"))]);
@@ -221,5 +201,5 @@ const pack: Tool = {
 };
 
 export const WORKSPACE_TOOLS: Record<string, Tool> = Object.fromEntries([
-  open, importArchive, list, search, read, exec, write, patch, diff, pack,
+  list, search, read, exec, write, patch, diff, pack,
 ].map((tool) => [tool.name, tool]));

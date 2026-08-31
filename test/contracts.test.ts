@@ -33,7 +33,8 @@ const plan = {
 describe("Horizon transport contracts", () => {
   it("keeps semantic intent in natural-language specifications", () => {
     expect(parseHzPlan(plan)).toEqual(plan);
-    expect(parseHzRequest("Build and verify the agent")).toEqual({ objective: "Build and verify the agent", context: null, constraints: [] });
+    expect(parseHzRequest("Build and verify the agent")).toEqual({ objective: "Build and verify the agent", context: null,
+      constraints: [], source: null, environment: { name: "default", cache: true, setup: [] } });
   });
 
   it("rejects structural dependency cycles without scoring plan prose", () => {

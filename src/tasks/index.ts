@@ -5,3 +5,4 @@ export { assertionAgent, critiqueAgent, decompositionAgent, designAgent, planFin
 export { executor } from "./executor.js";
 export { verifier } from "./verifier.js";
 export { reconciler } from "./reconciler.js";
+export { sourceResolver } from "./source.js";

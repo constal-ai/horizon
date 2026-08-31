@@ -8,7 +8,7 @@
   "mode": "script",
   "bindings": {
     "model": "crn:constal:production:platform:default:model/gpt-5.6-sol",
-    "sandbox": "crn:constal:production:platform:default:sandbox-pool/constal",
+    "sandbox": "crn:constal:production:platform:default:sandbox-pool/constal-code",
     "cas": "crn:constal:production:platform:default:cas/constal",
     "github": "crn:constal:production:platform:default:service/github",
     "web": "crn:constal:production:platform:default:web/constal",
@@ -21,8 +21,6 @@
     "github_tree",
     "github_file",
     "github_archive",
-    "workspace_open",
-    "workspace_import",
     "workspace_list",
     "workspace_search",
     "workspace_read",

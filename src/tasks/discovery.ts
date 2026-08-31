@@ -11,21 +11,13 @@ export const discoveryFramer = subtask<HzDiscoveryResult>({
     const conversation = await runReactLoop({
       role: "discovery-framer", system: DISCOVERY_SYSTEM,
       objective: "Establish the repository and frame focused software investigations.",
-      context: { request: input.request }, tools: input.tools, model: "model", stream: true,
+      context: { request: input.request, workspaceRoot: input.workspaceRoot, workspaceReceipt: input.workspaceReceipt },
+      tools: input.tools, model: "model", stream: true,
       maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: parseHzDiscoveryPlan,
     }, ctx);
-    const imported = [...conversation.evidence].reverse().find((entry) => {
-      if (entry.name !== "workspace_import" || !["ok", "repeated", "substituted"].includes(entry.status)) return false;
-      const result = entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
-        ? entry.result as Record<string, unknown> : null;
-      return typeof result?.path === "string" && result.path.length > 0;
-    });
-    const result = imported?.result && typeof imported.result === "object" && !Array.isArray(imported.result)
-      ? imported.result as Record<string, unknown> : null;
-    const workspaceRoot = typeof result?.path === "string" ? result.path : null;
-    if (conversation.artifact.workspaceRoot !== null && conversation.artifact.workspaceRoot !== workspaceRoot) {
-      throw new TypeError("Horizon discovery plan did not use the workspace root established by governed import evidence");
+    if (conversation.artifact.workspaceRoot !== input.workspaceRoot) {
+      throw new TypeError("Horizon discovery plan did not preserve the deterministically prepared workspace root");
     }
     return { discoveryPlan: conversation.artifact, toolEvidence: conversation.evidence };
   },

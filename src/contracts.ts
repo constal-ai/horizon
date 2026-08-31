@@ -210,6 +210,86 @@ export interface HzRequest {
   objective: string;
   context: unknown;
   constraints: string[];
+  source: HzSourceInput | null;
+  environment: HzEnvironmentSpec;
+}
+
+export type HzSourceInput = {
+  kind: "github";
+  owner: string;
+  repository: string;
+  ref: string;
+} | {
+  kind: "artifact";
+  ref: string;
+  format: "tar.gz";
+};
+
+export interface HzEnvironmentCommand {
+  cmd: string;
+  args: string[];
+  cwd: string;
+  timeoutMs: number;
+}
+
+export interface HzEnvironmentSpec {
+  name: string;
+  cache: boolean;
+  setup: HzEnvironmentCommand[];
+}
+
+export interface HzSourceResolution {
+  object: "constal.horizon.source-resolution";
+  version: 1;
+  status: "ready" | "needs-input" | "blocked";
+  source: Extract<HzSourceInput, { kind: "github" }> | null;
+  evidence: string[];
+  question: string | null;
+  blockedReason: string | null;
+}
+
+export interface HzSourceResolverInput {
+  request: HzRequest;
+  answer: string | null;
+  tools: string[];
+}
+
+export interface HzSourceResolverResult {
+  resolution: HzSourceResolution;
+  toolEvidence: HzToolEvidence[];
+}
+
+export interface HzResolvedSource {
+  kind: "github" | "artifact";
+  archive: { ref: string; bytes: number | null; format: "tar.gz" };
+  github: { owner: string; repository: string; requestedRef: string; sourceUrl: string | null } | null;
+}
+
+export interface HzWorkspaceReceipt {
+  object: "constal.horizon.workspace-ready";
+  version: 1;
+  session: string;
+  sandbox: string;
+  root: "/workspace/repo";
+  cache: { key: string; hit: boolean; image: string | null };
+  runner: { protocol: "constal.workspace-runner"; version: 1; digest: string };
+  source: HzResolvedSource;
+  baseline: { commit: string; tree: string };
+  setup: HzEnvironmentSpec;
+}
+
+export interface HzWorkspaceCheckpoint {
+  object: "constal.horizon.workspace-checkpoint";
+  version: 1;
+  workspaceReceipt: string;
+  planFact: string;
+  stepFact: string;
+  verificationFact: string;
+  stepId: string;
+  tree: string;
+  status: string;
+  image: string;
+  cacheKey: string;
 }
 
 export interface HzPlanInput {
@@ -226,6 +306,8 @@ export interface HzPlanInput {
 
 export interface HzDiscoveryInput {
   request: HzRequest;
+  workspaceRoot: string;
+  workspaceReceipt: string;
   tools: string[];
 }
 
@@ -237,6 +319,7 @@ export interface HzDiscoveryResult {
 export interface HzInvestigatorInput {
   request: HzRequest;
   discoveryPlan: HzDiscoveryPlan;
+  workspaceReceipt: string;
   focus: HzDiscoveryFocus;
   tools: string[];
 }
@@ -314,7 +397,9 @@ export interface HzRunResult {
   version: 1;
   status: "complete" | "blocked";
   summary: string;
-  plan: { revision: number; fact: string };
+  plan: { revision: number; fact: string } | null;
+  workspace: { receipt: string; cacheHit: boolean; image: string | null } | null;
+  checkpoints: Array<{ stepId: string; receipt: string; image: string; tree: string }>;
   completedSteps: Array<{ id: string; status: HzStepStatus; summary: string }>;
   remainingUnknowns: HzUnknown[];
   artifact: { ref: string; bytes: number; path: string } | null;
@@ -345,18 +430,69 @@ function strings(value: unknown, maximumItems = 128, maximumLength = 16_384): st
   return parsed.every((entry): entry is string => entry !== null) ? parsed : null;
 }
 
+function parseSourceInput(value: unknown): HzSourceInput | null {
+  const source = item(value); const kind = source?.kind;
+  if (source && kind === "github") {
+    const owner = string(source.owner, 100); const repository = string(source.repository, 100); const ref = string(source.ref, 256);
+    if (!owner || !repository || !ref) return null;
+    return { kind, owner, repository, ref };
+  }
+  if (source && kind === "artifact") {
+    const ref = string(source.ref, 1_024);
+    return ref && source.format === "tar.gz" ? { kind, ref, format: "tar.gz" } : null;
+  }
+  return null;
+}
+
+function parseEnvironmentCommand(value: unknown): HzEnvironmentCommand | null {
+  const source = item(value); const cmd = string(source?.cmd, 256);
+  const args = source?.args === undefined ? [] : strings(source.args, 256, 16_384);
+  const cwd = source?.cwd === undefined ? "/workspace/repo" : string(source.cwd, 4_096);
+  const timeoutMs = source?.timeoutMs === undefined ? 600_000 : Number(source.timeoutMs);
+  if (!source || !cmd || !args || !cwd || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 600_000) return null;
+  return { cmd, args, cwd, timeoutMs };
+}
+
+function parseEnvironmentSpec(value: unknown): HzEnvironmentSpec | null {
+  if (value === undefined) return { name: "default", cache: true, setup: [] };
+  const source = item(value); const name = source?.name === undefined ? "default" : string(source.name, 128);
+  if (!source || !name || source.cache !== undefined && typeof source.cache !== "boolean"
+    || source.setup !== undefined && (!Array.isArray(source.setup) || source.setup.length > 32)) return null;
+  const setup = (source.setup ?? []).map(parseEnvironmentCommand);
+  if (!setup.every((entry): entry is HzEnvironmentCommand => entry !== null)) return null;
+  return { name, cache: source.cache !== false, setup };
+}
+
 export function parseHzRequest(value: unknown): HzRequest {
   if (typeof value === "string") {
     const objective = string(value);
     if (!objective) throw new TypeError("Horizon requires a non-empty objective");
-    return { objective, context: null, constraints: [] };
+    return { objective, context: null, constraints: [], source: null,
+      environment: { name: "default", cache: true, setup: [] } };
   }
   const source = item(value);
   const objective = string(source?.objective);
   if (!source || !objective) throw new TypeError("Horizon requires a non-empty objective");
   const constraints = source.constraints === undefined ? [] : strings(source.constraints, 64, 8_192);
   if (!constraints) throw new TypeError("Horizon constraints are invalid");
-  return { objective, context: source.context ?? null, constraints };
+  const requestedSource = source.source === undefined ? null : parseSourceInput(source.source);
+  if (source.source !== undefined && !requestedSource) throw new TypeError("Horizon source is invalid");
+  const environment = parseEnvironmentSpec(source.environment);
+  if (!environment) throw new TypeError("Horizon environment is invalid");
+  return { objective, context: source.context ?? null, constraints, source: requestedSource, environment };
+}
+
+export function parseHzSourceResolution(value: unknown): HzSourceResolution | null {
+  const source = item(value); const status = source?.status;
+  const selected = source?.source === null ? null : parseSourceInput(source?.source);
+  const evidence = strings(source?.evidence, 64, 8_192); const question = nullableString(source?.question, 16_384);
+  const blockedReason = nullableString(source?.blockedReason, 16_384);
+  if (!source || source.object !== "constal.horizon.source-resolution" || source.version !== 1
+    || !["ready", "needs-input", "blocked"].includes(String(status)) || !evidence || question === undefined
+    || blockedReason === undefined || selected?.kind === "artifact") return null;
+  if (status === "ready" && !selected || status === "needs-input" && !question || status === "blocked" && !blockedReason) return null;
+  return { object: "constal.horizon.source-resolution", version: 1,
+    status: status as HzSourceResolution["status"], source: selected, evidence, question, blockedReason };
 }
 
 export function parseHzUnknown(value: unknown): HzUnknown | null {

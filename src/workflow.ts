@@ -7,6 +7,8 @@ import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_N
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
+import { captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
+  type PreparedWorkspace } from "./workspace/lifecycle.js";
 
 const MAX_PLAN_REVISIONS = 64;
 const MAX_WORKFLOW_TRANSITIONS = 1_024;
@@ -131,10 +133,13 @@ async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzR
 }
 
 function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[], summary: string,
-  remainingUnknowns = plan.unknowns, specialistRuns = 0, replans = 0, plateauCycles = 0): HzRunResult {
+  remainingUnknowns = plan.unknowns, specialistRuns = 0, replans = 0, plateauCycles = 0,
+  workspace: PreparedWorkspace | null = null, checkpoints: HzRunResult["checkpoints"] = []): HzRunResult {
   return {
     object: "constal.horizon.result", version: 1, status: "blocked", summary,
     plan: { revision: plan.revision, fact: planFact },
+    workspace: workspace ? { receipt: workspace.receiptRef, cacheHit: workspace.receipt.cache.hit,
+      image: workspace.receipt.cache.image } : null, checkpoints,
     completedSteps: completed.map(({ stepId, status, summary: stepSummary }) => ({ id: stepId, status, summary: stepSummary })),
     remainingUnknowns, artifact: null,
     longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles },
@@ -157,13 +162,14 @@ async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPla
   return { plan: result.plan, fact: fact.hash, planningRuns: result.planningRuns };
 }
 
-async function discover(request: HzRequest, ctx: Ctx): Promise<{
+async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: Ctx): Promise<{
   discoveryPlan: HzDiscoveryPlan;
   investigations: HzInvestigationResult[];
   specialistRuns: number;
 }> {
   const discoveryTools = availableTools(DISCOVERY_TOOL_NAMES, ctx);
-  const framed = await ctx.spawn(discoveryFramer, { request, tools: discoveryTools }, {
+  const framed = await ctx.spawn(discoveryFramer, { request, workspaceRoot: workspace.receipt.root,
+    workspaceReceipt: workspace.receiptRef, tools: discoveryTools }, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: attenuation(discoveryTools, ctx),
@@ -172,7 +178,7 @@ async function discover(request: HzRequest, ctx: Ctx): Promise<{
     toolEvidence: framed.toolEvidence }, { tier: "audit" });
   const investigationTools = availableTools(INVESTIGATOR_TOOL_NAMES, ctx);
   const handles = framed.discoveryPlan.focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
-    request, discoveryPlan: framed.discoveryPlan, focus, tools: investigationTools,
+    request, discoveryPlan: framed.discoveryPlan, workspaceReceipt: workspace.receiptRef, focus, tools: investigationTools,
   }, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
@@ -191,14 +197,25 @@ async function discover(request: HzRequest, ctx: Ctx): Promise<{
 export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResult> {
   const request: HzRequest = parseHzRequest(message);
   await ctx.commit({ kind: "horizon.request", request }, { tier: "audit" });
+  let workspace: PreparedWorkspace;
+  try { workspace = await prepareWorkspace(request, ctx); }
+  catch (error) {
+    const summary = error instanceof WorkspacePreparationError ? error.message
+      : error instanceof Error ? error.message : "Horizon workspace preparation failed.";
+    await ctx.commit({ kind: "horizon.workspace-failed", summary }, { tier: "audit" });
+    return { object: "constal.horizon.result", version: 1, status: "blocked", summary, plan: null,
+      workspace: null, checkpoints: [], completedSteps: [], remainingUnknowns: [], artifact: null,
+      longHorizon: { durablePlan: true, specialistRuns: 0, replans: 0, plateauCycles: 0 } };
+  }
   let completed: HzStepResult[] = [];
+  const checkpoints: HzRunResult["checkpoints"] = [];
   let resultDigests: string[] = [];
   let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
   let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
   const answeredQuestions = new Map<string, string>();
 
-  const discovery = await discover(request, ctx);
+  const discovery = await discover(request, workspace, ctx);
   specialistRuns += discovery.specialistRuns;
   let current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
     investigations: discovery.investigations, revision: 1, previousPlan: null,
@@ -209,18 +226,18 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
   while (transitions++ < MAX_WORKFLOW_TRANSITIONS) {
     if (current.plan.status === "blocked") {
       return blockedResult(current.plan, current.fact, completed, current.plan.blockedReason ?? current.plan.summary,
-        current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+        current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (current.plan.status === "needs-input") {
       if (current.plan.revision >= MAX_PLAN_REVISIONS) {
         return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling while user decisions remained open.",
-          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
       const key = questionKey(current.plan.question!, current.plan.unknowns);
       if (answeredQuestions.has(key)) {
         return blockedResult(current.plan, current.fact, completed,
           "Horizon stopped because planning requested a user decision that this Run already resolved.",
-          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
       answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
       answeredQuestions.set(key, answer);
@@ -246,11 +263,13 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
             reason: packaged.error ?? "Workspace packaging failed." }, { tier: "audit" });
           return blockedResult(current.plan, current.fact, completed,
             `Every work unit passed independent verification, but Horizon could not create the immutable final artifact: ${packaged.error ?? "unknown packaging failure"}`,
-            remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+            remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
         }
         const result: HzRunResult = {
           object: "constal.horizon.result", version: 1, status: "complete", summary: current.plan.summary,
           plan: { revision: current.plan.revision, fact: current.fact },
+          workspace: { receipt: workspace.receiptRef, cacheHit: workspace.receipt.cache.hit,
+            image: workspace.receipt.cache.image }, checkpoints,
           completedSteps: completed.map(({ stepId, status, summary }) => ({ id: stepId, status, summary })),
           remainingUnknowns: remainingUnknowns.filter(({ state }) => !["resolved", "assumed"].includes(state)),
           artifact: packaged.artifact,
@@ -260,7 +279,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
         return { ...result, summary: `${result.summary}\n\nDurable result: ${final.hash}` };
       }
       return blockedResult(current.plan, current.fact, completed, "No dependency-ready Horizon work unit remains; the immutable plan requires reconciliation.",
-        current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+        current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
 
     const executorTools = availableTools(EXECUTOR_TOOL_NAMES, ctx);
@@ -283,6 +302,12 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     specialistRuns++;
     const verificationFact = await ctx.commit({ kind: "horizon.verification", planFact: current.fact,
       stepFact: stepFact.hash, verification: verified.verification, toolEvidence: verified.toolEvidence }, { tier: "audit" });
+    if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
+      const captured = await captureWorkspaceCheckpoint({ workspace, planFact: current.fact, stepFact: stepFact.hash,
+        verificationFact: verificationFact.hash, stepId: step.id }, ctx);
+      checkpoints.push({ stepId: step.id, receipt: captured.receiptRef, image: captured.checkpoint.image,
+        tree: captured.checkpoint.tree });
+    }
     const resultDigest = await attemptProgressDigest({ execution: executed.result,
       executionTools: executed.toolEvidence, verification: verified.verification,
       verificationTools: verified.toolEvidence });
@@ -314,24 +339,24 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
         attemptedTransition: decision.action, remainingUnknowns }, { tier: "audit" });
       return blockedResult(current.plan, current.fact, completed,
         "Horizon stopped after repeated execution and verification produced no new evidence or resolved uncertainty.",
-        remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+        remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (decision.action === "continue") continue;
     if (decision.action === "blocked") {
       return blockedResult(current.plan, current.fact, completed, decision.blockedReason ?? decision.summary,
-        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (decision.action === "complete") continue;
     if (current.plan.revision >= MAX_PLAN_REVISIONS) {
       return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
-        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (decision.action === "ask") {
       const key = questionKey(decision.question!, decision.remainingUnknowns);
       if (answeredQuestions.has(key)) {
         return blockedResult(current.plan, current.fact, completed,
           "Horizon stopped because reconciliation requested a user decision that this Run already resolved.",
-          decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles);
+          decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
       answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
       answeredQuestions.set(key, answer);
@@ -347,5 +372,5 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     specialistRuns += current.planningRuns; replans++;
   }
   return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",
-    current.plan.unknowns, specialistRuns, replans, plateau.stableCycles);
+    current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
 }
