@@ -34,8 +34,8 @@ const finalPlan: HzPlan = { object: "constal.horizon.plan", version: 1, revision
   risks: design.milestones[0]!.risks, question: null, blockedReason: null };
 
 function narrative(plan: HzPlan): HzPlanNarrative {
-  const { steps: _steps, assertions: _assertions, ...rest } = plan;
-  return { ...rest, object: "constal.horizon.plan-narrative" };
+  return { object: "constal.horizon.plan-narrative", version: 1,
+    summary: plan.summary, specification: plan.specification, unknowns: plan.unknowns, risks: plan.risks };
 }
 const input: HzPlanInput = { request: { objective: rubric.objective, context: null, constraints: [], source: null,
   environment: { name: "default", cache: true, setup: [] } },

@@ -203,11 +203,14 @@ export const planner = subtask<HzPlannerResult>({
       budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
         wallMs: HORIZON_LOOP_WALL_MS }, attenuation: { bindings: ["cas", "model"], tools: [] } });
     planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
-    const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan",
-      steps: workPlan.steps, assertions });
-    if (!plan) throw new TypeError("Horizon finalization did not produce one valid immutable plan");
     const expectedStatus = critique.verdict === "accepted" ? "ready"
       : critique.verdict === "needs-input" ? "needs-input" : "blocked";
+    const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan",
+      revision: input.revision, status: expectedStatus, objective: input.request.objective,
+      workspaceRoot: input.discoveryPlan.workspaceRoot, steps: workPlan.steps, assertions,
+      question: expectedStatus === "needs-input" ? critique.question : null,
+      blockedReason: expectedStatus === "blocked" ? critique.blockedReason ?? critique.summary : null });
+    if (!plan) throw new TypeError("Horizon finalization did not produce one valid immutable plan");
     if (plan.status !== expectedStatus || canonicalJson(plan.steps) !== canonicalJson(workPlan.steps)
       || canonicalJson(plan.assertions) !== canonicalJson(assertions)
       || plan.workspaceRoot !== input.discoveryPlan.workspaceRoot

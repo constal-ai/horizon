@@ -115,13 +115,7 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, critique: input.critique },
       tools: [], model: "model", stream: true, maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse(value) {
-        const plan = parseHzPlanNarrative(value, input.planning.revision, input.planning.request.objective);
-        const expectedStatus = input.critique.verdict === "accepted" ? "ready"
-          : input.critique.verdict === "needs-input" ? "needs-input" : "blocked";
-        return plan?.status === expectedStatus && plan.workspaceRoot === input.planning.discoveryPlan.workspaceRoot
-          && (expectedStatus !== "needs-input" || plan.question === input.critique.question) ? plan : null;
-      } }, ctx);
+      parse: parseHzPlanNarrative }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });

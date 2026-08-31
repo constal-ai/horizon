@@ -18,23 +18,17 @@ Prefer existing abstractions and public package boundaries. Do not invent parall
 
 For a ready plan, use the exact workspace root established by the discovery plan. Explain how the accepted work units and assertions satisfy the rubric without reproducing them.
 
-Map critique state exactly: accepted becomes ready, needs-input becomes needs-input with the same question, and blocked becomes blocked with its reason.`,
+The runtime attaches the original objective, revision, critique state, workspace root, user question or blocker, accepted work units, and assertions deterministically. Do not reproduce those identity and control fields.`,
   tools: "Finalization has no Tools. All evidence gathering and planning repair belongs to earlier loops.",
   output: `Return exactly one JSON object with this transport shape:
 {
   "object":"constal.horizon.plan-narrative",
   "version":1,
-  "revision":1,
-  "status":"ready|needs-input|blocked",
-  "objective":"the intended outcome",
   "summary":"what the plan will accomplish and why this decomposition fits",
   "specification":"the complete natural-language execution specification",
-  "workspaceRoot":"/workspace/... or null",
   "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
-  "risks":["specific risk"],
-  "question":"one blocking user decision or null",
-  "blockedReason":"specific unavailable capability or null"
+  "risks":["specific risk"]
 }
 
-Use the revision supplied in context and copy the original request objective exactly into objective. A ready narrative requires a workspaceRoot. needs-input requires one question. blocked requires one blockedReason. JSON fields are a transport envelope; put the actual plan in specification.`,
+JSON fields are a transport envelope; put the actual plan in specification.`,
 });

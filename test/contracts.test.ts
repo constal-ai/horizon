@@ -33,9 +33,9 @@ const plan = {
 describe("Horizon transport contracts", () => {
   it("keeps semantic intent in natural-language specifications", () => {
     expect(parseHzPlan(plan)).toEqual(plan);
-    const { steps: _steps, assertions: _assertions, ...narrative } = plan;
-    expect(parseHzPlanNarrative({ ...narrative, object: "constal.horizon.plan-narrative" }, 1, plan.objective))
-      .toEqual({ ...narrative, object: "constal.horizon.plan-narrative" });
+    const narrative = { object: "constal.horizon.plan-narrative", version: 1, summary: plan.summary,
+      specification: plan.specification, unknowns: plan.unknowns, risks: plan.risks };
+    expect(parseHzPlanNarrative(narrative)).toEqual(narrative);
     expect(parseHzRequest("Build and verify the agent")).toEqual({ objective: "Build and verify the agent", context: null,
       constraints: [], source: null, environment: { name: "default", cache: true, setup: [] } });
     expect(parseHzRequest({ objective: "Build it", source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
