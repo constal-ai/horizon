@@ -18,7 +18,7 @@ export async function loadArtifact<T>(ctx: Ctx, envelope: ArtifactEnvelope): Pro
     throw new TypeError("Horizon artifact envelope is invalid");
   }
   const loaded = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-    { ref: envelope.ref, maximumBytes: 16_777_216 });
+    { ref: envelope.ref, maximumBytes: 1_048_576 });
   if (loaded.ref !== envelope.ref || typeof loaded.text !== "string") throw new TypeError("Horizon CAS artifact read is invalid");
   try { return JSON.parse(loaded.text) as T; }
   catch { throw new TypeError("Horizon CAS artifact is not canonical JSON"); }
