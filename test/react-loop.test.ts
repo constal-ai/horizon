@@ -1,4 +1,4 @@
-import type { Ctx, Fact, ToolCallRecord, TurnRecord } from "@constal/sdk";
+import { ToolUnavailable, type Ctx, type Fact, type ToolCallRecord, type TurnRecord } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import { EvidencePlateauDetector, LOOP_CHECKPOINT_SYSTEM, runReactLoop } from "../src/react-loop.js";
 
@@ -53,6 +53,12 @@ describe("EvidencePlateauDetector", () => {
         ? value as { status: "blocked" } : null }, ctx);
     expect(result.plateaued).toBe(true);
     expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+  });
+
+  it("propagates Tool availability failures instead of silently degrading the role", async () => {
+    const ctx = { turn: async () => { throw new ToolUnavailable("workspace_patch"); } } as unknown as Ctx;
+    await expect(runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+      tools: ["workspace_patch"], maxRounds: 8, parse: () => null }, ctx)).rejects.toBeInstanceOf(ToolUnavailable);
   });
 
   it("keeps bounded compacted evidence available while committing complete older rounds", async () => {

@@ -1,4 +1,4 @@
-import { ToolUnavailable, canonicalJson, type Ctx, type ToolCallRecord, type TurnDraft } from "@constal/sdk";
+import { canonicalJson, type Ctx, type ToolCallRecord, type TurnDraft } from "@constal/sdk";
 import type { HzToolEvidence } from "./contracts.js";
 import { COMMON_RULES, composePrompt } from "./prompts/compose.js";
 
@@ -164,7 +164,7 @@ function roundContext(calls: readonly ToolCallRecord[]): unknown[] {
 
 export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise<ReactLoopResult<T>> {
   const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
-  let enabledTools = [...new Set(spec.tools)];
+  const enabledTools = [...new Set(spec.tools)];
   const calls: ToolCallRecord[] = [];
   const recentRounds: unknown[][] = [];
   const compacted: Array<{ fact: string; rounds: number }> = [];
@@ -178,34 +178,25 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
     const offered = forcedPlateau || ordinal === maximum - 1 ? [] : enabledTools;
-    let turn;
-    for (;;) {
-      try {
-        turn = await ctx.turn({
-          system: spec.system,
-          objective: spec.objective,
-          context: ordinal === 0
-            ? spec.context
-            : { request: spec.context, compacted, compactedEvidence, recentRounds,
-              progressCheckpoints,
-              ...(forcedPlateau ? { plateau: "The observed evidence or structured unknown frontier stopped changing. Resolve, ask, or block without another Tool call." } : {}) },
-          tools: offered,
-          ...(spec.model ? { model: spec.model } : {}),
-          ...(spec.stream ? { stream: true } : {}),
-          gate: {
-            id: `horizon-${spec.role}`,
-            version: "1",
-            retries: 3,
-            before: (draft) => draft.toolCalls.length > 0 || spec.parse(candidate(draft)) !== null,
-            feedback: () => "Return only the required JSON transport object, with every required field present and no prose wrapper.",
-          },
-        });
-        break;
-      } catch (error) {
-        if (!(error instanceof ToolUnavailable) || !enabledTools.includes(error.tool)) throw error;
-        enabledTools = enabledTools.filter((name) => name !== error.tool);
-      }
-    }
+    const turn = await ctx.turn({
+      system: spec.system,
+      objective: spec.objective,
+      context: ordinal === 0
+        ? spec.context
+        : { request: spec.context, compacted, compactedEvidence, recentRounds,
+          progressCheckpoints,
+          ...(forcedPlateau ? { plateau: "The observed evidence or structured unknown frontier stopped changing. Resolve, ask, or block without another Tool call." } : {}) },
+      tools: offered,
+      ...(spec.model ? { model: spec.model } : {}),
+      ...(spec.stream ? { stream: true } : {}),
+      gate: {
+        id: `horizon-${spec.role}`,
+        version: "1",
+        retries: 3,
+        before: (draft) => draft.toolCalls.length > 0 || spec.parse(candidate(draft)) !== null,
+        feedback: () => "Return only the required JSON transport object, with every required field present and no prose wrapper.",
+      },
+    });
 
     if (turn.toolCalls.length === 0) {
       const artifact = spec.parse(candidate(turn));
