@@ -1,10 +1,10 @@
 {
   "agent": {
     "crn": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "version": "0.3.19",
-    "deploymentRevision": "333b6d8f-fcf4-45d2-b340-6dbce2e39615",
-    "resourceHash": "2629ba01b86fac0039b47198167ce8cba7079b959370beb48c4776f005aaf899",
-    "bundleHash": "41ba9e7d3c994630bdb0a65784225627a66a4c12cd2f57b519420aed0e31ab0f"
+    "version": "0.3.20",
+    "deploymentRevision": "a3583445-6c55-41a6-ab06-90c662a6b2d1",
+    "resourceHash": "6f84e187b33ee1540967ceb2708b3267398f5057cc58e9fca8302add47a13b3f",
+    "bundleHash": "b4d699b32c2fed03a86b3f4278840cb8799b7b314b4affcb5293148dc1258efd"
   },
   "datasets": {
     "capability": {
@@ -16,6 +16,11 @@
       "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-boundaries",
       "version": "1",
       "hash": "1b1c9d3ce948b4583d8068b253bcb4b18b6fd6f7842bb67814fc0f78901442a1"
+    },
+    "efficiency": {
+      "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-efficiency",
+      "version": "1",
+      "hash": "16628ede9646c02c492233992f405d93867466e4993cd90c0894d82b25f6b1bd"
     }
   },
   "scorers": {
@@ -28,17 +33,22 @@
       "crn": "crn:constal:production:52752121874141666554:default:scorer/horizon-blocked-contract",
       "version": "1",
       "hash": "035ed65f895282f76d3ce987791887742472bafd29cac5ce4d4dcbdbbd74c787"
+    },
+    "proportional": {
+      "crn": "crn:constal:production:52752121874141666554:default:scorer/horizon-proportional-small-task",
+      "version": "1",
+      "hash": "ff8e23d8097375e0ad35789c50e2ce0c49c94302dbec48fe6819e863e1af0155"
     }
   },
   "results": {
     "boundariesLuna": {
-      "suite": "horizon-boundaries-0-3-17-luna-v1",
-      "hash": "a29e67a7c3bffcd949823fa2741144ccbb1f91adf4d0558d68451da34bd50cff",
-      "bundleHash": "fe190c762a31825de5fbd3316f74def81e3f75704f760f6e84e126ae02261647",
+      "suite": "horizon-boundaries-0-3-19-luna-v1",
+      "hash": "73e210925032c1a595c4d18c081e20e13c40f924214d90a7521dbb171d8e72b4",
+      "bundleHash": "41ba9e7d3c994630bdb0a65784225627a66a4c12cd2f57b519420aed0e31ab0f",
       "completed": 3,
       "errored": 0,
       "passRate": 1,
-      "costMicroUsd": 19080
+      "costMicroUsd": 18630
     }
   }
 }
