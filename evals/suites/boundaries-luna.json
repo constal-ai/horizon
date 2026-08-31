@@ -1,5 +1,5 @@
 {
-  "id": "horizon-boundaries-0-3-23-luna-v1",
+  "id": "horizon-boundaries-0-3-24-luna-v1",
   "dataset": {
     "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-boundaries",
     "version": "1",
@@ -7,7 +7,7 @@
   },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "bundle": "d0e269004ba0a5f009d12170745a3fe38673312710aa6b5793bce0984e871e12"
+    "bundle": "9458e6c85c40b81708978d843a4fb3f5a9270bf333c44ab8715cf64fb48e0e14"
   },
   "mode": "fresh",
   "scorers": [
