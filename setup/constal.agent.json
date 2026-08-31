@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "id": "horizon-setup",
+  "namespace": "default",
+  "version": "0.1.0",
+  "entry": "src/setup/index.ts",
+  "mode": "script",
+  "bindings": {
+    "model": "crn:constal:production:platform:default:model/gpt-5.6-luna",
+    "api": "crn:constal:production:platform:default:service/constal-api"
+  },
+  "policies": [],
+  "tools": [],
+  "limits": {
+    "maxRunMicroUsd": 5000000,
+    "maxTurns": 16
+  },
+  "expectedCurrentDeploymentRevision": null
+}
