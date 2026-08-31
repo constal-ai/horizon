@@ -9,6 +9,7 @@ import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_N
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
+import { milestoneMarkdown, planMarkdown, postConversation, questionMarkdown, requestConversation, waitPresentation } from "./github-conversation.js";
 import { archiveWorkspace, captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
 
@@ -47,12 +48,16 @@ async function approvalAuthorized(event: HorizonRoutedEvent, ctx: Ctx): Promise<
   return { authorized: target.permissions.includes(permission), permission };
 }
 
-async function awaitPlanDecision(plan: HzPlan, planFact: string, ctx: Ctx): Promise<HorizonPlanDecision> {
+async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequest, ctx: Ctx): Promise<HorizonPlanDecision> {
   await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
     instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
+  const body = planMarkdown(plan, planFact);
+  await postConversation(ctx, requestConversation(request), `plan:${planFact}`, body);
   for (let attempt = 1; attempt <= 64; attempt++) {
     const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}-${attempt}`, {
       maxBytes: 65_536, afterRun: "message",
+      presentation: waitPresentation("approval", `Approve Horizon plan revision ${plan.revision}`, body,
+        { planFact, revision: plan.revision, attempt }),
       schema: { anyOf: [
         { type: "object", additionalProperties: false,
           required: ["object", "version", "planFact", "decision", "guidance"], properties: {
@@ -77,6 +82,8 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, ctx: Ctx): Prom
       if (!authorization.authorized) {
         await ctx.commit({ kind: "horizon.approval-denied", planFact, eventClass: event.eventClass,
           permission: authorization.permission, reason: "The GitHub sender does not have a configured approval permission." }, { tier: "audit" });
+        await postConversation(ctx, requestConversation(request), `approval-denied:${planFact}:${attempt}`,
+          `Horizon did not accept this approval because the sender has repository permission \`${authorization.permission}\`, which is not in the configured approver permissions. An authorized reviewer can reply to this issue.`);
         continue;
       }
     }
@@ -163,7 +170,9 @@ async function progressState(previous: HzPlateauState, completed: readonly HzSte
   return { fingerprint, stableCycles: previous.fingerprint === fingerprint ? previous.stableCycles + 1 : 0 };
 }
 
-async function answerQuestion(question: string, revision: number, ctx: Ctx): Promise<string> {
+async function answerQuestion(question: string, revision: number, request: HzRequest, ctx: Ctx): Promise<string> {
+  const body = questionMarkdown(question);
+  await postConversation(ctx, requestConversation(request), `question:${revision}:${await hashValue(question)}`, body);
   const response = await ctx.await<unknown>(`horizon-plan-${revision}`, {
     schema: { anyOf: [
       { type: "object", properties: { answer: { type: "string", minLength: 1, maxLength: 65_536 } },
@@ -172,6 +181,7 @@ async function answerQuestion(question: string, revision: number, ctx: Ctx): Pro
         object: { const: "constal.horizon.event" }, version: { const: 1 }, objective: { type: "string", minLength: 1, maxLength: 65_536 },
       } },
     ] }, maxBytes: 65_536, afterRun: "message",
+    presentation: waitPresentation("question", "Horizon needs input", body, { revision }),
   });
   const direct = response && typeof response === "object" && !Array.isArray(response) && typeof (response as { answer?: unknown }).answer === "string"
     ? (response as { answer: string }).answer : horizonRoutedEvent(response)?.objective;
@@ -317,7 +327,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           "Horizon stopped because planning requested a user decision that this Run already resolved.",
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
-      answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
+      answer = await answerQuestion(current.plan.question!, current.plan.revision, request, ctx);
       answeredQuestions.set(key, answer);
       const previous = current.plan;
       const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
@@ -361,7 +371,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     }
 
     if (options.requirePlanApproval === true && approvedPlanFact !== current.fact) {
-      const approval = await awaitPlanDecision(current.plan, current.fact, ctx);
+      const approval = await awaitPlanDecision(current.plan, current.fact, request, ctx);
       if (approval.decision === "cancel") {
         return blockedResult(current.plan, current.fact, completed, "Horizon execution was cancelled before repository mutation.",
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
@@ -426,6 +436,10 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       verificationTools: verified.toolEvidence });
     resultDigests = [...new Set([...resultDigests, resultDigest])];
     completed = updateCompleted(completed, executed.result, verified.verification.verdict === "passed");
+    if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
+      await postConversation(ctx, requestConversation(request), `milestone:${current.fact}:${step.id}`,
+        milestoneMarkdown(step, executed.result, completed.length, current.plan.steps.length));
+    }
 
     plateau = await progressState(plateau, completed, resultDigests,
       [...executed.result.unknowns, ...verified.verification.unknowns]);
@@ -471,7 +485,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           "Horizon stopped because reconciliation requested a user decision that this Run already resolved.",
           decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
-      answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
+      answer = await answerQuestion(decision.question!, current.plan.revision, request, ctx);
       answeredQuestions.set(key, answer);
     }
     const previous = current.plan;

@@ -7,14 +7,24 @@ import { horizonProgress } from "./views/progress.js";
 import { runHorizon } from "./workflow.js";
 import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
+import { postConversation, routedConversation, terminalMarkdown } from "./github-conversation.js";
 
 async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>[1]) {
   const event = horizonRoutedEvent(message);
   if (!event) return runHorizon(message, ctx);
-  if (event.behavior === "operate") return runHorizonOperational(event, ctx);
-  return runHorizon({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
+  const conversation = routedConversation(event);
+  if (event.behavior === "operate") {
+    const result = await runHorizonOperational(event, ctx);
+    await postConversation(ctx, conversation, `operational:${event.context && typeof event.context === "object" && "delivery" in event.context
+      ? String((event.context as { delivery?: unknown }).delivery ?? ctx.run.id) : ctx.run.id}`, terminalMarkdown(result));
+    return result;
+  }
+  await postConversation(ctx, conversation, "accepted", "Horizon has started investigating this issue. It will ask questions here when information is missing and will present an exact plan for approval before changing the repository.");
+  const result = await runHorizon({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
     constraints: event.constraints ?? [], ...(event.source === undefined ? {} : { source: event.source }),
     ...(event.environment === undefined ? {} : { environment: event.environment }) }, ctx, { requirePlanApproval: true });
+  await postConversation(ctx, conversation, "terminal", terminalMarkdown(result));
+  return result;
 }
 
 export default agent({
