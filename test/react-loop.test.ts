@@ -1,6 +1,6 @@
 import type { Ctx, Fact, ToolCallRecord, TurnRecord } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
-import { EvidencePlateauDetector, runReactLoop } from "../src/react-loop.js";
+import { EvidencePlateauDetector, LOOP_CHECKPOINT_SYSTEM, runReactLoop } from "../src/react-loop.js";
 
 function call(result: unknown): ToolCallRecord {
   return { id: "call", pos: "1", name: "workspace_read", version: "1", args: { path: "src/index.ts" },
@@ -78,5 +78,41 @@ describe("EvidencePlateauDetector", () => {
     expect(commits).toHaveLength(1);
     expect(contexts[7]).toMatchObject({ compacted: [{ fact: "fact-1", rounds: 4 }],
       compactedEvidence: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
+  });
+
+  it("stops semantically unchanged unknowns even when Tool calls keep changing", async () => {
+    const commits: unknown[] = []; let roleTurns = 0; let checkpoints = 0;
+    const ctx = {
+      turn: async (spec: { system?: string; tools?: string[] }) => {
+        if (spec.system === LOOP_CHECKPOINT_SYSTEM) {
+          checkpoints++;
+          return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+            object: "constal.horizon.loop-checkpoint", version: 1, role: "test", ready: false,
+            summary: "The same ownership question remains open.", unknowns: [{ id: "owner", question: "Who owns it?",
+              state: "open", resolution: null, evidence: [`round-${checkpoints}`] }], nextEvidence: ["Exact owner declaration"],
+          } } as unknown as TurnRecord;
+        }
+        roleTurns++;
+        if (roleTurns <= 16) return { toolCalls: [call({ ref: `different-evidence-${roleTurns}` })],
+          message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" },
+          artifact: { status: "blocked" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => {
+        commits.push(artifact);
+        return { hash: `fact-${commits.length}`, artifact, artifactHash: `artifact-${commits.length}` } as unknown as Fact<unknown>;
+      },
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+      tools: ["workspace_read"], maxRounds: 20,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
+        ? value as { status: "blocked" } : null }, ctx);
+    expect(result.plateaued).toBe(true);
+    expect(checkpoints).toBe(2);
+    expect(roleTurns).toBe(17);
+    expect(commits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "horizon.react-progress", toolRounds: 8 }),
+      expect.objectContaining({ kind: "horizon.react-progress", toolRounds: 16 }),
+    ]));
   });
 });

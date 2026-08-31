@@ -6,10 +6,11 @@ import { RECONCILER_SYSTEM } from "../src/prompts/reconciler.js";
 import { VERIFIER_SYSTEM } from "../src/prompts/verifier.js";
 import { SOURCE_RESOLVER_SYSTEM } from "../src/prompts/source.js";
 import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM, RUBRIC_SYSTEM } from "../src/prompts/planning.js";
+import { LOOP_CHECKPOINT_SYSTEM } from "../src/react-loop.js";
 
 describe("Horizon role prompts", () => {
   it.each([SOURCE_RESOLVER_SYSTEM, DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
-    CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM, VERIFIER_SYSTEM, RECONCILER_SYSTEM])("uses one stable six-section role contract", (prompt) => {
+    CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM, VERIFIER_SYSTEM, RECONCILER_SYSTEM, LOOP_CHECKPOINT_SYSTEM])("uses one stable six-section role contract", (prompt) => {
     const headings = ["# Role", "# Task", "# Context", "# Rules", "# Tools", "# Output"];
     expect(headings.map((heading) => prompt.indexOf(heading))).toEqual([...headings.map((heading) => prompt.indexOf(heading))].sort((a, b) => a - b));
     expect(prompt).toContain("natural-language");
