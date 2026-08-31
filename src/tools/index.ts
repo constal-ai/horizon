@@ -24,12 +24,12 @@ export const PLANNER_TOOL_NAMES = INVESTIGATOR_TOOL_NAMES;
 
 export const EXECUTOR_TOOL_NAMES = [
   "github_repository", "github_tree", "github_file",
-  "workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_write",
+  "workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_write", "workspace_edit",
   "workspace_patch", "workspace_diff", "workspace_package", "web_search", "web_fetch",
 ] as const;
 
 export const EXECUTOR_MUTATION_TOOL_NAMES = [
-  "workspace_write", "workspace_patch",
+  "workspace_write", "workspace_edit", "workspace_patch",
 ] as const;
 
 export const RECONCILER_TOOL_NAMES = ["workspace_list", "workspace_search", "workspace_read", "workspace_diff"] as const;

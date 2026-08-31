@@ -7,7 +7,7 @@ import { EXECUTOR_MUTATION_TOOL_NAMES } from "../tools/index.js";
 
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
-  version: "7",
+  version: "8",
   async run(input: HzExecutorInput, ctx) {
     const conversation = await runReactLoop({
       role: `executor-${input.step.id}`,

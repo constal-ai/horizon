@@ -25,6 +25,7 @@
     "workspace_read",
     "workspace_exec",
     "workspace_write",
+    "workspace_edit",
     "workspace_patch",
     "workspace_diff",
     "workspace_package",

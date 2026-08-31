@@ -69,6 +69,28 @@ export function workspaceReadMaximum(fileBytes: number, requested?: number): num
   return Math.max(1, fileBytes);
 }
 
+function lineEnding(value: string): "\r\n" | "\n" {
+  const crlf = value.split("\r\n").length - 1;
+  const lf = value.split("\n").length - 1 - crlf;
+  return crlf > lf ? "\r\n" : "\n";
+}
+
+function normalizeLineEndings(value: string, ending: "\r\n" | "\n"): string {
+  return ending === "\r\n" ? value.replace(/\r?\n/gu, "\r\n") : value.replace(/\r\n/gu, "\n");
+}
+
+export function editWorkspaceText(current: string, oldText: string, newText: string): { text: string; replacements: 1 } {
+  if (!oldText) throw new TypeError("workspace edit oldText must not be empty");
+  const ending = lineEnding(current);
+  const target = normalizeLineEndings(oldText, ending);
+  const replacement = normalizeLineEndings(newText, ending);
+  let count = 0; let offset = 0;
+  while ((offset = current.indexOf(target, offset)) >= 0) { count++; offset += target.length; }
+  if (count === 0) throw new TypeError("workspace edit target was not found; read the current file before retrying");
+  if (count > 1) throw new TypeError(`workspace edit target matched ${count} times; provide more surrounding text`);
+  return { text: current.replace(target, replacement), replacements: 1 };
+}
+
 async function requireCommand(selected: Sandbox, cmd: string, args: string[], cwd = "/workspace",
   options: { stdin?: string; outputs?: string[]; timeoutMs?: number } = {}): Promise<SandboxCommandResult> {
   const result = await command(selected, cmd, args, cwd, options);
@@ -146,7 +168,7 @@ const exec: Tool = {
 
 const write: Tool = {
   name: "workspace_write", version: "1",
-  description: "Write one complete UTF-8 file through tenant-scoped CAS into the governed workspace. Use for new files or intentional whole-file replacement after inspecting the relevant current state; prefer workspace_patch for small edits.",
+  description: "Write one complete UTF-8 file through tenant-scoped CAS into the governed workspace. Use for new files or intentional whole-file replacement after inspecting the relevant current state; prefer workspace_edit for a bounded change to an existing file.",
   schema: { type: "object", properties: { path: pathProperty, text: { type: "string", maxLength: 2_097_152 },
     mode: { type: "integer", minimum: 0, maximum: 511 } }, required: ["path", "text"], additionalProperties: false },
   maxEffect: "idempotent", needs: [{ binding: "cas", kind: "cas", ops: ["putText"] },
@@ -163,9 +185,38 @@ const write: Tool = {
   },
 };
 
+const edit: Tool = {
+  name: "workspace_edit", version: "1",
+  description: "Replace one unique exact text span in an existing governed workspace file. Include enough unchanged surrounding text in oldText to make the match unique. The Tool preserves line endings and returns before/after content references; use it for routine bounded edits instead of authoring a raw Git patch.",
+  schema: { type: "object", properties: { path: pathProperty,
+    oldText: { type: "string", minLength: 1, maxLength: 1_048_576 },
+    newText: { type: "string", maxLength: 1_048_576 },
+    expectedRef: { type: "string", pattern: "^[a-f0-9]{64}$" } },
+  required: ["path", "oldText", "newText"], additionalProperties: false },
+  maxEffect: "idempotent", once: "per-run-and-args",
+  needs: [{ binding: "cas", kind: "cas", ops: ["getText", "putText"] },
+    { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile", "putFile"] }],
+  async run(args: { path: string; oldText: string; newText: string; expectedRef?: string }, ctx) {
+    const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
+    if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
+      throw new TypeError("workspace edit path is outside /workspace/repo");
+    }
+    const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
+    if (args.expectedRef !== undefined && args.expectedRef !== file.ref) {
+      throw new TypeError("workspace edit expectedRef is stale; read the current file before retrying");
+    }
+    const current = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
+      { ref: file.ref, maximumBytes: workspaceReadMaximum(file.bytes, 1_048_576) });
+    const edited = editWorkspaceText(current.text, args.oldText, args.newText);
+    const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: edited.text });
+    await Promise.resolve(selected.putFile(path, stored.ref, { invoke: { timeoutMs: TIMEOUT_MS } }));
+    return { path, beforeRef: file.ref, afterRef: stored.ref, bytes: stored.bytes, replacements: edited.replacements };
+  },
+};
+
 const patch: Tool = {
   name: "workspace_patch", version: "1",
-  description: "Validate and apply one bounded Git patch in the governed repository. The patch must apply cleanly with no whitespace errors. Use after reading the target files; never include unrelated changes in the patch.",
+  description: "Validate and apply one bounded raw unified Git diff in the governed repository. The patch value must begin with standard ---/+++ file headers and must not contain apply_patch markers such as *** Begin Patch. Prefer workspace_edit for a routine exact replacement; use this Tool for a true multi-hunk diff.",
   schema: { type: "object", properties: { patch: { type: "string", minLength: 1, maxLength: 2_097_152 }, cwd: pathProperty },
     required: ["patch"], additionalProperties: false }, maxEffect: "reconcilable",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
@@ -212,5 +263,5 @@ const pack: Tool = {
 };
 
 export const WORKSPACE_TOOLS: Record<string, Tool> = Object.fromEntries([
-  list, search, read, exec, write, patch, diff, pack,
+  list, search, read, exec, write, edit, patch, diff, pack,
 ].map((tool) => [tool.name, tool]));
