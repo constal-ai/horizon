@@ -1,10 +1,10 @@
 {
   "agent": {
     "crn": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "version": "0.3.11",
-    "deploymentRevision": "a897de0d-f700-4c67-b569-fb01b3e6ef97",
-    "resourceHash": "e9f78676e730123356c382ab8988bb4d55ef9b7102a139c23d5866622bb7f55a",
-    "bundleHash": "71dcb3cb45ccae35b204d14c95ad461d37e5ce669bec56ec8065247fb4ff0eb7"
+    "version": "0.3.12",
+    "deploymentRevision": "42e6bd52-6f4b-4d75-9f45-5783e76232d6",
+    "resourceHash": "a36bcbb500b7db134aa44d8f9fc4e5bd66b00f9bbfe2653df2e3d8cb978fe18e",
+    "bundleHash": "57fff211366badacbbd1ab8c624576b5928e0fd9aff775038fee815fe7a0af35"
   },
   "datasets": {
     "capability": {
@@ -34,6 +34,7 @@
     "boundariesLuna": {
       "suite": "horizon-boundaries-0-3-11-luna-v1",
       "hash": "aff6035afdd3c8ef9d5c29792bf4da39339b8546b81d1977b77300ff5828f304",
+      "bundleHash": "71dcb3cb45ccae35b204d14c95ad461d37e5ce669bec56ec8065247fb4ff0eb7",
       "completed": 3,
       "errored": 0,
       "passRate": 1,
