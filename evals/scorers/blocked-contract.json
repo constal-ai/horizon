@@ -1,0 +1,65 @@
+{
+  "id": "horizon-blocked-contract",
+  "version": "1",
+  "displayName": "Horizon blocked contract",
+  "description": "Requires an impossible Horizon mission to return an explicit durable blocked result without fabricating an artifact or successful work.",
+  "applies": "case",
+  "kind": "code",
+  "code": {
+    "ir": {
+      "v": 1,
+      "rule": {
+        "op": "all",
+        "rules": [
+          {
+            "op": "schema",
+            "path": "/output",
+            "schema": {
+              "type": "object",
+              "required": [
+                "object",
+                "version",
+                "status",
+                "summary",
+                "plan",
+                "workspace",
+                "checkpoints",
+                "completedSteps",
+                "remainingUnknowns",
+                "artifact",
+                "longHorizon"
+              ],
+              "properties": {
+                "object": { "type": "string" },
+                "version": { "type": "integer" },
+                "status": { "type": "string" },
+                "summary": { "type": "string", "minLength": 1 },
+                "plan": { "type": ["object", "null"] },
+                "workspace": { "type": ["object", "null"] },
+                "checkpoints": { "type": "array" },
+                "completedSteps": { "type": "array" },
+                "remainingUnknowns": { "type": "array" },
+                "artifact": { "type": "null" },
+                "longHorizon": {
+                  "type": "object",
+                  "required": ["durablePlan", "specialistRuns", "replans", "plateauCycles"],
+                  "properties": {
+                    "durablePlan": { "type": "boolean" },
+                    "specialistRuns": { "type": "integer", "minimum": 0 },
+                    "replans": { "type": "integer", "minimum": 0 },
+                    "plateauCycles": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          { "op": "equals", "path": "/output/object", "value": "constal.horizon.result" },
+          { "op": "equals", "path": "/output/version", "value": 1 },
+          { "op": "equals", "path": "/output/status", "value": "blocked" },
+          { "op": "equals", "path": "/output/artifact", "value": null },
+          { "op": "equals", "path": "/output/longHorizon/durablePlan", "value": true }
+        ]
+      }
+    }
+  }
+}

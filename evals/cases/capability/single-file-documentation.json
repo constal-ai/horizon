@@ -1,0 +1,38 @@
+{
+  "caseId": "single-file-documentation",
+  "input": {
+    "objective": "Add one concise sentence under README Development explaining that the canonical Constal code image may be mirrored to a provider-native immutable release for execution. Preserve the surrounding terminology and prove the package remains healthy.",
+    "context": {
+      "purpose": "Evaluate a bounded documentation change with real repository investigation, implementation, independent verification, and artifact packaging."
+    },
+    "constraints": [
+      "Change only README.md.",
+      "Reuse the repository's existing terminology.",
+      "Run npm run check.",
+      "Do not publish, deploy, tag, or push anything."
+    ],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon",
+      "ref": "fb0b2def8ef6c373fb205befee061167faed756e"
+    },
+    "environment": {
+      "name": "node",
+      "cache": true,
+      "setup": [
+        {
+          "cmd": "npm",
+          "args": ["ci", "--ignore-scripts"],
+          "cwd": "/workspace/repo",
+          "timeoutMs": 600000
+        }
+      ]
+    }
+  },
+  "context": null,
+  "expected": { "status": "complete" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "capability", "scope": "single-file", "model": "luna" }
+}

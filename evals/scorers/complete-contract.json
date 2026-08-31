@@ -1,0 +1,91 @@
+{
+  "id": "horizon-complete-contract",
+  "version": "1",
+  "displayName": "Horizon complete contract",
+  "description": "Requires a completed Horizon mission to expose a durable plan, verified work units, a content-addressed artifact, no remaining unknowns, and bounded convergence metadata.",
+  "applies": "case",
+  "kind": "code",
+  "code": {
+    "ir": {
+      "v": 1,
+      "rule": {
+        "op": "all",
+        "rules": [
+          {
+            "op": "schema",
+            "path": "/output",
+            "schema": {
+              "type": "object",
+              "required": [
+                "object",
+                "version",
+                "status",
+                "summary",
+                "plan",
+                "workspace",
+                "checkpoints",
+                "completedSteps",
+                "remainingUnknowns",
+                "artifact",
+                "longHorizon"
+              ],
+              "properties": {
+                "object": { "type": "string" },
+                "version": { "type": "integer" },
+                "status": { "type": "string" },
+                "summary": { "type": "string", "minLength": 1 },
+                "plan": {
+                  "type": "object",
+                  "required": ["revision", "fact"],
+                  "properties": {
+                    "revision": { "type": "integer", "minimum": 1 },
+                    "fact": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                  }
+                },
+                "workspace": {
+                  "type": "object",
+                  "required": ["receipt", "cacheHit", "image"],
+                  "properties": {
+                    "receipt": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                    "cacheHit": { "type": "boolean" },
+                    "image": { "type": ["string", "null"] }
+                  }
+                },
+                "checkpoints": { "type": "array", "minItems": 1 },
+                "completedSteps": { "type": "array", "minItems": 1 },
+                "remainingUnknowns": { "type": "array", "maxItems": 0 },
+                "artifact": {
+                  "type": "object",
+                  "required": ["ref", "bytes", "path"],
+                  "properties": {
+                    "ref": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                    "bytes": { "type": "integer", "minimum": 1 },
+                    "path": { "type": "string", "minLength": 1 }
+                  }
+                },
+                "longHorizon": {
+                  "type": "object",
+                  "required": ["durablePlan", "specialistRuns", "replans", "plateauCycles"],
+                  "properties": {
+                    "durablePlan": { "type": "boolean" },
+                    "specialistRuns": { "type": "integer", "minimum": 1 },
+                    "replans": { "type": "integer", "minimum": 0 },
+                    "plateauCycles": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          { "op": "equals", "path": "/output/object", "value": "constal.horizon.result" },
+          { "op": "equals", "path": "/output/version", "value": 1 },
+          { "op": "equals", "path": "/output/status", "value": "complete" },
+          { "op": "equals", "path": "/output/remainingUnknowns", "value": [] },
+          { "op": "equals", "path": "/output/longHorizon/durablePlan", "value": true },
+          { "op": "range", "path": "/output/longHorizon/specialistRuns", "min": 7, "max": 512 },
+          { "op": "range", "path": "/output/longHorizon/replans", "min": 0, "max": 64 },
+          { "op": "range", "path": "/output/longHorizon/plateauCycles", "min": 0, "max": 1 }
+        ]
+      }
+    }
+  }
+}

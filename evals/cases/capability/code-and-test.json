@@ -1,0 +1,38 @@
+{
+  "caseId": "code-and-test",
+  "input": {
+    "objective": "Strengthen workspace path-confinement coverage by adding focused unit assertions that absolute paths outside /workspace and prefix-collision paths such as /workspace-evil are rejected. If the implementation does not satisfy those assertions, make the smallest coherent implementation fix. Prove the complete package remains healthy.",
+    "context": {
+      "purpose": "Evaluate source and test responsibilities, negative-path reasoning, minimal implementation, and independent test reproduction."
+    },
+    "constraints": [
+      "Change only src/tools/workspace.ts and test/tools.test.ts.",
+      "Preserve the current Tool API.",
+      "Run npm run check.",
+      "Do not publish, deploy, tag, or push anything."
+    ],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon",
+      "ref": "fb0b2def8ef6c373fb205befee061167faed756e"
+    },
+    "environment": {
+      "name": "node",
+      "cache": true,
+      "setup": [
+        {
+          "cmd": "npm",
+          "args": ["ci", "--ignore-scripts"],
+          "cwd": "/workspace/repo",
+          "timeoutMs": 600000
+        }
+      ]
+    }
+  },
+  "context": null,
+  "expected": { "status": "complete" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "capability", "scope": "code-and-test", "model": "luna" }
+}

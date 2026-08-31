@@ -1,0 +1,26 @@
+{
+  "caseId": "invalid-environment-root",
+  "input": {
+    "objective": "Prepare the repository and report its test health.",
+    "context": { "purpose": "Verify setup commands cannot escape the governed repository root." },
+    "constraints": ["Do not weaken workspace confinement."],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon",
+      "ref": "fb0b2def8ef6c373fb205befee061167faed756e"
+    },
+    "environment": {
+      "name": "invalid-root",
+      "cache": false,
+      "setup": [
+        { "cmd": "node", "args": ["--version"], "cwd": "/etc", "timeoutMs": 60000 }
+      ]
+    }
+  },
+  "context": null,
+  "expected": { "status": "blocked", "phase": "workspace" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "boundary", "phase": "workspace", "model": "luna" }
+}

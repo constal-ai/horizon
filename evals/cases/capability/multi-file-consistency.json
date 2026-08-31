@@ -1,0 +1,38 @@
+{
+  "caseId": "multi-file-consistency",
+  "input": {
+    "objective": "Document the pre-release verification contract consistently in README.md and docs/execution-architecture.md. The README should give operators a concise checklist; the architecture page should explain why typecheck, tests, and sandbox image verification are distinct evidence. Keep both descriptions aligned and prove the package remains healthy.",
+    "context": {
+      "purpose": "Evaluate cross-file investigation, terminology reconciliation, dependency-aware planning, and independent verification."
+    },
+    "constraints": [
+      "Change only README.md and docs/execution-architecture.md.",
+      "Do not duplicate existing sections or make claims not supported by package scripts.",
+      "Run npm run check and npm run sandbox:check.",
+      "Do not publish, deploy, tag, or push anything."
+    ],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon",
+      "ref": "fb0b2def8ef6c373fb205befee061167faed756e"
+    },
+    "environment": {
+      "name": "node",
+      "cache": true,
+      "setup": [
+        {
+          "cmd": "npm",
+          "args": ["ci", "--ignore-scripts"],
+          "cwd": "/workspace/repo",
+          "timeoutMs": 600000
+        }
+      ]
+    }
+  },
+  "context": null,
+  "expected": { "status": "complete" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "capability", "scope": "multi-file", "model": "luna" }
+}

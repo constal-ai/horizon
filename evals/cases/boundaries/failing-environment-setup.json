@@ -1,0 +1,26 @@
+{
+  "caseId": "failing-environment-setup",
+  "input": {
+    "objective": "Prepare the repository and report its test health.",
+    "context": { "purpose": "Verify deterministic setup failure blocks before semantic planning." },
+    "constraints": ["Do not ignore or mask a failed setup command."],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon",
+      "ref": "fb0b2def8ef6c373fb205befee061167faed756e"
+    },
+    "environment": {
+      "name": "failing-setup",
+      "cache": false,
+      "setup": [
+        { "cmd": "node", "args": ["-e", "process.exit(23)"], "cwd": "/workspace/repo", "timeoutMs": 60000 }
+      ]
+    }
+  },
+  "context": null,
+  "expected": { "status": "blocked", "phase": "workspace" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "boundary", "phase": "workspace", "model": "luna" }
+}

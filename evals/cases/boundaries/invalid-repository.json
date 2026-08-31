@@ -1,0 +1,20 @@
+{
+  "caseId": "invalid-repository",
+  "input": {
+    "objective": "Inspect this repository and add a verified development note.",
+    "context": { "purpose": "Verify exact source failures stop honestly before planning." },
+    "constraints": ["Do not substitute or guess another repository."],
+    "source": {
+      "kind": "github",
+      "owner": "constal-ai",
+      "repository": "horizon-eval-repository-does-not-exist",
+      "ref": "main"
+    },
+    "environment": { "name": "node", "cache": false, "setup": [] }
+  },
+  "context": null,
+  "expected": { "status": "blocked", "phase": "source" },
+  "scorers": [],
+  "source": null,
+  "tags": { "class": "boundary", "phase": "source", "model": "luna" }
+}
