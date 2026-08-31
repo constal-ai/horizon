@@ -1,10 +1,10 @@
 {
   "agent": {
     "crn": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "version": "0.3.13",
-    "deploymentRevision": "fe2ec62e-4e6e-4a90-b0cd-17f7de5a9bdd",
-    "resourceHash": "90a74a66f70cfc41b1c773b0696d42b6d636af2d89de419c1298f588c3a4335d",
-    "bundleHash": "012f7ea6e81ebf97dd59a7e60aeb47811dda7961080c871efa94528bf902eb56"
+    "version": "0.3.14",
+    "deploymentRevision": "874737a2-2313-4cc2-8a59-9dcb3d5e1423",
+    "resourceHash": "0299e70bfb0a16485329ee477f68b3209abbe7529f749eda5ea787a25dea1641",
+    "bundleHash": "479a918f90e52338d5833b9b565d9a08d050d6ed62b526882c36066a1ce9ec58"
   },
   "datasets": {
     "capability": {
