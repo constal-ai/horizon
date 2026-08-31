@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { availableTools, bindingsForTools } from "../src/tools/index.js";
-import { normalizeRepositoryPath, normalizeWorkspacePath, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
+import { normalizeRepositoryPath, normalizeWorkspacePath, workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
   it("requires catalog bindings as well as direct Tool needs", () => {
@@ -24,5 +24,11 @@ describe("Horizon Tool capability projection", () => {
       workspace_exec: "reconcilable", workspace_write: "idempotent", workspace_patch: "reconcilable",
       workspace_diff: "reconcilable", workspace_package: "reconcilable",
     });
+  });
+
+  it("rejects undersized workspace reads before invoking CAS", () => {
+    expect(workspaceReadMaximum(9_420, 10_000)).toBe(9_420);
+    expect(() => workspaceReadMaximum(12_000, 10_000)).toThrow("requested read limit");
+    expect(() => workspaceReadMaximum(1_048_577)).toThrow("supported read ceiling");
   });
 });

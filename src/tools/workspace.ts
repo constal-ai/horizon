@@ -58,6 +58,17 @@ function succeeded(result: SandboxCommandResult): boolean {
   return result.status === "completed" && result.exitCode === 0;
 }
 
+export function workspaceReadMaximum(fileBytes: number, requested?: number): number {
+  const maximum = requested ?? 262_144;
+  if (!Number.isSafeInteger(fileBytes) || fileBytes < 0 || fileBytes > 1_048_576) {
+    throw new TypeError("workspace file exceeds the supported read ceiling");
+  }
+  if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 1_048_576 || fileBytes > maximum) {
+    throw new TypeError("workspace file exceeds the requested read limit");
+  }
+  return Math.max(1, fileBytes);
+}
+
 async function requireCommand(selected: Sandbox, cmd: string, args: string[], cwd = "/workspace",
   options: { stdin?: string; outputs?: string[]; timeoutMs?: number } = {}): Promise<SandboxCommandResult> {
   const result = await command(selected, cmd, args, cwd, options);
@@ -112,7 +123,7 @@ const read: Tool = {
     }
     const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
     const value = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-      { ref: file.ref, maximumBytes: args.maximumBytes ?? 262_144 });
+      { ref: file.ref, maximumBytes: workspaceReadMaximum(file.bytes, args.maximumBytes) });
     return { path: file.path, ref: value.ref, bytes: value.bytes, text: value.text };
   },
 };
