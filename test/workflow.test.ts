@@ -15,6 +15,7 @@ vi.mock("../src/workspace/lifecycle.js", async (importOriginal) => {
     } }),
     captureWorkspaceCheckpoint: async (input: { stepId: string }) => ({ receiptRef: `checkpoint-${input.stepId}`,
       checkpoint: { image: `image-${input.stepId}`, tree: `tree-${input.stepId}` } }),
+    archiveWorkspace: async (selected: { exec(input: { cmd: string }): unknown }) => selected.exec({ cmd: "tar" }),
   };
 });
 

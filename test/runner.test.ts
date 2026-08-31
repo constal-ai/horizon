@@ -1,5 +1,5 @@
 import { execFile as callbackExecFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,6 +17,7 @@ describe("Constal workspace runner", () => {
     const repository = join(workspace, "repo");
     await execFile("mkdir", ["-p", repository]);
     await writeFile(join(repository, "file.txt"), "baseline\n");
+    await writeFile(join(repository, ".gitignore"), "node_modules/\n");
     await execFile("git", ["init", "--initial-branch=main"], { cwd: repository });
     await execFile("git", ["add", "-A"], { cwd: repository });
     await execFile("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline"], { cwd: repository });
@@ -31,6 +32,16 @@ describe("Constal workspace runner", () => {
     expect(changed.tree).not.toBe(baseline.tree);
     expect(changed.status).toContain("file.txt");
     expect((await execFile("git", ["diff", "--cached", "--name-only"], { cwd: repository })).stdout).toBe("");
+
+    await writeFile(join(repository, "new.txt"), "new\n");
+    await mkdir(join(repository, "node_modules"));
+    await writeFile(join(repository, "node_modules", "ignored.js"), "ignored\n");
+    const archive = join(workspace, "result.tar.gz");
+    const archived = JSON.parse((await execFile("node", [localRunner, "archive", repository, archive])).stdout) as { tree: string };
+    expect(archived.tree).not.toBe(baseline.tree);
+    const entries = (await execFile("tar", ["-tzf", archive])).stdout.split("\n");
+    expect(entries).toEqual(expect.arrayContaining(["file.txt", "new.txt"]));
+    expect(entries.some((entry) => entry.startsWith("node_modules/"))).toBe(false);
   });
 
   it("rejects command working directories outside its workspace root", async () => {

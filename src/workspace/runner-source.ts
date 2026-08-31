@@ -32,17 +32,29 @@ function git(cwd, args, env = process.env) {
   return String(result.stdout).trim();
 }
 
-function inspect(root) {
+function withWorktreeIndex(root, run) {
   const directory = mkdtempSync(join(tmpdir(), "constal-workspace-"));
   const index = join(directory, "index");
   try {
     copyFileSync(join(root, ".git", "index"), index);
     const env = { ...process.env, GIT_INDEX_FILE: index };
     git(root, ["add", "-A"], env);
-    return { protocol: PROTOCOL, version: VERSION, root,
-      commit: git(root, ["rev-parse", "HEAD"]), tree: git(root, ["write-tree"], env),
-      status: git(root, ["status", "--porcelain=v1", "--untracked-files=all"]) };
+    return run(env, git(root, ["write-tree"], env));
   } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+
+function inspect(root) {
+  return withWorktreeIndex(root, (_env, tree) => ({ protocol: PROTOCOL, version: VERSION, root,
+    commit: git(root, ["rev-parse", "HEAD"]), tree,
+    status: git(root, ["status", "--porcelain=v1", "--untracked-files=all"]) }));
+}
+
+function archive(root, output) {
+  const target = workspacePath(output);
+  return withWorktreeIndex(root, (env, tree) => {
+    git(root, ["archive", "--format=tar.gz", \`--output=${"${target}"}\`, tree], env);
+    return { protocol: PROTOCOL, version: VERSION, root, tree, output: target };
+  });
 }
 
 async function execute(argv) {
@@ -68,6 +80,10 @@ if (operation === "probe") {
 } else if (operation === "inspect") {
   const root = workspacePath(args[0] ?? "/workspace/repo");
   process.stdout.write(\`${"${JSON.stringify(inspect(root))}"}\\n\`);
+} else if (operation === "archive") {
+  const root = workspacePath(args[0] ?? "/workspace/repo");
+  if (!args[1]) fail("workspace runner archive requires an output path");
+  process.stdout.write(\`${"${JSON.stringify(archive(root, args[1]))}"}\\n\`);
 } else if (operation === "exec") {
   await execute(args);
 } else {

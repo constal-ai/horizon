@@ -7,7 +7,7 @@ import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_N
   PLANNER_TOOL_NAMES, RECONCILER_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "./tools/index.js";
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
-import { captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
+import { archiveWorkspace, captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
 
 const MAX_PLAN_REVISIONS = 64;
@@ -118,8 +118,7 @@ async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzR
     if (mkdir.status !== "completed" || mkdir.exitCode !== 0) {
       return { artifact: null, error: `Artifact directory creation failed (${mkdir.status}, exit ${mkdir.exitCode ?? "unknown"}).` };
     }
-    const packed = await Promise.resolve(selected.exec({ cmd: "tar", args: ["-czf", output, "--", "."],
-      cwd: plan.workspaceRoot, outputs: [output], timeoutMs: 600_000 }, { timeoutMs: 600_000 }));
+    const packed = await archiveWorkspace(selected, output);
     if (packed.status !== "completed" || packed.exitCode !== 0) {
       return { artifact: null, error: `Workspace packaging failed (${packed.status}, exit ${packed.exitCode ?? "unknown"}).` };
     }

@@ -50,6 +50,11 @@ export async function workspaceCommand(selected: Sandbox, cmd: string, args: str
   return rawCommand(selected, "node", [HORIZON_RUNNER_PATH, "exec", "--cwd", cwd, "--", cmd, ...args], "/workspace", options);
 }
 
+export async function archiveWorkspace(selected: Sandbox, output: string): Promise<SandboxCommandResult> {
+  return rawCommand(selected, "node", [HORIZON_RUNNER_PATH, "archive", HORIZON_WORKSPACE_ROOT, output], "/workspace",
+    { outputs: [output], timeoutMs: TIMEOUT_MS });
+}
+
 async function requireCommand(selected: Sandbox, cmd: string, args: string[], cwd: string = HORIZON_WORKSPACE_ROOT,
   options: { stdin?: string; outputs?: string[]; timeoutMs?: number } = {}): Promise<SandboxCommandResult> {
   const result = await workspaceCommand(selected, cmd, args, cwd, options);
@@ -186,6 +191,7 @@ async function initializeWorkspace(ctx: Ctx, selected: Sandbox, source: HzResolv
     const command = normalizedSetupCommand(input);
     await requireCommand(selected, command.cmd, command.args, command.cwd, { timeoutMs: command.timeoutMs });
   }
+  await requireCommand(selected, "rm", ["-rf", "--", `${HORIZON_WORKSPACE_ROOT}/.git`], HORIZON_WORKSPACE_ROOT);
   await requireCommand(selected, "git", ["init", "--initial-branch=constal-baseline"], HORIZON_WORKSPACE_ROOT);
   await requireCommand(selected, "git", ["add", "-A"], HORIZON_WORKSPACE_ROOT);
   await requireCommand(selected, "git", ["-c", "user.name=Constal Horizon", "-c", "user.email=horizon@constal.invalid",
