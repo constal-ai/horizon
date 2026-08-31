@@ -48,7 +48,7 @@ Source resolution is semantic work. Archive retrieval, extraction, baseline crea
 
 ## Execution and concurrency
 
-Investigators receive read-only workspace Tools and may run concurrently before mutation. The workflow admits one execution specialist at a time. The verifier runs only after that specialist returns, and reconciliation runs only after verification. This makes the workflow controller the exclusive writer lease without introducing a second lock service. Future parallel writers must use isolated Git worktrees or independent sandbox forks from one verified checkpoint.
+Investigators receive read-only workspace Tools and may run concurrently before mutation. The workflow admits one execution specialist at a time. The verifier runs only after that specialist returns, and reconciliation runs only after verification. The platform code Sandbox Pool additionally admits one command at a time and the coordinator orders same-time commands by durable command identity. Together these make the Session workspace an exclusive deterministic writer without introducing a second lock service. Future parallel writers must use isolated Git worktrees or independent sandbox forks from one verified checkpoint.
 
 Every workspace Tool reopens the same logical Session sandbox and routes argv execution through the pinned runner. Paths used for repository reads, writes, patches, diffs, searches, and commands are confined to `/workspace/repo`. Credentials remain behind Resources and are never written into setup specifications or snapshots.
 
