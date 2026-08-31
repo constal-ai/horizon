@@ -1,9 +1,9 @@
 type = "sandbox"
 # Blaxel's importer currently resolves the release tag. The release pipeline
 # verifies that this tag resolves to canonical digest
-# sha256:69a6b1c36307f8b6c1070e02274574ac5c8ac690cc9960470f25018332195937
+# sha256:6c25e975cc8542bddb37e1a9fc4d86f1e1e0fb6c824c4ec9771087c6654863ff
 # before mirroring it into the provider-native registry.
-image = "registry.constal.ai/platform/default/constal-code:0.3.2-75e238e"
+image = "registry.constal.ai/platform/default/constal-code:0.3.4-9f5fe66"
 
 [runtime]
 generation = "mk3"
