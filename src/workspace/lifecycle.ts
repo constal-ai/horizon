@@ -72,10 +72,16 @@ async function resolveImage(ctx: Ctx, pool: SandboxPool, cacheKey: string): Prom
   return result.image === null ? null : imageHandle(ctx, pool, result.image, cacheKey);
 }
 
-async function publishImage(ctx: Ctx, selected: Sandbox, cacheKey: string): Promise<SandboxImage> {
-  const result = await ctx.invoke<{ image: string }>(selected.pool.resource, "createImage",
-    { sandbox: selected.id, cacheKey }, { dedupeKey: `horizon-image:${cacheKey}`, timeoutMs: TIMEOUT_MS });
-  return imageHandle(ctx, selected.pool, result.image, cacheKey);
+async function publishImage(ctx: Ctx, selected: Sandbox, cacheKey: string): Promise<SandboxImage | null> {
+  try {
+    const result = await ctx.invoke<{ image: string }>(selected.pool.resource, "createImage",
+      { sandbox: selected.id, cacheKey }, { dedupeKey: `horizon-image:${cacheKey}`, timeoutMs: TIMEOUT_MS });
+    return imageHandle(ctx, selected.pool, result.image, cacheKey);
+  } catch (error) {
+    await ctx.commit({ kind: "horizon.workspace-cache-unavailable", cacheKey,
+      reason: error instanceof Error ? error.message : "The Sandbox provider does not support prepared images." }, { tier: "audit" });
+    return null;
+  }
 }
 
 async function installRunner(ctx: Ctx, selected: Sandbox): Promise<string> {
@@ -293,7 +299,7 @@ export async function captureWorkspaceCheckpoint(input: {
   const checkpoint: HzWorkspaceCheckpoint = {
     object: "constal.horizon.workspace-checkpoint", version: 1, workspaceReceipt: input.workspace.receiptRef,
     planFact: input.planFact, stepFact: input.stepFact, verificationFact: input.verificationFact,
-    stepId: input.stepId, tree: inspection.tree, status: inspection.status, image: image.id, cacheKey,
+    stepId: input.stepId, tree: inspection.tree, status: inspection.status, image: image?.id ?? null, cacheKey,
   };
   const stored = await storeArtifact(ctx, checkpoint);
   await ctx.commit({ kind: "horizon.workspace-checkpoint", checkpoint, receiptRef: stored.ref }, { tier: "audit" });

@@ -288,7 +288,7 @@ export interface HzWorkspaceCheckpoint {
   stepId: string;
   tree: string;
   status: string;
-  image: string;
+  image: string | null;
   cacheKey: string;
 }
 
@@ -399,7 +399,7 @@ export interface HzRunResult {
   summary: string;
   plan: { revision: number; fact: string } | null;
   workspace: { receipt: string; cacheHit: boolean; image: string | null } | null;
-  checkpoints: Array<{ stepId: string; receipt: string; image: string; tree: string }>;
+  checkpoints: Array<{ stepId: string; receipt: string; image: string | null; tree: string }>;
   completedSteps: Array<{ id: string; status: HzStepStatus; summary: string }>;
   remainingUnknowns: HzUnknown[];
   artifact: { ref: string; bytes: number; path: string } | null;

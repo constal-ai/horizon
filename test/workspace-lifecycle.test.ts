@@ -25,6 +25,7 @@ class FakeBackend {
   readonly images = new Map<string, Snapshot>();
   readonly operations: Array<{ op: string; args: unknown }> = [];
   sequence = 0;
+  snapshotsAvailable = true;
   current: FakeSandbox | null = null;
 
   readonly pool: SandboxPool = {
@@ -45,7 +46,7 @@ class FakeBackend {
     return {
       resources: { sandbox: this.pool.resource, cas: "crn:constal:production:platform:default:cas/constal" as never },
       run: { id: `run-${session}`, session, tenant: "tenant", namespace: "default", identity: {},
-        agent: { id: "horizon", version: "0.3.5", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+        agent: { id: "horizon", version: "0.3.6", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
       sandboxPool: () => this.pool,
       commit: async (artifact: unknown) => ({ hash: `fact-${++facts}`, artifact, artifactHash: `artifact-${facts}` }) as unknown as Fact<unknown>,
       invoke: async (_resource: unknown, op: string, args: Record<string, unknown>) => {
@@ -64,6 +65,7 @@ class FakeBackend {
           return { image };
         }
         if (op === "createImage") {
+          if (!this.snapshotsAvailable) throw new Error("provider snapshots are unavailable");
           const cacheKey = String(args.cacheKey); const sandbox = [...this.sandboxes.values()].find(({ id }) => id === args.sandbox);
           if (!sandbox) throw new Error("missing source sandbox");
           const image = `image-${cacheKey.slice(0, 12)}`; const snapshot = sandbox.snapshot();
@@ -163,6 +165,15 @@ describe("Horizon prepared Session workspaces", () => {
     expect(captured.checkpoint).toMatchObject({ stepId: "implement", tree: "changed-tree", status: " M src/index.ts",
       image: expect.stringMatching(/^image-/u) });
     expect(backend.images.has(captured.checkpoint.cacheKey)).toBe(true);
+  });
+
+  it("continues with durable receipts when provider snapshots are unavailable", async () => {
+    const backend = new FakeBackend(); backend.snapshotsAvailable = false; const ctx = backend.context("session-a");
+    const workspace = await prepareWorkspace(request, ctx);
+    expect(workspace.receipt.cache).toMatchObject({ hit: false, image: null });
+    const captured = await captureWorkspaceCheckpoint({ workspace, planFact: "plan", stepFact: "step",
+      verificationFact: "verification", stepId: "implement" }, ctx);
+    expect(captured.checkpoint).toMatchObject({ image: null, tree: "baseline-tree" });
   });
 
   it("evicts an invalid provider snapshot and deterministically rebuilds from the base image", async () => {
