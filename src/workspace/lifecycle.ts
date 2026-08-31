@@ -228,20 +228,38 @@ export async function prepareWorkspace(request: HzRequest, ctx: Ctx): Promise<Pr
   await ctx.commit({ kind: "horizon.source", source, environment: request.environment, cacheKey }, { tier: "audit" });
   const pool = ctx.sandboxPool(ctx.resources.sandbox);
   const cached = request.environment.cache ? await resolveImage(ctx, pool, cacheKey) : null;
-  const selected = await pool.createSandbox(ctx.run.agent.crn, ctx.run.session, cached ? { image: cached } : undefined);
-  const verifiedRunnerDigest = await installRunner(ctx, selected);
-  if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during preparation.");
+  let selected = await pool.createSandbox(ctx.run.agent.crn, ctx.run.session, cached ? { image: cached } : undefined);
   let receipt: HzWorkspaceReceipt;
   let image: SandboxImage | null = cached;
   if (cached) {
-    const persisted = await readCachedReceipt(ctx, selected, cacheKey);
-    const inspection = await inspectWorkspace(selected);
-    if (inspection.commit !== persisted.baseline.commit || inspection.tree !== persisted.baseline.tree || inspection.status) {
-      throw new WorkspacePreparationError("The prepared Sandbox image failed baseline verification.");
+    try {
+      const verifiedRunnerDigest = await installRunner(ctx, selected);
+      if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during preparation.");
+      const persisted = await readCachedReceipt(ctx, selected, cacheKey);
+      const inspection = await inspectWorkspace(selected);
+      if (inspection.commit !== persisted.baseline.commit || inspection.tree !== persisted.baseline.tree || inspection.status) {
+        throw new WorkspacePreparationError("The prepared Sandbox image failed baseline verification.");
+      }
+      receipt = { ...persisted, session: ctx.run.session, sandbox: selected.id,
+        cache: { key: cacheKey, hit: true, image: cached.id } };
+    } catch (error) {
+      await ctx.commit({ kind: "horizon.workspace-cache-invalid", cacheKey, image: cached.id,
+        reason: error instanceof Error ? error.message : "Prepared image verification failed." }, { tier: "audit" });
+      try { await selected.delete(); } catch { /* The reset below is authoritative. */ }
+      try { await cached.delete(); } catch { /* Driver deletion is idempotent and may already be reconciled. */ }
+      await ctx.invoke(pool.resource, "createSandbox", { agent: ctx.run.agent.crn, session: ctx.run.session, resetImage: true },
+        { dedupeKey: `horizon-reset:${cacheKey}` });
+      selected = await pool.createSandbox(ctx.run.agent.crn, ctx.run.session);
+      image = null;
+      const verifiedRunnerDigest = await installRunner(ctx, selected);
+      if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during recovery.");
+      receipt = await initializeWorkspace(ctx, selected, source, request, runnerDigest, cacheKey);
+      if (request.environment.cache) image = await publishImage(ctx, selected, cacheKey);
+      receipt = { ...receipt, cache: { key: cacheKey, hit: false, image: image?.id ?? null } };
     }
-    receipt = { ...persisted, session: ctx.run.session, sandbox: selected.id,
-      cache: { key: cacheKey, hit: true, image: cached.id } };
   } else {
+    const verifiedRunnerDigest = await installRunner(ctx, selected);
+    if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during preparation.");
     receipt = await initializeWorkspace(ctx, selected, source, request, runnerDigest, cacheKey);
     if (request.environment.cache) image = await publishImage(ctx, selected, cacheKey);
     receipt = { ...receipt, cache: { key: cacheKey, hit: false, image: image?.id ?? null } };

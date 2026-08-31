@@ -70,7 +70,12 @@ class FakeBackend {
           this.images.set(cacheKey, snapshot); this.images.set(image, snapshot);
           return { image };
         }
-        if (op === "deleteImage") { this.images.delete(String(args.image)); return { ok: true }; }
+        if (op === "deleteImage") {
+          const snapshot = this.images.get(String(args.image));
+          for (const [key, value] of this.images) if (value === snapshot) this.images.delete(key);
+          return { ok: true };
+        }
+        if (op === "createSandbox" && args.resetImage === true) return { sandbox: `sandbox-${session}` };
         throw new Error(`unexpected operation ${op}`);
       },
     } as unknown as Ctx;
@@ -94,7 +99,7 @@ class FakeSandbox implements Sandbox {
     commit: this.commit, tree: this.tree, status: this.status }; }
   suspend(): Promise<void> { return Promise.resolve(); }
   resume(): Promise<void> { return Promise.resolve(); }
-  delete(): Promise<void> { return Promise.resolve(); }
+  delete(): Promise<void> { this.backend.sandboxes.delete(this.session); return Promise.resolve(); }
   exec(input: { args?: string[] }): Handle<SandboxCommandResult> {
     const args = input.args ?? [];
     if (args[1] === "probe") return handle(command("completed",
@@ -157,5 +162,20 @@ describe("Horizon prepared Session workspaces", () => {
     expect(captured.checkpoint).toMatchObject({ stepId: "implement", tree: "changed-tree", status: " M src/index.ts",
       image: expect.stringMatching(/^image-/u) });
     expect(backend.images.has(captured.checkpoint.cacheKey)).toBe(true);
+  });
+
+  it("evicts an invalid provider snapshot and deterministically rebuilds from the base image", async () => {
+    const backend = new FakeBackend();
+    const first = await prepareWorkspace(request, backend.context("session-a"));
+    const cached = backend.images.get(first.receipt.cache.key)!;
+    cached.files.delete("/workspace/.constal/workspace-ready.json");
+
+    const recovered = await prepareWorkspace(request, backend.context("session-b"));
+    expect(recovered.receipt.cache).toMatchObject({ hit: false, image: expect.stringMatching(/^image-/u) });
+    expect(backend.sandboxes.get("session-b")?.setupCommands).toEqual(["npm install --ignore-scripts"]);
+    expect(backend.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ op: "deleteImage" }),
+      expect.objectContaining({ op: "createSandbox", args: expect.objectContaining({ resetImage: true }) }),
+    ]));
   });
 });
