@@ -13,6 +13,46 @@ import { archiveWorkspace, captureWorkspaceCheckpoint, prepareWorkspace, Workspa
 const MAX_PLAN_REVISIONS = 64;
 const MAX_WORKFLOW_TRANSITIONS = 1_024;
 
+export interface HorizonPlanDecision {
+  object: "constal.horizon.plan-decision";
+  version: 1;
+  planFact: string;
+  decision: "approve" | "revise" | "cancel";
+  guidance: string | null;
+}
+
+export interface HorizonExecutionOptions { requirePlanApproval?: boolean }
+
+function planDecision(value: unknown, planFact: string): HorizonPlanDecision | null {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  if (!source || source.object !== "constal.horizon.plan-decision" || source.version !== 1 || source.planFact !== planFact
+    || !["approve", "revise", "cancel"].includes(String(source.decision))
+    || source.guidance !== null && (typeof source.guidance !== "string" || !source.guidance.trim() || source.guidance.length > 65_536)
+    || source.decision === "revise" && source.guidance === null
+    || source.decision !== "revise" && source.guidance !== null) return null;
+  return { object: "constal.horizon.plan-decision", version: 1, planFact,
+    decision: source.decision as HorizonPlanDecision["decision"],
+    guidance: source.guidance === null ? null : source.guidance.trim() };
+}
+
+async function awaitPlanDecision(plan: HzPlan, planFact: string, ctx: Ctx): Promise<HorizonPlanDecision> {
+  await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
+    instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
+  const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}`, {
+    maxBytes: 65_536, afterRun: "ignore",
+    schema: { type: "object", additionalProperties: false,
+      required: ["object", "version", "planFact", "decision", "guidance"], properties: {
+        object: { const: "constal.horizon.plan-decision" }, version: { const: 1 }, planFact: { const: planFact },
+        decision: { enum: ["approve", "revise", "cancel"] },
+        guidance: { anyOf: [{ type: "null" }, { type: "string", minLength: 1, maxLength: 65_536 }] },
+      } },
+  });
+  const decision = planDecision(response, planFact);
+  if (!decision) throw new TypeError("Horizon plan approval response is invalid or stale");
+  await ctx.commit({ kind: "horizon.approval-decision", planFact, decision }, { tier: "audit" });
+  return decision;
+}
+
 function attenuation(names: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
   return { bindings: bindingsForTools(names, ctx), tools: [...names].sort() };
 }
@@ -193,7 +233,7 @@ async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: C
   return { discoveryPlan: framed.discoveryPlan, investigations, specialistRuns: 1 + investigations.length };
 }
 
-export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResult> {
+export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExecutionOptions = {}): Promise<HzRunResult> {
   const request: HzRequest = parseHzRequest(message);
   await ctx.commit({ kind: "horizon.request", request }, { tier: "audit" });
   let workspace: PreparedWorkspace;
@@ -212,6 +252,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
   let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
   let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
+  let approvedPlanFact: string | null = null;
   const answeredQuestions = new Map<string, string>();
 
   const discovery = await discover(request, workspace, ctx);
@@ -279,6 +320,32 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       }
       return blockedResult(current.plan, current.fact, completed, "No dependency-ready Horizon work unit remains; the immutable plan requires reconciliation.",
         current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+    }
+
+    if (options.requirePlanApproval === true && approvedPlanFact !== current.fact) {
+      const approval = await awaitPlanDecision(current.plan, current.fact, ctx);
+      if (approval.decision === "cancel") {
+        return blockedResult(current.plan, current.fact, completed, "Horizon execution was cancelled before repository mutation.",
+          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+      }
+      if (approval.decision === "revise") {
+        if (current.plan.revision >= MAX_PLAN_REVISIONS) {
+          return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
+            current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+        }
+        const previous = current.plan;
+        const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
+          revision: previous.revision + 1, previousPlan: previous, completed,
+          replanBrief: "Revise the plan according to the authorized review guidance before any further repository mutation.",
+          answer: approval.guidance, tools: [] }, ctx);
+        const reconciled = reconcileCompletedForPlan(previous, next.plan, completed);
+        if (reconciled.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
+          previousPlanFact: current.fact, nextPlanFact: next.fact, steps: reconciled.invalidated }, { tier: "audit" });
+        completed = reconciled.completed; current = next; remainingUnknowns = current.plan.unknowns;
+        specialistRuns += current.planningRuns; replans++; approvedPlanFact = null;
+        continue;
+      }
+      approvedPlanFact = current.fact;
     }
 
     const executorTools = availableTools(EXECUTOR_TOOL_NAMES, ctx);

@@ -138,6 +138,48 @@ describe("Horizon workflow", () => {
     ]);
   });
 
+  it("requires approval of the exact issue-work plan before spawning an executor", async () => {
+    const sequence: string[] = []; const committed: Array<{ kind?: string; planFact?: string }> = []; let fact = 0;
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.3.37", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: { kind?: string; planFact?: string }) => {
+        committed.push(artifact); fact++;
+        return { hash: `fact-${fact}`, artifact, artifactHash: `artifact-${fact}` } as unknown as Fact<unknown>;
+      },
+      invoke: casRuntime(),
+      await: (label: string) => {
+        sequence.push(`await:${label}`);
+        const planFact = committed.findLast(({ kind }) => kind === "horizon.approval-request")?.planFact;
+        return handle({ object: "constal.horizon.plan-decision", version: 1, planFact, decision: "approve", guidance: null });
+      },
+      spawn: (task: { id: string }) => {
+        sequence.push(`spawn:${task.id}`);
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") return handle({ plan, toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
+        if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
+        if (task.id === "horizon-reconciler") return handle({ reconciliation: {
+          object: "constal.horizon.reconciliation", version: 1, action: "complete", summary: "All work is proven.",
+          remainingUnknowns: [], replanBrief: null, question: null, blockedReason: null,
+        }, toolEvidence: [] });
+        throw new Error(`unexpected task ${task.id}`);
+      },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
+    } as unknown as Ctx;
+
+    const result = await runHorizon({ objective: plan.objective }, ctx, { requirePlanApproval: true });
+    expect(result.status).toBe("complete");
+    const approval = sequence.indexOf("await:horizon-approval-1");
+    const execution = sequence.indexOf("spawn:horizon-executor");
+    expect(approval).toBeGreaterThan(-1);
+    expect(execution).toBeGreaterThan(approval);
+    expect(committed.map(({ kind }) => kind)).toContain("horizon.approval-decision");
+  });
+
   it("does not report complete when the immutable final artifact cannot be created", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0;
     const ctx = {
