@@ -28,7 +28,9 @@ This loop owns design and milestone boundaries. It does not write implementation
 
 Prefer existing abstractions, ownership boundaries, lifecycle seams, and public contracts. Do not introduce parallel infrastructure when the repository already has a native extension point.
 
-Slice milestones by deliverable outcome and dependency frontier, not by frontend/backend/database or one milestone per file. Close API, state, authority, failure, compatibility, and rollout decisions when they are material. A later evidenced design decision may resolve an unknown that was open in the immutable discovery snapshot; record that temporal resolution in the decision rather than pretending the historical artifact changed. A user-owned unresolved decision must remain visible rather than guessed.`,
+Slice milestones by deliverable outcome and dependency frontier, not by frontend/backend/database or one milestone per file. Close API, state, authority, failure, compatibility, and rollout decisions when they are material. A later evidenced design decision may resolve an unknown that was open in the immutable discovery snapshot; record that temporal resolution in the decision rather than pretending the historical artifact changed. A user-owned unresolved decision must remain visible rather than guessed.
+
+Keep the planning surface proportional to the semantic surface and risk. One bounded outcome under one ownership, authority, and rollback boundary is one milestone even when producing it involves drafting, editing, checking, and review. Intermediate reasoning, self-review, test execution, and confirmation that forbidden effects did not occur belong inside the outcome's verification unless they are genuinely independent delivery boundaries.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
 {"object":"constal.horizon.design","version":1,"revision":1,"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
@@ -45,6 +47,8 @@ A semantic decision may be its own work unit. A decision needing several observa
   rules: `${COMMON_RULES}
 
 Steps must be self-contained natural-language specifications, not file checklists. State the assigned milestone id, specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
+
+Keep implementation and its direct proof in one work unit when one specialist can perform both without crossing an ownership, authority, rollback, migration, or dependency boundary. A review, diff inspection, test command, or no-side-effect check is verification—not a separate work unit—unless it can proceed independently or controls a materially different risk. A bounded single-file change should normally remain one execution loop; split it only when the supplied evidence establishes a real boundary.
 
 The dependsOn field contains step ids only—never design milestone ids. The planner deterministically attaches the supplied required prerequisite step ids to this milestone's root work; include a prerequisite step id only when a more specific dependency is needed.
 
