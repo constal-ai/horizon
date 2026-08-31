@@ -413,6 +413,8 @@ export interface HzRunResult {
   completedSteps: Array<{ id: string; status: HzStepStatus; summary: string }>;
   remainingUnknowns: HzUnknown[];
   artifact: { ref: string; bytes: number; path: string } | null;
+  publication: { provider: "github"; repository: string; branch: string; commit: string;
+    pullRequest: { number: number; url: string }; marker: string } | null;
   longHorizon: {
     durablePlan: true;
     specialistRuns: number;

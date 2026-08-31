@@ -69,7 +69,8 @@ export function terminalMarkdown(result: HzRunResult | HorizonOperationalResult)
   if (result.object === "constal.horizon.operational-result") return result.message;
   if (result.status === "complete") {
     const steps = result.completedSteps.map((step) => `- **${step.id}:** ${step.summary}`).join("\n");
-    return `## Horizon completed the work\n\n${result.summary}${steps ? `\n\n### Completed work\n\n${steps}` : ""}`;
+    const publication = result.publication ? `\n\n### Pull request\n\n[#${result.publication.pullRequest.number}](${result.publication.pullRequest.url}) · \`${result.publication.branch}\`` : "";
+    return `## Horizon completed the work\n\n${result.summary}${steps ? `\n\n### Completed work\n\n${steps}` : ""}${publication}`;
   }
   return `## Horizon is blocked\n\n${result.summary}`;
 }

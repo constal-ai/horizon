@@ -10,6 +10,7 @@ import { availableTools, bindingsForTools, DISCOVERY_TOOL_NAMES, EXECUTOR_TOOL_N
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS,
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
 import { milestoneMarkdown, planMarkdown, postConversation, questionMarkdown, requestConversation, waitPresentation } from "./github-conversation.js";
+import { publishWorkspace } from "./github-publication.js";
 import { archiveWorkspace, captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
 
@@ -228,7 +229,7 @@ function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[]
     workspace: workspace ? { receipt: workspace.receiptRef, cacheHit: workspace.receipt.cache.hit,
       image: workspace.receipt.cache.image } : null, checkpoints,
     completedSteps: completed.map(({ stepId, status, summary: stepSummary }) => ({ id: stepId, status, summary: stepSummary })),
-    remainingUnknowns, artifact: null,
+    remainingUnknowns, artifact: null, publication: null,
     longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles },
   };
 }
@@ -291,7 +292,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       : error instanceof Error ? error.message : "Horizon workspace preparation failed.";
     await ctx.commit({ kind: "horizon.workspace-failed", summary }, { tier: "audit" });
     return { object: "constal.horizon.result", version: 1, status: "blocked", summary, plan: null,
-      workspace: null, checkpoints: [], completedSteps: [], remainingUnknowns: [], artifact: null,
+      workspace: null, checkpoints: [], completedSteps: [], remainingUnknowns: [], artifact: null, publication: null,
       longHorizon: { durablePlan: true, specialistRuns: 0, replans: 0, plateauCycles: 0 } };
   }
   let completed: HzStepResult[] = [];
@@ -353,6 +354,15 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
             `Every work unit passed independent verification, but Horizon could not create the immutable final artifact: ${packaged.error ?? "unknown packaging failure"}`,
             remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
         }
+        let publication: HzRunResult["publication"] = null;
+        try { publication = await publishWorkspace(request, current.plan, current.fact, packaged.artifact, ctx); }
+        catch (error) {
+          const reason = error instanceof Error ? error.message : "GitHub publication failed.";
+          await ctx.commit({ kind: "horizon.publication-failed", planFact: current.fact, artifact: packaged.artifact, reason }, { tier: "audit" });
+          return blockedResult(current.plan, current.fact, completed,
+            `Every work unit passed verification and the immutable artifact was created, but repository publication failed: ${reason}`,
+            remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+        }
         const result: HzRunResult = {
           object: "constal.horizon.result", version: 1, status: "complete", summary: current.plan.summary,
           plan: { revision: current.plan.revision, fact: current.fact },
@@ -361,6 +371,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           completedSteps: completed.map(({ stepId, status, summary }) => ({ id: stepId, status, summary })),
           remainingUnknowns: remainingUnknowns.filter(({ state }) => !["resolved", "assumed"].includes(state)),
           artifact: packaged.artifact,
+          publication,
           longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles: plateau.stableCycles },
         };
         const final = await ctx.commit({ kind: "horizon.result", result }, { tier: "audit" });
