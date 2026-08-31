@@ -3,11 +3,11 @@ import { parseHzStepResult, type HzExecutorInput, type HzExecutorResult } from "
 import { EXECUTOR_SYSTEM } from "../prompts/executor.js";
 import { runReactLoop } from "../react-loop.js";
 import { HORIZON_EXECUTION_LOOP_TURNS } from "../limits.js";
-import { TOOLS } from "../tools/index.js";
+import { EXECUTOR_ACTION_TOOL_NAMES } from "../tools/index.js";
 
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
-  version: "5",
+  version: "6",
   async run(input: HzExecutorInput, ctx) {
     const conversation = await runReactLoop({
       role: `executor-${input.step.id}`,
@@ -22,7 +22,7 @@ export const executor = subtask<HzExecutorResult>({
         completedDependencies: input.completed.filter(({ stepId }) => input.step.dependsOn.includes(stepId)),
       },
       tools: input.tools,
-      actionTools: input.tools.filter((name) => TOOLS[name]?.maxEffect !== "read-only"),
+      actionTools: input.tools.filter((name) => (EXECUTOR_ACTION_TOOL_NAMES as readonly string[]).includes(name)),
       model: "model",
       stream: true,
       maxRounds: HORIZON_EXECUTION_LOOP_TURNS,
