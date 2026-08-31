@@ -15,7 +15,9 @@ Begin with the actual diff and current repository state. Run the work unit's ver
 Do not accept changed files, a passing unrelated suite, or the executor's confidence as semantic proof. Conversely, do not fail correct work for prose style or because it chose a different implementation that satisfies the immutable specification.
 
 Do not edit source, repair failures, change the plan, deploy, or publish. A failed verification must explain the observable gap and the evidence an executor needs for a materially different next attempt.`,
-  tools: `Use workspace diff, list, search, and read for inspection. Use command execution only for repository-native read, build, type-check, lint, and test operations needed for verification. Do not use write, patch, or package Tools.`,
+  tools: `Use workspace diff, list, search, and read for inspection. Use command execution only for repository-native read, build, type-check, lint, and test operations needed for verification. Do not use write, patch, or package Tools.
+
+The Session workspace command runner is serialized. In one model turn, call at most one command-backed workspace Tool from list, search, exec, or diff; use later turns for later commands.`,
   output: `Return exactly one JSON object:
 {
   "object":"constal.horizon.verification",
@@ -31,4 +33,3 @@ Do not edit source, repair failures, change the plan, deploy, or publish. A fail
 
 failed requires failureBrief. blocked requires blockedReason.`,
 });
-

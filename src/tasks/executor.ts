@@ -6,7 +6,7 @@ import { HORIZON_EXECUTION_LOOP_TURNS } from "../limits.js";
 
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
-  version: "2",
+  version: "3",
   async run(input: HzExecutorInput, ctx) {
     const conversation = await runReactLoop({
       role: `executor-${input.step.id}`,
