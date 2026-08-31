@@ -293,7 +293,7 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
       toolEvidence: executed.toolEvidence }, { tier: "audit" });
     const verifierTools = availableTools(VERIFIER_TOOL_NAMES, ctx);
     const verified = await ctx.spawn(verifier, { request, plan: current.plan, planFact: current.fact, step,
-      execution: executed.result, tools: verifierTools }, {
+      execution: executed.result, executionToolEvidence: executed.toolEvidence, tools: verifierTools }, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(verifierTools, ctx),

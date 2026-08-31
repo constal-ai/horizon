@@ -364,6 +364,7 @@ export interface HzVerifierInput {
   planFact: string;
   step: HzPlanStep;
   execution: HzStepResult;
+  executionToolEvidence: HzToolEvidence[];
   tools: string[];
 }
 

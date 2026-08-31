@@ -6,7 +6,7 @@ import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const verifier = subtask<HzVerifierResult>({
   id: "horizon-verifier",
-  version: "5",
+  version: "6",
   async run(input: HzVerifierInput, ctx) {
     const conversation = await runReactLoop({
       role: `verifier-${input.step.id}`, system: VERIFIER_SYSTEM,
@@ -14,13 +14,9 @@ export const verifier = subtask<HzVerifierResult>({
       context: { request: input.request, plan: input.plan, planFact: input.planFact,
         assignedStep: input.step,
         assertions: input.plan.assertions.find(({ stepId }) => stepId === input.step.id)?.assertions ?? [],
-        executorReport: input.execution },
+        executorReport: input.execution, executionToolEvidence: input.executionToolEvidence },
       tools: input.tools,
-      plateauStages: [
-        input.tools.filter((name) => name === "workspace_read"),
-        input.tools.filter((name) => name === "workspace_exec"),
-        input.tools.filter((name) => name === "workspace_exec"),
-      ],
+      plateauStages: [input.tools.filter((name) => name === "workspace_read")],
       model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzVerification(value, input.step.id),
     }, ctx);

@@ -5,7 +5,9 @@ export const VERIFIER_SYSTEM = composePrompt({
   task: `Inspect the live workspace independently. Reproduce the relevant proof, review the exact diff, and test the work unit's observable behavior, negative paths, and stated invariants. The executor's report is a claim to investigate, not proof.
 
 Return passed only when observed evidence supports the assigned stop condition. Return failed with a precise repair brief when the implementation or proof is deficient. Return blocked when verification itself cannot run because required capability or authority is unavailable.`,
-  context: `Dynamic context supplies the original request, immutable plan and Fact, assigned work unit, and executor report. It does not include the executor's hidden reasoning.
+  context: `Dynamic context supplies the original request, immutable plan and Fact, assigned work unit, executor report, and the executor's governed Tool receipts. It does not include the executor's hidden reasoning.
+
+The executor report is a claim. executionToolEvidence is different: it contains durable governed Tool outcomes with exact arguments, status, result or content reference, and observed command output when available. Use those receipts as evidence. Independently reproduce semantic and final-workspace claims; rerun an already receipted command only when its result is missing, stale after a later mutation, or insufficient for the assertion.
 
 Verify this work unit only. Dependencies already have their own verification evidence.`,
   rules: `${COMMON_RULES}
