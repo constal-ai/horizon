@@ -71,7 +71,7 @@ const pathsProperty = { type: "array", maxItems: 256, items: pathProperty } as c
 const list: Tool = {
   name: "workspace_list", version: "1",
   description: "List a bounded set of tracked and untracked repository paths without reading file contents. Use this to discover real paths before workspace_read or workspace_search.",
-  schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false }, maxEffect: "read-only",
+  schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false }, maxEffect: "reconcilable",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
     const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
@@ -85,7 +85,7 @@ const search: Tool = {
   description: "Search repository text with ripgrep and return bounded line-numbered matches. Use a precise literal or expression and narrow paths when possible; inspect matching files with workspace_read before making decisions or edits.",
   schema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 2_048 }, cwd: pathProperty,
     paths: pathsProperty, maximumMatches: { type: "integer", minimum: 1, maximum: 500 } }, required: ["query"], additionalProperties: false },
-  maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
+  maxEffect: "reconcilable", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { query: string; cwd?: string; paths?: string[]; maximumMatches?: number }, ctx) {
     const selected = await workspace(ctx); const maximum = args.maximumMatches ?? 200; const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? ["."]).map((path) => normalizeRepositoryPath(path, cwd));
@@ -98,7 +98,7 @@ const read: Tool = {
   description: "Read one bounded UTF-8 workspace file through CAS. Use an exact path discovered from the repository and request only the bytes needed for the current decision.",
   schema: { type: "object", properties: { path: pathProperty,
     maximumBytes: { type: "integer", minimum: 1, maximum: 1_048_576 } }, required: ["path"], additionalProperties: false },
-  maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile"] },
+  maxEffect: "idempotent", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile"] },
     { binding: "cas", kind: "cas", ops: ["getText"] }],
   preview(result) {
     const value = result as { path?: unknown; ref?: unknown; bytes?: unknown; text?: unknown };
@@ -156,7 +156,7 @@ const patch: Tool = {
   name: "workspace_patch", version: "1",
   description: "Validate and apply one bounded Git patch in the governed repository. The patch must apply cleanly with no whitespace errors. Use after reading the target files; never include unrelated changes in the patch.",
   schema: { type: "object", properties: { patch: { type: "string", minLength: 1, maxLength: 2_097_152 }, cwd: pathProperty },
-    required: ["patch"], additionalProperties: false }, maxEffect: "idempotent",
+    required: ["patch"], additionalProperties: false }, maxEffect: "reconcilable",
   needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { patch: string; cwd?: string }, ctx) {
     const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
@@ -172,7 +172,7 @@ const diff: Tool = {
   name: "workspace_diff", version: "1",
   description: "Read the exact bounded Git diff for the selected repository paths. Use after edits and before reporting completion so the specialist can catch accidental or unrelated changes.",
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false },
-  maxEffect: "read-only", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
+  maxEffect: "reconcilable", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {
     const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
