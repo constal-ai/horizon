@@ -20,7 +20,7 @@ export interface ReactLoopSpec<T> {
   objective: unknown;
   context: unknown;
   tools: string[];
-  plateauTools?: string[];
+  plateauStages?: string[][];
   parse(value: unknown): T | null;
   maxRounds: number;
   model?: string;
@@ -131,6 +131,11 @@ export class EvidencePlateauDetector {
   readonly #seen = new Set<string>();
   #stableRounds = 0;
 
+  reset(): void {
+    this.#seen.clear();
+    this.#stableRounds = 0;
+  }
+
   observe(calls: readonly ToolCallRecord[]): { plateaued: boolean; stableRounds: number; added: number } {
     let added = 0;
     for (const call of calls) {
@@ -167,8 +172,9 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
   const enabledTools = [...new Set(spec.tools)];
   const enabledToolSet = new Set(enabledTools);
-  const plateauTools = [...new Set(spec.plateauTools ?? [])].filter((name) => enabledToolSet.has(name));
-  const plateauToolSet = new Set(plateauTools);
+  const plateauStages = (spec.plateauStages ?? [])
+    .map((stage) => [...new Set(stage)].filter((name) => enabledToolSet.has(name)))
+    .filter((stage) => stage.length > 0);
   const calls: ToolCallRecord[] = [];
   const recentRounds: unknown[][] = [];
   const compacted: Array<{ fact: string; rounds: number }> = [];
@@ -177,21 +183,23 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   const plateau = new EvidencePlateauDetector();
   let forcedPlateau = false;
   let narrowedPlateau = false;
-  let plateauToolAttempted = false;
+  let plateauStage = 0;
   let toolRounds = 0;
   let priorCheckpoint: LoopCheckpoint | null = null;
   let priorCheckpointFingerprint: string | null = null;
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
-    const offered = forcedPlateau || ordinal === maximum - 1 ? [] : narrowedPlateau ? plateauTools : enabledTools;
+    const offered = forcedPlateau || ordinal === maximum - 1 ? []
+      : narrowedPlateau ? plateauStages[plateauStage] ?? [] : enabledTools;
     const turn = await ctx.turn({
       system: spec.system,
       objective: spec.objective,
       context: ordinal === 0
         ? spec.context
-        : { request: spec.context, compacted, compactedEvidence, recentRounds,
+        : { request: spec.context, compacted, compactedGovernedToolObservations: compactedEvidence,
+          recentGovernedToolObservations: recentRounds,
           progressCheckpoints,
-          ...(narrowedPlateau ? { plateau: "Inspection stopped changing before a source mutation was attempted. Use an available mutation Tool now if the assigned stop condition requires a change; otherwise resolve the work unit from the evidence without another inspection." }
+          ...(narrowedPlateau ? { plateau: "The current evidence phase stopped changing. Use one of the remaining convergence Tools if the assigned stop condition still needs that effect or proof; otherwise resolve from the governed observations already recorded." }
             : forcedPlateau ? { plateau: "The observed evidence or structured unknown frontier stopped changing. Resolve, ask, or block without another Tool call." } : {}) },
       tools: offered,
       ...(spec.model ? { model: spec.model } : {}),
@@ -214,13 +222,23 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
     calls.push(...turn.toolCalls);
     toolRounds++;
     recentRounds.push(roundContext(turn.toolCalls));
-    if (turn.toolCalls.some(({ name }) => plateauToolSet.has(name))) {
-      plateauToolAttempted = true;
-      narrowedPlateau = false;
+    const successful = new Set(["ok", "repeated", "substituted"]);
+    let advanced = false;
+    for (const call of turn.toolCalls) {
+      const stage = plateauStages[plateauStage];
+      if (stage?.includes(call.name) && successful.has(call.status)) {
+        plateauStage++;
+        narrowedPlateau = false;
+        advanced = true;
+      }
     }
-    const observation = plateau.observe(turn.toolCalls);
+    const hasFailedCall = turn.toolCalls.some(({ status }) => !successful.has(status));
+    if (advanced || hasFailedCall) plateau.reset();
+    const observation = advanced || hasFailedCall
+      ? { plateaued: false, stableRounds: 0, added: 0 }
+      : plateau.observe(turn.toolCalls);
     if (observation.plateaued) {
-      if (!plateauToolAttempted && plateauTools.length > 0) narrowedPlateau = true;
+      if (plateauStage < plateauStages.length) narrowedPlateau = true;
       else forcedPlateau = true;
     }
 
@@ -241,7 +259,8 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         system: LOOP_CHECKPOINT_SYSTEM,
         objective: "Checkpoint the assigned unknown frontier from observed evidence.",
         context: { role: spec.role, objective: spec.objective, request: compactBounded(spec.context),
-          priorCheckpoint, compactedEvidence, recentRounds: recentRounds.slice(-3) },
+          priorCheckpoint, compactedGovernedToolObservations: compactedEvidence,
+          recentGovernedToolObservations: recentRounds.slice(-3) },
         tools: [],
         gate: {
           id: `horizon-${spec.role}-progress`, version: "1", retries: 3,

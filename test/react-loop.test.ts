@@ -72,7 +72,7 @@ describe("EvidencePlateauDetector", () => {
       commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
     } as unknown as Ctx;
     const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
-      tools: ["workspace_read", "workspace_patch"], plateauTools: ["workspace_patch"], maxRounds: 8,
+      tools: ["workspace_read", "workspace_patch"], plateauStages: [["workspace_patch"]], maxRounds: 8,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(result.plateaued).toBe(false);
@@ -83,6 +83,38 @@ describe("EvidencePlateauDetector", () => {
       ["workspace_patch"],
       ["workspace_read", "workspace_patch"],
     ]);
+  });
+
+  it("advances through mutation and proof plateaus before forcing resolution", async () => {
+    const offered: string[][] = []; let turns = 0;
+    const tool = (name: string, maxEffect: ToolCallRecord["maxEffect"]): ToolCallRecord => ({
+      ...call({ name, ok: true }), name, maxEffect, effectObserved: maxEffect, args: { name },
+    });
+    const ctx = {
+      turn: async (spec: { tools?: string[]; system?: string }) => {
+        if (spec.system === LOOP_CHECKPOINT_SYSTEM) return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+          object: "constal.horizon.loop-checkpoint", version: 1, role: "executor", ready: false,
+          summary: "Proof is complete; final transport remains.", unknowns: [{ id: "final", question: "Can the role return its result?",
+            state: "open", resolution: null, evidence: ["mutation and proof Tools completed"] }], nextEvidence: ["Final transport object"],
+        } } as unknown as TurnRecord;
+        offered.push(spec.tools ?? []); turns++;
+        if (turns <= 3) return { toolCalls: [call({ ref: "before" })], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        if (turns === 4) return { toolCalls: [tool("workspace_edit", "idempotent")], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        if (turns <= 7) return { toolCalls: [call({ ref: "after" })], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        if (turns === 8) return { toolCalls: [tool("workspace_exec", "reconcilable")], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
+      tools: ["workspace_read", "workspace_edit", "workspace_exec"],
+      plateauStages: [["workspace_edit"], ["workspace_exec"]], maxRounds: 12,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(result.plateaued).toBe(false);
+    expect(offered[3]).toEqual(["workspace_edit"]);
+    expect(offered[7]).toEqual(["workspace_exec"]);
+    expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
   });
 
   it("propagates Tool availability failures instead of silently degrading the role", async () => {
@@ -113,7 +145,7 @@ describe("EvidencePlateauDetector", () => {
     expect(result.plateaued).toBe(false);
     expect(commits).toHaveLength(1);
     expect(contexts[7]).toMatchObject({ compacted: [{ fact: "fact-1", rounds: 4 }],
-      compactedEvidence: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
+      compactedGovernedToolObservations: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
   });
 
   it("stops semantically unchanged unknowns even when Tool calls keep changing", async () => {

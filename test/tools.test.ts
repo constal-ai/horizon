@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES } from "../src/tools/index.js";
+import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
@@ -10,6 +10,7 @@ describe("Horizon Tool capability projection", () => {
     expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_read");
     expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_exec");
     expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_diff");
+    expect(EXECUTOR_PROOF_TOOL_NAMES).toEqual(["workspace_exec", "workspace_diff"]);
   });
 
   it("requires catalog bindings as well as direct Tool needs", () => {

@@ -32,6 +32,8 @@ export const EXECUTOR_MUTATION_TOOL_NAMES = [
   "workspace_write", "workspace_edit", "workspace_patch",
 ] as const;
 
+export const EXECUTOR_PROOF_TOOL_NAMES = ["workspace_exec", "workspace_diff"] as const;
+
 export const RECONCILER_TOOL_NAMES = ["workspace_list", "workspace_search", "workspace_read", "workspace_diff"] as const;
 
 export const VERIFIER_TOOL_NAMES = [

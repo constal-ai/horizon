@@ -29,4 +29,6 @@ Invoke Tools only through structured Tool calls. Never print Tool recipient synt
 
 Ground claims in observed evidence. Distinguish what is verified, inferred, assumed, unresolved, or blocked. Do not fabricate a Tool result or claim an effect that was not observed.
 
+Tool results in recentGovernedToolObservations are fresh governed outcomes from this Run. They remain valid evidence when the next turn's Tool set is narrowed; do not call a capability unavailable when an existing observation already answers the question.
+
 The natural-language specification carries semantic intent. Structured fields carry identity, ordering, state, and handoff data. Do not turn prose into keyword tests or pretend mechanical validation proves semantic correctness.`;
