@@ -23,12 +23,12 @@ export const DESIGN_SYSTEM = composePrompt({
   task: `Choose the architecture that best fits the existing repository. Record every material semantic decision with its question, decision, rationale, and evidence. Then define milestones as independently verifiable outcomes with owned responsibilities, dependencies, and risks.
 
 This loop owns design and milestone boundaries. It does not write implementation steps or assertions.`,
-  context: "Dynamic context supplies the rubric, discovery evidence, previous plan during replanning, and critique feedback on repair passes.",
+  context: "Dynamic context supplies the rubric, immutable discovery history, previous plan during replanning, and critique feedback on repair passes.",
   rules: `${COMMON_RULES}
 
 Prefer existing abstractions, ownership boundaries, lifecycle seams, and public contracts. Do not introduce parallel infrastructure when the repository already has a native extension point.
 
-Slice milestones by deliverable outcome and dependency frontier, not by frontend/backend/database or one milestone per file. Close API, state, authority, failure, compatibility, and rollout decisions when they are material. A user-owned unresolved decision must remain visible rather than guessed.`,
+Slice milestones by deliverable outcome and dependency frontier, not by frontend/backend/database or one milestone per file. Close API, state, authority, failure, compatibility, and rollout decisions when they are material. A later evidenced design decision may resolve an unknown that was open in the immutable discovery snapshot; record that temporal resolution in the decision rather than pretending the historical artifact changed. A user-owned unresolved decision must remain visible rather than guessed.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
 {"object":"constal.horizon.design","version":1,"revision":1,"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
@@ -73,10 +73,14 @@ export const CRITIQUE_SYSTEM = composePrompt({
   task: `Find contradictions, unclosed material decisions, missing success coverage, invalid responsibility boundaries, dependency gaps, unsafe authority expansion, missing negative paths, and verification that cannot prove its claim.
 
 Assign every finding to the earliest planning owner that can actually repair it. Accept when no blocking finding remains. Request user input only for a material decision evidence cannot settle.`,
-  context: "Dynamic context supplies every planning artifact, discovery evidence, previous immutable plan and completed evidence during replanning, plus the prior critique on repeated passes.",
+  context: "Dynamic context supplies every ordered planning artifact, immutable discovery history, previous immutable plan and completed evidence during replanning, plus the prior critique on repeated passes.",
   rules: `${COMMON_RULES}
 
 Reason about semantic coherence; do not use keyword matching, prose regexes, item counts, or preferred wording as correctness tests. A different architecture is acceptable when it satisfies the rubric and repository constraints.
+
+Treat discovery and investigation artifacts as historical snapshots, not mutable current-state records. Later rubric or design evidence may resolve, assume, avoid, or narrow an unknown that was open earlier. Do not require an earlier artifact to be rewritten merely so its historical state matches a later decision. A temporal inconsistency is blocking only when the latest owning artifact fails to account for a still-material unknown, relies on contradictory evidence, or leaves the final execution frontier ambiguous.
+
+Assign repair to the earliest planning artifact that is both currently deficient and actually mutable in this pipeline. Discovery is not a repair owner here. When a later design decision already closes an earlier repository-answerable unknown with evidence, accept that handoff instead of repeatedly routing the same historical state to design.
 
 Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.`,
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",

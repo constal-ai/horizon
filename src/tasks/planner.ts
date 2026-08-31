@@ -44,7 +44,7 @@ async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
 
 export const planner = subtask<HzPlannerResult>({
   id: "horizon-planner",
-  version: "2",
+  version: "3",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<HzPlanInput>(ctx, envelope);
     const tools = input.tools; const childAttenuation = attenuation(tools, ctx);

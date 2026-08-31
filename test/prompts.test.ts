@@ -30,4 +30,11 @@ describe("Horizon role prompts", () => {
     expect(VERIFIER_SYSTEM).toContain("independent verification specialist");
     expect(RECONCILER_SYSTEM).toContain("new immutable revision");
   });
+
+  it("reconciles historical discovery unknowns without impossible artifact rewrites", () => {
+    expect(DESIGN_SYSTEM).toContain("immutable discovery snapshot");
+    expect(CRITIQUE_SYSTEM).toContain("historical snapshots, not mutable current-state records");
+    expect(CRITIQUE_SYSTEM).toContain("Do not require an earlier artifact to be rewritten");
+    expect(CRITIQUE_SYSTEM).toContain("Discovery is not a repair owner here");
+  });
 });
