@@ -124,6 +124,7 @@ describe("Horizon multi-loop planner", () => {
   it("runs one decomposition loop per milestone and feeds accepted prerequisite steps forward", async () => {
     const proofStep = { ...step, id: "prove", milestoneId: "proof", title: "Prove",
       responsibility: "Prove the durable behavior independently.", dependsOn: [step.id] };
+    const modelProofStep = { ...proofStep, dependsOn: ["behavior"] };
     const proofAssertions: HzStepAssertions = { ...assertions, stepId: proofStep.id,
       assertions: [{ ...assertions.assertions[0]!, id: "independent-proof", claim: "Independent proof passes." }] };
     const twoMilestones: HzDesign = { ...design, milestones: [design.milestones[0]!, {
@@ -131,7 +132,7 @@ describe("Horizon multi-loop planner", () => {
       responsibilities: [proofStep.responsibility], risks: ["Incomplete negative-path proof."] }] };
     const twoStepPlan: HzPlan = { ...finalPlan, steps: [step, proofStep], assertions: [assertions, proofAssertions] };
     const fixture = planningContext([accepted], [twoMilestones], {
-      workByMilestone: { behavior: [step], proof: [proofStep] },
+      workByMilestone: { behavior: [step], proof: [modelProofStep] },
       assertionsByStep: { [step.id]: assertions, [proofStep.id]: proofAssertions }, finalPlan: twoStepPlan,
     });
     const result = await planner.run(fixture.envelope, fixture.ctx);

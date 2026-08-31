@@ -1,6 +1,6 @@
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { parseHzPlan, parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
+import { parseHzMilestoneWork, parseHzPlan, parseHzWorkPlan, type HzDesign, type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
 import { HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS, HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
@@ -34,6 +34,28 @@ function orderedMilestones(design: HzDesign): HzMilestone[] {
     ordered.push(next); completed.add(next.id); remaining.delete(next.id);
   }
   return ordered;
+}
+
+function terminalStepIds(steps: readonly HzWorkPlan["steps"][number][]): string[] {
+  const ids = new Set(steps.map(({ id }) => id));
+  const prerequisites = new Set(steps.flatMap(({ dependsOn }) => dependsOn.filter((id) => ids.has(id))));
+  return steps.filter(({ id }) => !prerequisites.has(id)).map(({ id }) => id);
+}
+
+export function bindMilestoneDependencies(milestone: HzMilestone, steps: HzWorkPlan["steps"],
+  completedMilestones: ReadonlyMap<string, HzWorkPlan["steps"]>): HzWorkPlan["steps"] {
+  const prerequisiteByMilestone = new Map(milestone.dependsOn.map((id) => {
+    const completed = completedMilestones.get(id);
+    if (!completed) throw new TypeError(`Horizon milestone ${milestone.id} is missing prerequisite work for ${id}`);
+    return [id, terminalStepIds(completed)] as const;
+  }));
+  const required = [...new Set([...prerequisiteByMilestone.values()].flat())].sort();
+  const local = new Set(steps.map(({ id }) => id));
+  return steps.map((step) => {
+    const declared = step.dependsOn.flatMap((id) => prerequisiteByMilestone.get(id) ?? [id]);
+    const dependencies = declared.some((id) => local.has(id)) ? declared : [...required, ...declared];
+    return { ...step, dependsOn: [...new Set(dependencies)].sort() };
+  });
 }
 
 async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
@@ -73,17 +95,28 @@ export const planner = subtask<HzPlannerResult>({
     };
     const runDecomposition = async (rubric: HzRubric, design: HzDesign, prior: HzWorkPlan | null): Promise<HzWorkPlan> => {
       const acceptedSteps: HzWorkPlan["steps"] = [];
+      const completedMilestones = new Map<string, HzWorkPlan["steps"]>();
       for (const milestone of orderedMilestones(design)) {
+        const requiredPrerequisiteStepIds = milestone.dependsOn.flatMap((id) => {
+          const completed = completedMilestones.get(id);
+          if (!completed) throw new TypeError(`Horizon milestone ${milestone.id} is missing prerequisite work for ${id}`);
+          return terminalStepIds(completed);
+        });
         const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, milestoneId: milestone.id,
-          acceptedSteps, prior: prior?.steps.filter((step) => step.milestoneId === milestone.id) ?? [], critique, tools });
+          acceptedSteps, requiredPrerequisiteStepIds,
+          prior: prior?.steps.filter((step) => step.milestoneId === milestone.id) ?? [], critique, tools });
         const result = await ctx.spawn(decompositionAgent, phaseInput, {
           retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
             microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
           attenuation: childAttenuation,
         });
         planningRuns++; evidence.push(...result.toolEvidence);
-        await commitPhase(ctx, `decomposition:${milestone.id}`, input.revision, result, repairCycle);
-        acceptedSteps.push(...result.artifact.steps);
+        const normalized = parseHzMilestoneWork({ ...result.artifact,
+          steps: bindMilestoneDependencies(milestone, result.artifact.steps, completedMilestones) }, input.revision, milestone.id);
+        if (!normalized) throw new TypeError(`Horizon milestone ${milestone.id} dependency normalization failed`);
+        await commitPhase(ctx, `decomposition:${milestone.id}`, input.revision,
+          { ...result, artifact: normalized }, repairCycle);
+        acceptedSteps.push(...normalized.steps); completedMilestones.set(milestone.id, normalized.steps);
       }
       const workPlan = parseHzWorkPlan({ object: "constal.horizon.work-plan", version: 1,
         revision: input.revision, steps: acceptedSteps }, input.revision);

@@ -16,7 +16,8 @@ export interface PlanningPhaseResult<T> {
 interface RubricInput { planning: HzPlanInput; prior: HzRubric | null; critique: HzPlanCritique | null; tools: string[] }
 interface DesignInput { planning: HzPlanInput; rubric: HzRubric; prior: HzDesign | null; critique: HzPlanCritique | null; tools: string[] }
 interface DecompositionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; milestoneId: string;
-  acceptedSteps: HzPlanStep[]; prior: HzPlanStep[]; critique: HzPlanCritique | null; tools: string[] }
+  acceptedSteps: HzPlanStep[]; requiredPrerequisiteStepIds: string[];
+  prior: HzPlanStep[]; critique: HzPlanCritique | null; tools: string[] }
 interface AssertionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
   stepId: string; prior: HzStepAssertions | null; critique: HzPlanCritique | null; tools: string[] }
 interface CritiqueInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
@@ -67,7 +68,8 @@ export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>(
       objective: `Decompose milestone ${milestone.id} into ordered specialist agentic loops.`,
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         assignedMilestone: milestone,
-        acceptedPrerequisiteSteps: input.acceptedSteps, priorMilestoneSteps: input.prior, critique: input.critique },
+        acceptedPrerequisiteSteps: input.acceptedSteps, requiredPrerequisiteStepIds: input.requiredPrerequisiteStepIds,
+        priorMilestoneSteps: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzMilestoneWork(value, input.planning.revision, input.milestoneId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };

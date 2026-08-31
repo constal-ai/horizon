@@ -46,6 +46,8 @@ A semantic decision may be its own work unit. A decision needing several observa
 
 Steps must be self-contained natural-language specifications, not file checklists. State the assigned milestone id, specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
 
+The dependsOn field contains step ids only—never design milestone ids. The planner deterministically attaches the supplied required prerequisite step ids to this milestone's root work; include a prerequisite step id only when a more specific dependency is needed.
+
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",
   output: `Return exactly:
