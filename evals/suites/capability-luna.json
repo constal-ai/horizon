@@ -1,5 +1,5 @@
 {
-  "suiteId": "horizon-capability-0-3-11-luna-v1",
+  "id": "horizon-capability-0-3-11-luna-v1",
   "dataset": {
     "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-capability",
     "version": "1",

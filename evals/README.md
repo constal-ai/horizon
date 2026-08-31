@@ -31,7 +31,7 @@ The exact published Resources and tested Agent identity are recorded in `pins.js
 
 ```json
 {
-  "suiteId": "horizon-capability-0-3-10-luna-1",
+  "id": "horizon-capability-0-3-11-luna-v1",
   "dataset": { "crn": "DATASET_CRN", "version": "1", "hash": "DATASET_HASH" },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
