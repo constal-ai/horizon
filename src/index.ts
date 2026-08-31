@@ -8,7 +8,7 @@ import { runHorizon } from "./workflow.js";
 
 export default agent({
   id: "horizon",
-  version: "0.3.10",
+  version: "0.3.11",
   model: "model",
   mode: "script",
   tools: TOOLS,
