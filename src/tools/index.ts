@@ -28,8 +28,8 @@ export const EXECUTOR_TOOL_NAMES = [
   "workspace_patch", "workspace_diff", "workspace_package", "web_search", "web_fetch",
 ] as const;
 
-export const EXECUTOR_ACTION_TOOL_NAMES = [
-  "workspace_exec", "workspace_write", "workspace_patch", "workspace_package",
+export const EXECUTOR_MUTATION_TOOL_NAMES = [
+  "workspace_write", "workspace_patch",
 ] as const;
 
 export const RECONCILER_TOOL_NAMES = ["workspace_list", "workspace_search", "workspace_read", "workspace_diff"] as const;

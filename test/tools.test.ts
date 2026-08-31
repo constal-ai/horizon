@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { availableTools, bindingsForTools, EXECUTOR_ACTION_TOOL_NAMES } from "../src/tools/index.js";
+import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES } from "../src/tools/index.js";
 import { normalizeRepositoryPath, normalizeWorkspacePath, workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
-  it("defines executor action Tools independently of Resource recovery effects", () => {
-    expect(EXECUTOR_ACTION_TOOL_NAMES).toEqual([
-      "workspace_exec", "workspace_write", "workspace_patch", "workspace_package",
-    ]);
-    expect(EXECUTOR_ACTION_TOOL_NAMES).not.toContain("workspace_list");
-    expect(EXECUTOR_ACTION_TOOL_NAMES).not.toContain("workspace_search");
-    expect(EXECUTOR_ACTION_TOOL_NAMES).not.toContain("workspace_read");
-    expect(EXECUTOR_ACTION_TOOL_NAMES).not.toContain("workspace_diff");
+  it("defines executor mutation Tools independently of Resource recovery effects", () => {
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).toEqual(["workspace_write", "workspace_patch"]);
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_list");
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_search");
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_read");
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_exec");
+    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_diff");
   });
 
   it("requires catalog bindings as well as direct Tool needs", () => {

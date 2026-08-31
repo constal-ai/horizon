@@ -72,7 +72,7 @@ describe("EvidencePlateauDetector", () => {
       commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
     } as unknown as Ctx;
     const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
-      tools: ["workspace_read", "workspace_patch"], actionTools: ["workspace_patch"], maxRounds: 8,
+      tools: ["workspace_read", "workspace_patch"], plateauTools: ["workspace_patch"], maxRounds: 8,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(result.plateaued).toBe(false);

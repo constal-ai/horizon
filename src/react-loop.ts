@@ -20,7 +20,7 @@ export interface ReactLoopSpec<T> {
   objective: unknown;
   context: unknown;
   tools: string[];
-  actionTools?: string[];
+  plateauTools?: string[];
   parse(value: unknown): T | null;
   maxRounds: number;
   model?: string;
@@ -167,8 +167,8 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
   const enabledTools = [...new Set(spec.tools)];
   const enabledToolSet = new Set(enabledTools);
-  const actionTools = [...new Set(spec.actionTools ?? [])].filter((name) => enabledToolSet.has(name));
-  const actionToolSet = new Set(actionTools);
+  const plateauTools = [...new Set(spec.plateauTools ?? [])].filter((name) => enabledToolSet.has(name));
+  const plateauToolSet = new Set(plateauTools);
   const calls: ToolCallRecord[] = [];
   const recentRounds: unknown[][] = [];
   const compacted: Array<{ fact: string; rounds: number }> = [];
@@ -176,14 +176,14 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   let compactedEvidence: unknown[] = [];
   const plateau = new EvidencePlateauDetector();
   let forcedPlateau = false;
-  let actionPlateau = false;
-  let actionAttempted = false;
+  let narrowedPlateau = false;
+  let plateauToolAttempted = false;
   let toolRounds = 0;
   let priorCheckpoint: LoopCheckpoint | null = null;
   let priorCheckpointFingerprint: string | null = null;
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
-    const offered = forcedPlateau || ordinal === maximum - 1 ? [] : actionPlateau ? actionTools : enabledTools;
+    const offered = forcedPlateau || ordinal === maximum - 1 ? [] : narrowedPlateau ? plateauTools : enabledTools;
     const turn = await ctx.turn({
       system: spec.system,
       objective: spec.objective,
@@ -191,7 +191,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         ? spec.context
         : { request: spec.context, compacted, compactedEvidence, recentRounds,
           progressCheckpoints,
-          ...(actionPlateau ? { plateau: "Inspection stopped changing before an action was attempted. Use an available action Tool now if the assigned stop condition requires an effect; otherwise resolve the work unit from the evidence without another inspection." }
+          ...(narrowedPlateau ? { plateau: "Inspection stopped changing before a source mutation was attempted. Use an available mutation Tool now if the assigned stop condition requires a change; otherwise resolve the work unit from the evidence without another inspection." }
             : forcedPlateau ? { plateau: "The observed evidence or structured unknown frontier stopped changing. Resolve, ask, or block without another Tool call." } : {}) },
       tools: offered,
       ...(spec.model ? { model: spec.model } : {}),
@@ -214,13 +214,13 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
     calls.push(...turn.toolCalls);
     toolRounds++;
     recentRounds.push(roundContext(turn.toolCalls));
-    if (turn.toolCalls.some(({ name }) => actionToolSet.has(name))) {
-      actionAttempted = true;
-      actionPlateau = false;
+    if (turn.toolCalls.some(({ name }) => plateauToolSet.has(name))) {
+      plateauToolAttempted = true;
+      narrowedPlateau = false;
     }
     const observation = plateau.observe(turn.toolCalls);
     if (observation.plateaued) {
-      if (!actionAttempted && actionTools.length > 0) actionPlateau = true;
+      if (!plateauToolAttempted && plateauTools.length > 0) narrowedPlateau = true;
       else forcedPlateau = true;
     }
 
