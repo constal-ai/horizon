@@ -1,7 +1,7 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzDesign, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
-import { planner } from "../src/tasks/planner.js";
+import { planner, scopeMilestoneStepIds } from "../src/tasks/planner.js";
 
 function handle<T>(value: T): Handle<T> {
   const promise = Promise.resolve(value) as Promise<T> & Partial<Handle<T>>;
@@ -96,6 +96,16 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
 }
 
 describe("Horizon multi-loop planner", () => {
+  it("namespaces a step that borrows another milestone's identity", () => {
+    const foreign = { ...step, id: "proof-run", milestoneId: "behavior", dependsOn: [] };
+    const dependent = { ...step, id: "review", milestoneId: "behavior", dependsOn: [foreign.id] };
+    expect(scopeMilestoneStepIds(design.milestones[0]!, [foreign, dependent],
+      new Set(["behavior", "proof"]), new Set())).toEqual([
+      { ...foreign, id: "behavior-proof-run" },
+      { ...dependent, dependsOn: ["behavior-proof-run"] },
+    ]);
+  });
+
   it("finalizes only after rubric, design, decomposition, assertions, and critique loops", async () => {
     const fixture = planningContext([accepted]);
     const result = await planner.run(fixture.envelope, fixture.ctx);

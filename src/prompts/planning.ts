@@ -48,6 +48,8 @@ Steps must be self-contained natural-language specifications, not file checklist
 
 The dependsOn field contains step ids only—never design milestone ids. The planner deterministically attaches the supplied required prerequisite step ids to this milestone's root work; include a prerequisite step id only when a more specific dependency is needed.
 
+Keep every new step id inside the assigned milestone's identity namespace. Do not reuse another design milestone's id or id prefix; the planner enforces uniqueness across independently generated milestone work.
+
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",
   output: `Return exactly:

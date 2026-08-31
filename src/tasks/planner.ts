@@ -58,6 +58,22 @@ export function bindMilestoneDependencies(milestone: HzMilestone, steps: HzWorkP
   });
 }
 
+export function scopeMilestoneStepIds(milestone: HzMilestone, steps: HzWorkPlan["steps"],
+  milestoneIds: ReadonlySet<string>, acceptedStepIds: ReadonlySet<string>): HzWorkPlan["steps"] {
+  const ids = new Map<string, string>();
+  for (const step of steps) {
+    const foreign = [...milestoneIds].some((id) => id !== milestone.id
+      && (step.id === id || step.id.startsWith(`${id}-`)));
+    const scoped = foreign || acceptedStepIds.has(step.id) ? `${milestone.id}-${step.id}` : step.id;
+    if (acceptedStepIds.has(scoped) || [...ids.values()].includes(scoped)) {
+      throw new TypeError(`Horizon milestone ${milestone.id} produced a duplicate step id ${scoped}`);
+    }
+    ids.set(step.id, scoped);
+  }
+  return steps.map((step) => ({ ...step, id: ids.get(step.id)!,
+    dependsOn: step.dependsOn.map((id) => ids.get(id) ?? id) }));
+}
+
 async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
   result: PlanningPhaseResult<T>, repairCycle: number): Promise<void> {
   await ctx.commit({ kind: "horizon.planning-phase", phase, revision, repairCycle,
@@ -96,6 +112,7 @@ export const planner = subtask<HzPlannerResult>({
     const runDecomposition = async (rubric: HzRubric, design: HzDesign, prior: HzWorkPlan | null): Promise<HzWorkPlan> => {
       const acceptedSteps: HzWorkPlan["steps"] = [];
       const completedMilestones = new Map<string, HzWorkPlan["steps"]>();
+      const milestoneIds = new Set(design.milestones.map(({ id }) => id));
       for (const milestone of orderedMilestones(design)) {
         const requiredPrerequisiteStepIds = milestone.dependsOn.flatMap((id) => {
           const completed = completedMilestones.get(id);
@@ -111,8 +128,10 @@ export const planner = subtask<HzPlannerResult>({
           attenuation: childAttenuation,
         });
         planningRuns++; evidence.push(...result.toolEvidence);
+        const scoped = scopeMilestoneStepIds(milestone, result.artifact.steps, milestoneIds,
+          new Set(acceptedSteps.map(({ id }) => id)));
         const normalized = parseHzMilestoneWork({ ...result.artifact,
-          steps: bindMilestoneDependencies(milestone, result.artifact.steps, completedMilestones) }, input.revision, milestone.id);
+          steps: bindMilestoneDependencies(milestone, scoped, completedMilestones) }, input.revision, milestone.id);
         if (!normalized) throw new TypeError(`Horizon milestone ${milestone.id} dependency normalization failed`);
         await commitPhase(ctx, `decomposition:${milestone.id}`, input.revision,
           { ...result, artifact: normalized }, repairCycle);
