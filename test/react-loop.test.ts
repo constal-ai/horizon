@@ -23,6 +23,19 @@ describe("EvidencePlateauDetector", () => {
     expect(detector.observe([call({ ref: "two" })])).toEqual({ plateaued: false, stableRounds: 0, added: 1 });
   });
 
+  it("ignores volatile sandbox identity and metering fields when evidence is unchanged", () => {
+    const detector = new EvidencePlateauDetector();
+    const command = (ordinal: number) => call({
+      commandId: `run:root/${ordinal}/tool/0`, status: "completed", exitCode: 0,
+      stdoutRef: "same-content", stdoutPreview: "README.md\n", stderrRef: null, outputs: [],
+      sandbox: { id: "session-sandbox", generation: 1, fresh: false },
+      usage: { wallMs: 10 + ordinal, microUsd: 100 + ordinal, providerUnits: { active_memory_gib_ms: 500 + ordinal } },
+    });
+    expect(detector.observe([command(1)])).toEqual({ plateaued: false, stableRounds: 0, added: 1 });
+    expect(detector.observe([command(2)])).toEqual({ plateaued: false, stableRounds: 1, added: 0 });
+    expect(detector.observe([command(3)])).toEqual({ plateaued: true, stableRounds: 2, added: 0 });
+  });
+
   it("removes Tools after a plateau and requires the role to terminate honestly", async () => {
     const offered: string[][] = []; let turns = 0;
     const ctx = {

@@ -52,9 +52,21 @@ function callValue(call: ToolCallRecord): unknown {
   return null;
 }
 
+const VOLATILE_OBSERVATION_FIELDS = new Set(["commandId", "usage"]);
+
+function stableObservation(value: unknown, depth = 0): unknown {
+  if (depth >= 8 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((entry) => stableObservation(entry, depth + 1));
+  const source = record(value);
+  if (!source) return value;
+  return Object.fromEntries(Object.entries(source)
+    .filter(([key]) => !VOLATILE_OBSERVATION_FIELDS.has(key))
+    .map(([key, entry]) => [key, stableObservation(entry, depth + 1)]));
+}
+
 function callSignature(call: ToolCallRecord): string {
-  return canonicalJson({ name: call.name, args: bounded(call.args), status: call.status, ref: call.ref ?? null,
-    value: callValue(call) });
+  return canonicalJson({ name: call.name, args: stableObservation(bounded(call.args)), ref: call.ref ?? null,
+    value: stableObservation(callValue(call)) });
 }
 
 export class EvidencePlateauDetector {
