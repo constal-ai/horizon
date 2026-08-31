@@ -1,5 +1,5 @@
 {
-  "id": "horizon-capability-0-3-15-luna-v1",
+  "id": "horizon-capability-0-3-16-luna-v1",
   "dataset": {
     "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-capability",
     "version": "1",
@@ -7,7 +7,7 @@
   },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "bundle": "75d282fddf16b520c1d12b9774551d3fee7f1c99ca115696e6e6848409460884"
+    "bundle": "37e00576ec9be7e6ff0668ceec10c6abb82cee5adff6f581c290330ac3739ea8"
   },
   "mode": "fresh",
   "scorers": [
