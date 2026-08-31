@@ -113,6 +113,7 @@ class FakeSandbox implements Sandbox {
     if (cmd === "test" && commandArgs[0] === "-e") return handle(command(this.rootExists ? "completed" : "failed"));
     if (cmd === "mkdir") { if (commandArgs.includes("/workspace/repo")) this.rootExists = true; return handle(command()); }
     if (cmd === "tar") { this.rootExists = true; return handle(command()); }
+    if (cmd === "rm") return handle(command());
     if (cmd === "git") return handle(command());
     if (cmd) this.setupCommands.push([cmd, ...commandArgs].join(" "));
     return handle(command());
