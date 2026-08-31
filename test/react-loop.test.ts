@@ -117,6 +117,35 @@ describe("EvidencePlateauDetector", () => {
     expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
   });
 
+  it("does not let a ready checkpoint bypass a remaining convergence stage", async () => {
+    const offered: string[][] = []; let roleTurns = 0; let toolRounds = 0;
+    const edit = { ...call({ edited: true }), name: "workspace_edit", maxEffect: "idempotent" as const,
+      effectObserved: "idempotent" as const };
+    const exec = { ...call({ exitCode: 0 }), name: "workspace_exec", maxEffect: "reconcilable" as const,
+      effectObserved: "reconcilable" as const };
+    const ctx = {
+      turn: async (spec: { tools?: string[]; system?: string }) => {
+        if (spec.system === LOOP_CHECKPOINT_SYSTEM) return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+          object: "constal.horizon.loop-checkpoint", version: 1, role: "executor", ready: true,
+          summary: "The semantic unknowns are resolved.", unknowns: [], nextEvidence: [],
+        } } as unknown as TurnRecord;
+        offered.push(spec.tools ?? []); roleTurns++;
+        if (roleTurns === 1) { toolRounds++; return { toolCalls: [edit], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord; }
+        if (toolRounds < 8) { toolRounds++; return { toolCalls: [call({ ref: `evidence-${toolRounds}` })],
+          message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord; }
+        if (roleTurns === 9) return { toolCalls: [exec], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
+    } as unknown as Ctx;
+    await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
+      tools: ["workspace_read", "workspace_edit", "workspace_exec"],
+      plateauStages: [["workspace_edit"], ["workspace_exec"]], maxRounds: 12,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(offered[8]).toEqual(["workspace_exec"]);
+  });
+
   it("propagates Tool availability failures instead of silently degrading the role", async () => {
     const ctx = { turn: async () => { throw new ToolUnavailable("workspace_patch"); } } as unknown as Ctx;
     await expect(runReactLoop({ role: "test", system: "test", objective: "test", context: {},

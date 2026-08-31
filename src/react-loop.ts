@@ -8,7 +8,7 @@ export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
   role: "You are Horizon's evidence progress controller. You inspect one specialist's bounded observations and report whether its assigned unknown frontier has materially changed.",
   task: "Produce a stable structured checkpoint of the questions this specialist still owns. Resolve an unknown only from supplied evidence. Identify the smallest exact evidence still needed; do not ask for generic additional inspection.",
   context: "Dynamic context supplies the specialist role, objective, original role context, recent observations, compacted evidence, and the prior checkpoint when one exists.",
-  rules: `${COMMON_RULES}\n\nReuse stable unknown ids across checkpoints. Evidence accumulation without a changed unknown state or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not decide implementation or call Tools.`,
+  rules: `${COMMON_RULES}\n\nReuse stable unknown ids across checkpoints. Evidence accumulation without a changed unknown state or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not invent proof obligations beyond the supplied role objective, context, and stop condition. For a verifier role, the executor report remains a claim: only governed Tool observations produced by this verifier independently prove an executable assertion. Do not decide implementation or call Tools.`,
   tools: "No Tools are available. Judge progress only from supplied observations.",
   output: `Return exactly one JSON object:
 {"object":"constal.horizon.loop-checkpoint","version":1,"role":"exact supplied role","ready":false,"summary":"what changed in the unknown frontier","unknowns":[{"id":"stable id","question":"precise question","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],"nextEvidence":["smallest exact missing evidence"]}`,
@@ -275,7 +275,10 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
       progressCheckpoints.push({ fact: fact.hash, ready: current.ready, summary: current.summary });
       if (progressCheckpoints.length > 32) progressCheckpoints.splice(0, progressCheckpoints.length - 32);
       const fingerprint = checkpointFingerprint(current);
-      if (current.ready || priorCheckpointFingerprint === fingerprint) forcedPlateau = true;
+      if (current.ready || priorCheckpointFingerprint === fingerprint) {
+        if (plateauStage < plateauStages.length) narrowedPlateau = true;
+        else forcedPlateau = true;
+      }
       priorCheckpoint = current; priorCheckpointFingerprint = fingerprint;
     }
   }
