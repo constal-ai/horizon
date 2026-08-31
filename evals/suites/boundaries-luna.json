@@ -1,0 +1,22 @@
+{
+  "suiteId": "horizon-boundaries-0-3-10-luna-v1",
+  "dataset": {
+    "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-boundaries",
+    "version": "1",
+    "hash": "1b1c9d3ce948b4583d8068b253bcb4b18b6fd6f7842bb67814fc0f78901442a1"
+  },
+  "subject": {
+    "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
+    "bundle": "76ae3abf4c2700bbbf71169de73f999f5559b19246ec511a61bb580c2ebe59d5"
+  },
+  "mode": "fresh",
+  "scorers": [
+    {
+      "crn": "crn:constal:production:52752121874141666554:default:scorer/horizon-blocked-contract",
+      "version": "1",
+      "hash": "035ed65f895282f76d3ce987791887742472bafd29cac5ce4d4dcbdbbd74c787"
+    }
+  ],
+  "concurrency": 1,
+  "budgetMicroUsd": 3000000
+}

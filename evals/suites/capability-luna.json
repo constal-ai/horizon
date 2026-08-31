@@ -1,0 +1,22 @@
+{
+  "suiteId": "horizon-capability-0-3-10-luna-v1",
+  "dataset": {
+    "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-capability",
+    "version": "1",
+    "hash": "589650e75c7ccf34748e1b188b6b992aa9a13c50c8226db49e517908b7b9b1f7"
+  },
+  "subject": {
+    "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
+    "bundle": "76ae3abf4c2700bbbf71169de73f999f5559b19246ec511a61bb580c2ebe59d5"
+  },
+  "mode": "fresh",
+  "scorers": [
+    {
+      "crn": "crn:constal:production:52752121874141666554:default:scorer/horizon-complete-contract",
+      "version": "1",
+      "hash": "4eedac416866ba64281505c7a1741382aee528d47fba0936256dc38333820ff9"
+    }
+  ],
+  "concurrency": 1,
+  "budgetMicroUsd": 20000000
+}

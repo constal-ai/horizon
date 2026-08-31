@@ -27,7 +27,7 @@ constal evals datasets create horizon-boundaries \
 
 Add every case as `{ "case": CASE, "replace": true }`, publish both drafts, and start one fresh Suite per Dataset with concurrency `1`. Keeping the Suites separate allows each Dataset to use one narrow Scorer and prevents a blocked safety case from being counted as a capability failure.
 
-Suite requests must pin the exact Dataset and Scorer triples returned by publication, plus the current Horizon Agent CRN:
+The exact published Resources and tested Agent identity are recorded in `pins.json`. Ready-to-run Suite requests are in `suites/`; they pin the tested bundle rather than floating to a later deployment.
 
 ```json
 {
@@ -35,13 +35,18 @@ Suite requests must pin the exact Dataset and Scorer triples returned by publica
   "dataset": { "crn": "DATASET_CRN", "version": "1", "hash": "DATASET_HASH" },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "bundle": "current"
+    "bundle": "BUNDLE_HASH"
   },
   "mode": "fresh",
   "scorers": [{ "crn": "SCORER_CRN", "version": "1", "hash": "SCORER_HASH" }],
   "concurrency": 1,
   "budgetMicroUsd": 20000000
 }
+```
+
+```sh
+constal evals suites start --body @evals/suites/boundaries-luna.json
+constal evals suites start --body @evals/suites/capability-luna.json
 ```
 
 Review case errors separately from Scorer failures. An execution error is not a low quality score. Promote a result to the Horizon baseline only after all cases complete, every deterministic Scorer passes, the generated diffs and planning Facts have been sampled manually, and the settled cost is understood.
