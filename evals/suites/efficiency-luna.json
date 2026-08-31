@@ -1,5 +1,5 @@
 {
-  "id": "horizon-efficiency-0-3-20-luna-v1",
+  "id": "horizon-efficiency-0-3-20-luna-v2",
   "dataset": {
     "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-efficiency",
     "version": "1",
@@ -18,5 +18,5 @@
     }
   ],
   "concurrency": 1,
-  "budgetMicroUsd": 5000000
+  "budgetMicroUsd": 20000000
 }
