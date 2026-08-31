@@ -32,7 +32,7 @@ describe("Horizon managed Agent package", () => {
   it("uses only existing platform catalog Resources and a long-horizon admission ceiling", async () => {
     const manifest = await json("../constal.agent.json");
     expect(manifest.bindings).toEqual({
-      model: "crn:constal:production:platform:default:model/gpt-5.6-sol",
+      model: "crn:constal:production:platform:default:model/gpt-5.6-luna",
       sandbox: "crn:constal:production:platform:default:sandbox-pool/constal-code",
       cas: "crn:constal:production:platform:default:cas/constal",
       github: "crn:constal:production:platform:default:service/github",

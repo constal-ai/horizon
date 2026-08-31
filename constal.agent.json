@@ -3,11 +3,11 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
-    "model": "crn:constal:production:platform:default:model/gpt-5.6-sol",
+    "model": "crn:constal:production:platform:default:model/gpt-5.6-luna",
     "sandbox": "crn:constal:production:platform:default:sandbox-pool/constal-code",
     "cas": "crn:constal:production:platform:default:cas/constal",
     "github": "crn:constal:production:platform:default:service/github",
@@ -35,5 +35,5 @@
     "maxRunMicroUsd": 500000000,
     "maxTurns": 2048
   },
-  "expectedCurrentDeploymentRevision": "17b4b406-2efb-4425-93fd-c6899a72d0d2"
+  "expectedCurrentDeploymentRevision": "1a84ace8-04ff-47d5-be90-050cd0efd3dc"
 }
