@@ -1,9 +1,9 @@
 # Horizon sandbox image
 
-Build this image from an immutable base reference:
+The Dockerfile pins its default multi-platform Node base by digest. Override it only with another immutable reference:
 
 ```sh
-docker build --build-arg BASE_IMAGE=node:24-bookworm-slim@sha256:<digest> -t <registry>/constal-horizon-runner:<version> sandbox
+docker build --platform linux/amd64 -t <registry>/constal-horizon-runner:<version> sandbox
 ```
 
 The platform `sandbox-pool/constal-code` Resource pins the published image. The image contains only common toolchains and the non-authoritative workspace runner. Repository source, tenant Credentials, and Session state never belong in this base layer.
