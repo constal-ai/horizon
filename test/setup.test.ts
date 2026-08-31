@@ -21,7 +21,8 @@ describe("Horizon durable setup workflow", () => {
     const values: Record<string, unknown> = {
       introduction: {},
       github: { credential: { crn: "crn:constal:production:tenant:default:credential/horizon-github", hash: "d".repeat(64) },
-        principal: "crn:constal:production:tenant:identity:principal/github-installation", accountLogin: "constal-ai",
+        principal: "crn:constal:production:tenant:identity:principal/github-installation", installationId: 123,
+        accountLogin: "constal-ai",
         repositories: ["constal-ai/horizon", "constal-ai/coreagents"] },
       repositories: { repositories: ["constal-ai/horizon"] },
       routing: { events: ["github.issue.activated", "github.issue.comment"], routes: {
@@ -63,7 +64,10 @@ describe("Horizon durable setup workflow", () => {
       },
     } as unknown as Ctx;
 
-    const result = await runHorizonSetup({}, ctx);
+    const result = await runHorizonSetup({ object: "constal.setup.start", version: 1, targetAgent: "horizon", input: { package: {
+      channel: { deploymentRevision: "123e4567-e89b-42d3-a456-426614174000" },
+      authProvider: { deploymentRevision: "223e4567-e89b-42d3-a456-426614174000" },
+    } } }, ctx);
     expect(result.status).toBe("complete");
     expect(screens.map(({ current }) => current.id)).toEqual([
       "introduction", "github", "repositories", "routing", "approval", "review", "complete",

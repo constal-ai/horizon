@@ -8,8 +8,11 @@ import { runHorizon } from "./workflow.js";
 import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
 import { postConversation, routedConversation, terminalMarkdown } from "./github-conversation.js";
+import { runHorizonSetup } from "./setup/workflow.js";
 
 async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>[1]) {
+  if (message && typeof message === "object" && !Array.isArray(message)
+    && (message as { object?: unknown }).object === "constal.setup.start") return runHorizonSetup(message, ctx);
   const event = horizonRoutedEvent(message);
   if (!event) return runHorizon(message, ctx);
   const conversation = routedConversation(event);

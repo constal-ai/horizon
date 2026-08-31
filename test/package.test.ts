@@ -24,7 +24,7 @@ describe("Horizon managed Agent package", () => {
     expect(agent.subtasks?.map(({ id }) => id)).toEqual([
       "horizon-source-resolver", "horizon-discovery-framer", "horizon-investigator", "horizon-planner", "horizon-rubric", "horizon-design",
       "horizon-milestone-decomposition", "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer",
-      "horizon-executor", "horizon-verifier", "horizon-reconciler",
+      "horizon-executor", "horizon-verifier", "horizon-reconciler", "horizon-approval-interpreter",
     ]);
     expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress"]);
   });
@@ -38,6 +38,7 @@ describe("Horizon managed Agent package", () => {
       github: "crn:constal:production:platform:default:service/github",
       web: "crn:constal:production:platform:default:web/constal",
       search: "crn:constal:production:platform:default:service/constal-search",
+      api: "crn:constal:production:platform:default:service/constal-api",
     });
     expect(manifest.limits).toEqual({ maxRunMicroUsd: 500_000_000, maxTurns: 2_048 });
     expect({ standard: HORIZON_STANDARD_LOOP_TURNS, execution: HORIZON_EXECUTION_LOOP_TURNS })

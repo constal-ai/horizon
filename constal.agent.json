@@ -12,7 +12,8 @@
     "cas": "crn:constal:production:platform:default:cas/constal",
     "github": "crn:constal:production:platform:default:service/github",
     "web": "crn:constal:production:platform:default:web/constal",
-    "search": "crn:constal:production:platform:default:service/constal-search"
+    "search": "crn:constal:production:platform:default:service/constal-search",
+    "api": "crn:constal:production:platform:default:service/constal-api"
   },
   "policies": [],
   "tools": [

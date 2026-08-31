@@ -13,6 +13,7 @@ const STEP_LABELS = ["Introduction", "Connect GitHub", "Repositories", "Events &
 interface ConnectionReceipt {
   credential: { crn: string; hash: string };
   principal: string;
+  installationId: number;
   accountLogin: string;
   repositories: string[];
 }
@@ -28,8 +29,26 @@ interface SetupConfiguration {
   semanticApproval: true;
 }
 
+interface SetupPackage {
+  channel: { deploymentRevision: string };
+  authProvider: { deploymentRevision: string };
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function setupPackage(value: unknown): SetupPackage {
+  const start = record(value); const input = record(start?.input); const packageValue = record(input?.package);
+  const channel = record(packageValue?.channel); const authProvider = record(packageValue?.authProvider);
+  const revision = (candidate: Record<string, unknown> | null) => typeof candidate?.deploymentRevision === "string"
+    && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(candidate.deploymentRevision)
+    ? candidate.deploymentRevision : null;
+  const channelRevision = revision(channel); const authRevision = revision(authProvider);
+  if (start?.object !== "constal.setup.start" || start.version !== 1 || !channelRevision || !authRevision) {
+    throw new TypeError("Horizon setup requires exact platform Channel package releases");
+  }
+  return { channel: { deploymentRevision: channelRevision }, authProvider: { deploymentRevision: authRevision } };
 }
 
 function steps(index: number, blocked = false): SetupScreen["steps"] {
@@ -49,12 +68,14 @@ function connectionReceipt(value: unknown): ConnectionReceipt {
   if (!source || !credential || typeof credential.crn !== "string" || !credential.crn.includes(":credential/")
     || typeof credential.hash !== "string" || !/^[a-f0-9]{64}$/u.test(credential.hash)
     || typeof source.principal !== "string" || !source.principal.includes(":principal/")
+    || !Number.isSafeInteger(source.installationId) || Number(source.installationId) < 1
     || typeof source.accountLogin !== "string" || !source.accountLogin
     || !Array.isArray(source.repositories) || source.repositories.length > 500
     || source.repositories.some((item) => typeof item !== "string" || !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u.test(item))) {
     throw new TypeError("GitHub Credential interaction returned an invalid non-secret receipt");
   }
   return { credential: { crn: credential.crn, hash: credential.hash }, principal: source.principal,
+    installationId: Number(source.installationId),
     accountLogin: source.accountLogin, repositories: [...new Set(source.repositories as string[])].sort() };
 }
 
@@ -92,7 +113,8 @@ async function terminal(kind: "complete" | "blocked", revision: number, title: s
   return screen;
 }
 
-export async function runHorizonSetup(_message: unknown, ctx: Ctx): Promise<SetupScreen> {
+export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<SetupScreen> {
+  const channelPackage = setupPackage(message);
   let revision = 1;
   let response = await present({ revision, status: "active", title: "Set up Horizon", description: "Install Horizon into GitHub and choose how repository events are handled.",
     steps: steps(0), waitLabel: `horizon-setup-introduction-${revision}`,
@@ -182,9 +204,10 @@ export async function runHorizonSetup(_message: unknown, ctx: Ctx): Promise<Setu
     plan = await ctx.invoke<ConstalApiChangePlan>(ctx.resources.api!, "plan", {
       objective: "Install or update Horizon for GitHub using the reviewed repository, event-routing, and approval configuration.",
       operations: [{ id: "install-channel", operation: "channel.install", input: {
-        namespace: ctx.run.namespace, package: { publisher: "constal-ai", id: "horizon-github", version: "1" },
-        id: "horizon-github", targetAgent: "horizon", credential: connection.credential,
-        principal: connection.principal, configuration,
+        namespace: ctx.run.namespace, package: channelPackage, id: "horizon-github", configuration,
+        target: { resourceKind: "agent", selector: { matchLabels: { "channels.constal.ai/horizon-github": "enabled" } } },
+        scopedBindings: [{ key: "github-user", subject: `github:${connection.installationId}`, target: connection.credential }],
+        ingressRoutes: [{ provider: "github", key: `installation:${connection.installationId}` }],
       } }],
     }, { dedupeKey: `horizon-setup-plan:${ctx.run.session}:${revision}` });
   } catch (error) {
