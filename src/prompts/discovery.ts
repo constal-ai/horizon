@@ -24,7 +24,7 @@ Do not edit source, run mutation commands, or design the final implementation pl
   "version":1,
   "status":"ready|partial|blocked",
   "summary":"what is known and how investigation is divided",
-  "workspaceRoot":"the exact workspace_import path or null",
+  "workspaceRoot":"the exact supplied prepared workspace root or null",
   "focuses":[{"id":"stable id","title":"focus","mission":"self-contained investigation directive","questions":["decision-relevant question"],"evidenceNeeded":["specific source or proof"],"stopWhen":"questions resolved, narrowed, or honestly plateaued"}],
   "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "blockedReason":"specific reason or null"

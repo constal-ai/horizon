@@ -121,6 +121,7 @@ async function resolveRequestedSource(request: HzRequest, ctx: Ctx): Promise<HzS
     if (resolved.resolution.status === "blocked") {
       throw new WorkspacePreparationError(resolved.resolution.blockedReason ?? "Repository source resolution was blocked.");
     }
+    if (attempt === 2) break;
     const response = await ctx.await<{ answer: string }>("horizon-source", {
       schema: { type: "object", required: ["answer"], additionalProperties: false,
         properties: { answer: { type: "string", minLength: 1, maxLength: 65_536 } } }, maxBytes: 65_536, afterRun: "ignore",

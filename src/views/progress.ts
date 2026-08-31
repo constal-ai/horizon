@@ -1,7 +1,10 @@
 import type { Fact, Hash, ViewDef } from "@constal/sdk";
 
 export interface HorizonProgressState {
-  status: "idle" | "discovering" | "planning" | "executing" | "waiting" | "blocked" | "complete";
+  status: "idle" | "preparing" | "discovering" | "planning" | "executing" | "waiting" | "blocked" | "complete";
+  workspaceReceipt: string | null;
+  workspaceCacheHit: boolean | null;
+  checkpoints: number;
   planRevision: number | null;
   planningPhase: string | null;
   currentStep: string | null;
@@ -21,14 +24,24 @@ function unique(values: string[]): string[] { return [...new Set(values)].slice(
 
 export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
   id: "horizon-progress",
-  version: "1",
+  version: "2",
   over: "facts",
-  init: () => ({ status: "idle", planRevision: null, planningPhase: null, currentStep: null,
+  init: () => ({ status: "idle", workspaceReceipt: null, workspaceCacheHit: null, checkpoints: 0,
+    planRevision: null, planningPhase: null, currentStep: null,
     verifiedSteps: [], replans: 0, plateauCycles: 0, artifactRef: null, lastFact: null, updatedAt: null }),
   apply(state, fact) {
     const artifact = record(fact.artifact); const kind = typeof artifact?.kind === "string" ? artifact.kind : "";
     const next = { ...state, lastFact: fact.hash, updatedAt: fact.at };
-    if (kind === "horizon.request" || kind === "horizon.discovery-plan" || kind === "horizon.investigation") {
+    if (kind === "horizon.request" || kind === "horizon.source-resolution" || kind === "horizon.source"
+      || kind === "horizon.workspace-cache-invalid") return { ...next, status: "preparing" as const };
+    if (kind === "horizon.workspace-failed") return { ...next, status: "blocked" as const };
+    if (kind === "horizon.workspace-ready") {
+      const receipt = record(artifact?.receipt); const cache = record(receipt?.cache);
+      return { ...next, status: "discovering" as const,
+        workspaceReceipt: typeof artifact?.receiptRef === "string" ? artifact.receiptRef : state.workspaceReceipt,
+        workspaceCacheHit: typeof cache?.hit === "boolean" ? cache.hit : state.workspaceCacheHit };
+    }
+    if (kind === "horizon.discovery-plan" || kind === "horizon.investigation") {
       return { ...next, status: "discovering" as const };
     }
     if (kind === "horizon.planning-phase") {
@@ -57,6 +70,9 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
         verifiedSteps: verification?.verdict === "passed" && typeof stepId === "string"
           ? unique([...state.verifiedSteps, stepId]) : state.verifiedSteps };
     }
+    if (kind === "horizon.workspace-checkpoint") {
+      return { ...next, status: "executing" as const, checkpoints: state.checkpoints + 1 };
+    }
     if (kind === "horizon.plan-invalidation") {
       const invalidated = new Set(Array.isArray(artifact?.steps)
         ? artifact.steps.filter((value): value is string => typeof value === "string") : []);
@@ -75,7 +91,9 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
         status: action === "replan" ? "planning" as const : action === "ask" ? "waiting" as const
           : action === "blocked" ? "blocked" as const : "executing" as const };
     }
-    if (kind === "horizon.plateau" || kind === "horizon.package-failed") return { ...next, status: "blocked" as const };
+    if (kind === "horizon.plateau" || kind === "horizon.package-failed" || kind === "horizon.workspace-checkpoint-failed") {
+      return { ...next, status: "blocked" as const };
+    }
     if (kind === "horizon.result") {
       const result = record(artifact?.result); const packaged = record(result?.artifact);
       return { ...next, status: result?.status === "complete" ? "complete" as const : "blocked" as const,

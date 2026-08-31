@@ -4,10 +4,11 @@ import { DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM } from "../src/prompts/discovery.
 import { PLANNER_SYSTEM } from "../src/prompts/planner.js";
 import { RECONCILER_SYSTEM } from "../src/prompts/reconciler.js";
 import { VERIFIER_SYSTEM } from "../src/prompts/verifier.js";
+import { SOURCE_RESOLVER_SYSTEM } from "../src/prompts/source.js";
 import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM, RUBRIC_SYSTEM } from "../src/prompts/planning.js";
 
 describe("Horizon role prompts", () => {
-  it.each([DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
+  it.each([SOURCE_RESOLVER_SYSTEM, DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
     CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM, VERIFIER_SYSTEM, RECONCILER_SYSTEM])("uses one stable six-section role contract", (prompt) => {
     const headings = ["# Role", "# Task", "# Context", "# Rules", "# Tools", "# Output"];
     expect(headings.map((heading) => prompt.indexOf(heading))).toEqual([...headings.map((heading) => prompt.indexOf(heading))].sort((a, b) => a - b));
@@ -16,6 +17,7 @@ describe("Horizon role prompts", () => {
   });
 
   it("makes planning immutable and execution responsibility-scoped", () => {
+    expect(SOURCE_RESOLVER_SYSTEM).toContain("one exact GitHub repository");
     expect(DISCOVERY_SYSTEM).toContain("separate child Agent");
     expect(INVESTIGATOR_SYSTEM).toContain("one bounded software question set");
     expect(RUBRIC_SYSTEM).toContain("definition of success");

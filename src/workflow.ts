@@ -302,10 +302,19 @@ export async function runHorizon(message: unknown, ctx: Ctx): Promise<HzRunResul
     const verificationFact = await ctx.commit({ kind: "horizon.verification", planFact: current.fact,
       stepFact: stepFact.hash, verification: verified.verification, toolEvidence: verified.toolEvidence }, { tier: "audit" });
     if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
-      const captured = await captureWorkspaceCheckpoint({ workspace, planFact: current.fact, stepFact: stepFact.hash,
-        verificationFact: verificationFact.hash, stepId: step.id }, ctx);
-      checkpoints.push({ stepId: step.id, receipt: captured.receiptRef, image: captured.checkpoint.image,
-        tree: captured.checkpoint.tree });
+      try {
+        const captured = await captureWorkspaceCheckpoint({ workspace, planFact: current.fact, stepFact: stepFact.hash,
+          verificationFact: verificationFact.hash, stepId: step.id }, ctx);
+        checkpoints.push({ stepId: step.id, receipt: captured.receiptRef, image: captured.checkpoint.image,
+          tree: captured.checkpoint.tree });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Workspace checkpoint capture failed.";
+        await ctx.commit({ kind: "horizon.workspace-checkpoint-failed", planFact: current.fact,
+          stepFact: stepFact.hash, verificationFact: verificationFact.hash, step: step.id, reason }, { tier: "audit" });
+        return blockedResult(current.plan, current.fact, completed,
+          `The work unit passed independent verification, but its durable workspace checkpoint could not be captured: ${reason}`,
+          verified.verification.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+      }
     }
     const resultDigest = await attemptProgressDigest({ execution: executed.result,
       executionTools: executed.toolEvidence, verification: verified.verification,

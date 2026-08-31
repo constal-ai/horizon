@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
-  parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
+  parseHzSourceResolution, parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
 const unknown = { id: "architecture-seam", question: "Which existing abstraction owns publication?", state: "resolved",
   resolution: "The deployment boundary owns it.", evidence: ["src/deploy.ts"] };
@@ -35,6 +35,13 @@ describe("Horizon transport contracts", () => {
     expect(parseHzPlan(plan)).toEqual(plan);
     expect(parseHzRequest("Build and verify the agent")).toEqual({ objective: "Build and verify the agent", context: null,
       constraints: [], source: null, environment: { name: "default", cache: true, setup: [] } });
+    expect(parseHzRequest({ objective: "Build it", source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
+      environment: { name: "node", setup: [{ cmd: "npm", args: ["ci"], cwd: "/workspace/repo", timeoutMs: 600_000 }] } }))
+      .toMatchObject({ source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
+        environment: { name: "node", cache: true } });
+    expect(parseHzSourceResolution({ object: "constal.horizon.source-resolution", version: 1, status: "ready",
+      source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
+      evidence: ["authenticated repository metadata"], question: null, blockedReason: null })?.status).toBe("ready");
   });
 
   it("rejects structural dependency cycles without scoring plan prose", () => {
