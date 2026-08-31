@@ -1,0 +1,6 @@
+type = "sandbox"
+image = "registry.constal.ai/platform/default/constal-code@sha256:69a6b1c36307f8b6c1070e02274574ac5c8ac690cc9960470f25018332195937"
+
+[runtime]
+generation = "mk3"
+memory = 4096
