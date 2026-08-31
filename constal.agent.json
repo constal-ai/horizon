@@ -3,7 +3,7 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.3.32",
+  "version": "0.3.33",
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
@@ -36,5 +36,5 @@
     "maxRunMicroUsd": 500000000,
     "maxTurns": 2048
   },
-  "expectedCurrentDeploymentRevision": "7d5b8841-5dd4-4e33-b12d-a56ff8ab0364"
+  "expectedCurrentDeploymentRevision": "2ccac709-f770-4c78-bdf1-393eb9b166b3"
 }
