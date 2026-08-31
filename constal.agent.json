@@ -3,7 +3,7 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "entry": "src/index.ts",
   "mode": "script",
   "bindings": {
