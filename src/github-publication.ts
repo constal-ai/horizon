@@ -23,14 +23,14 @@ export async function publishWorkspace(request: HzRequest, plan: HzPlan, planFac
     ctx.resources.github, "repository.branch.publish", {
       owner: request.source.owner, repository: request.source.repository, base: request.source.ref,
       branch: branchName, archive: artifact.ref, message: `Implement approved Horizon plan for #${issue}`, marker,
-    }, { dedupeKey: `${marker}:branch` });
+    }, { dedupeKey: `${marker}:branch`, timeoutMs: 600_000 });
   const body = [`Implements the approved Horizon plan for #${issue}.`, "", plan.summary, "",
     `Plan fact: \`${planFact}\``, `Workspace artifact: \`${artifact.ref}\``, "", `Closes #${issue}`].join("\n");
   const created = await ctx.invoke<{ pullRequest?: { number?: unknown; html_url?: unknown }; duplicate?: boolean }>(
     ctx.resources.github, "pull-request.create", {
       owner: request.source.owner, repository: request.source.repository, base: request.source.ref, head: branch.branch,
       title: plan.summary.slice(0, 256), body, marker,
-    }, { dedupeKey: `${marker}:pull-request` });
+    }, { dedupeKey: `${marker}:pull-request`, timeoutMs: 600_000 });
   const number = Number(created.pullRequest?.number); const url = created.pullRequest?.html_url;
   if (!Number.isSafeInteger(number) || number < 1 || typeof url !== "string" || !url.startsWith("https://github.com/")) {
     throw new TypeError("GitHub pull request publication returned an invalid receipt");

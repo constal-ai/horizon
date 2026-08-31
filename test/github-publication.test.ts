@@ -21,9 +21,9 @@ describe("Horizon GitHub publication", () => {
     expect(invoke).toHaveBeenNthCalledWith(1, "github", "repository.branch.publish", expect.objectContaining({
       owner: "constal-ai", repository: "horizon", base: "main", archive: "a".repeat(64),
       branch: "constal/horizon-42-plan-fact-12",
-    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":branch") }));
+    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":branch"), timeoutMs: 600_000 }));
     expect(invoke).toHaveBeenNthCalledWith(2, "github", "pull-request.create", expect.objectContaining({
       head: "constal/horizon-42-plan-fact-12", base: "main",
-    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":pull-request") }));
+    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":pull-request"), timeoutMs: 600_000 }));
   });
 });
