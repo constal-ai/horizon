@@ -1,6 +1,6 @@
 {
   "name": "@constal/horizon",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "description": "Constal's long-horizon software agent.",
   "private": true,
   "type": "module",
