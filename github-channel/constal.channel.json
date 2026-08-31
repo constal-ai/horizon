@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "kind": "channel",
+  "id": "horizon-github",
+  "namespace": "default",
+  "version": "0.1.0",
+  "entry": "src/github-channel/index.ts",
+  "config": {
+    "repositories": ["constal-ai/horizon"],
+    "events": ["github.issue.activated", "github.issue.comment", "github.pull-request.comment", "github.status"],
+    "routes": {
+      "github.issue.activated": "issue-work",
+      "github.issue.comment": "operate",
+      "github.pull-request.comment": "operate",
+      "github.status": "operate"
+    },
+    "mention": "@constalai",
+    "label": "horizon",
+    "approverPermissions": ["write", "maintain", "admin"],
+    "semanticApproval": true
+  },
+  "public": true,
+  "customerIdentity": "none",
+  "authProvider": "crn:constal:production:default:default:auth-provider/horizon-github",
+  "target": {
+    "resourceKind": "agent",
+    "selector": { "matchLabels": { "channels.constal.ai/horizon-github": "enabled" } }
+  },
+  "bindings": { "github": "crn:constal:production:platform:default:service/github" },
+  "policies": [],
+  "expectedCurrentDeploymentRevision": null
+}
