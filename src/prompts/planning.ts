@@ -10,6 +10,10 @@ This loop defines what success means. It does not choose architecture, milestone
 
 Every success criterion must describe an observable pass/fail outcome. Derive constraints and non-goals from evidence or explicit user direction; omit generic engineering platitudes.
 
+Treat "do not publish/deploy/push" and similar directions as authority ceilings and non-goals. Policy, the offered Tool set, and the durable Run journal enforce and record those effects; do not turn their universal absence into a forensic success criterion. The prepared workspace already has an immutable clean Git baseline. For an ordinary repository change, final content, Git diff/status, and the requested repository-native checks are sufficient proof; do not require a second pre-edit inventory, per-path hashes, or an independently reconstructed command transcript unless the objective itself is a forensic audit.
+
+Verification principles must demand the smallest evidence that proves the user-visible outcome and material invariants. They must not make a bounded change harder to prove than to implement.
+
 Resolve repository-answerable questions from the supplied investigations or focused reads. Preserve a question only when its answer materially changes product behavior, public contract, authority, risk tolerance, or execution scope.`,
   tools: "Use read-only repository or primary-source Tools only to close one concrete rubric gap. Do not design or edit the solution.",
   output: `Return exactly:
@@ -34,6 +38,8 @@ Keep the planning surface proportional to the semantic surface and risk. One bou
 
 Repository-local tests, pre/post status checks, exact diff review, and confirmation that disallowed commands were absent are verification for the change they prove. Do not promote them into a later milestone when the same owner and workspace can perform them as part of the bounded delivery outcome.
 
+Horizon begins execution from a committed clean Git baseline, and every Tool and Resource effect is already journaled by the runtime. Reuse those native facts. Do not design a second baseline made of full-tree path inventories or per-file hashes, and do not require a specialist to prove the universal absence of an effect it had no authority or Tool to perform.
+
 Horizon already runs an independent Verifier and Reconciler after each work unit. Integrated evidence acceptance belongs to those runtime roles; do not define a design milestone whose only outcome is reviewing, accepting, or reconciling evidence from another milestone.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
@@ -53,6 +59,8 @@ A semantic decision may be its own work unit. A decision needing several observa
 Steps must be self-contained natural-language specifications, not file checklists. State the assigned milestone id, specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
 
 Keep implementation and its direct proof in one work unit when one specialist can perform both without crossing an ownership, authority, rollback, migration, or dependency boundary. A review, diff inspection, test command, or no-side-effect check is verification—not a separate work unit—unless it can proceed independently or controls a materially different risk. A bounded single-file change should normally remain one execution loop; split it only when the supplied evidence establishes a real boundary.
+
+Use the prepared Git baseline and final diff/status to attribute repository changes. Do not add pre-edit full-tree inventories, recursive manifests, per-file hash captures, or command-transcript audits unless the user requested forensic evidence or Git cannot represent the relevant state. Operational prohibitions remain authority ceilings recorded by the Run journal, not implementation work.
 
 The dependsOn field contains step ids only—never design milestone ids. The planner deterministically attaches the supplied required prerequisite step ids to this milestone's root work; include a prerequisite step id only when a more specific dependency is needed.
 
@@ -76,7 +84,9 @@ export const ASSERTION_SYSTEM = composePrompt({
   context: "Dynamic context supplies the rubric, design, full work plan, discovery evidence, and exactly one assigned step.",
   rules: `${COMMON_RULES}
 
-Assertions must be observable and executable by an independent verifier. Do not assert implementation style, prose quality, filenames alone, or vague maintainability. Include a negative-path assertion when the assigned responsibility has a meaningful failure or denial path.`,
+Assertions must be observable and executable by an independent verifier. Do not assert implementation style, prose quality, filenames alone, or vague maintainability. Include a negative-path assertion when the assigned responsibility has a meaningful failure or denial path.
+
+Require only evidence the verifier can independently reproduce after execution. For a normal Git workspace change, inspect the final content and diff/status and run the requested checks. The committed workspace baseline is already authoritative; do not require the verifier to recreate a pre-edit filesystem inventory. Do not require proof of a universal negative such as "no deploy happened" when Policy, unavailable Tools, and the durable Run journal are the enforcement and audit boundary. A user prohibition without an executable failure path is a constraint, not a synthetic negative-path test.`,
   tools: "Use read-only repository Tools only to confirm available proof surfaces and repository-native test commands.",
   output: `Return exactly:
 {"object":"constal.horizon.step-assertions","version":1,"revision":1,"stepId":"exact assigned id","assertions":[{"id":"stable assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}
@@ -99,6 +109,8 @@ Treat discovery and investigation artifacts as historical snapshots, not mutable
 Assign repair to the earliest planning artifact that is both currently deficient and actually mutable in this pipeline. Discovery is not a repair owner here. When a later design decision already closes an earlier repository-answerable unknown with evidence, accept that handoff instead of repeatedly routing the same historical state to design.
 
 Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.
+
+Over-proof is itself a blocking planning defect when it makes a bounded outcome unverifiable or disproportionate. Reject plans that recreate Horizon's immutable Git baseline with full-tree inventories or hashes, require an independent verifier to reproduce pre-edit state after mutation, or demand proof of unobservable universal negatives already governed by Policy and the Run journal. Route that repair to the earliest owner that introduced the unnecessary criterion, design, work, or assertion.
 
 Judge the plan together with Horizon's stable role contracts. Execution specialists preserve unrelated changes, report observed operation and check failures honestly, and cannot deploy or publish unless the assigned specification explicitly authorizes it. Verifiers are read-only, reproduce proof, and return failed when an assertion is not satisfied. Do not require every work unit to restate these ambient invariants or exhaustively rehearse generic failure handling. Require task-specific recovery only when the objective needs behavior beyond those contracts.
 

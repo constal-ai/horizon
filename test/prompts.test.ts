@@ -45,4 +45,13 @@ describe("Horizon role prompts", () => {
     expect(INVESTIGATOR_SYSTEM).toContain("do not search indefinitely for a substitute");
     expect(INVESTIGATOR_SYSTEM).toContain("execution-phase responsibility");
   });
+
+  it("uses native Git and journal evidence instead of forensic over-proof", () => {
+    expect(RUBRIC_SYSTEM).toContain("authority ceilings and non-goals");
+    expect(RUBRIC_SYSTEM).toContain("must not make a bounded change harder to prove than to implement");
+    expect(DESIGN_SYSTEM).toContain("Do not design a second baseline");
+    expect(DECOMPOSITION_SYSTEM).toContain("Do not add pre-edit full-tree inventories");
+    expect(ASSERTION_SYSTEM).toContain("do not require the verifier to recreate a pre-edit filesystem inventory");
+    expect(CRITIQUE_SYSTEM).toContain("Over-proof is itself a blocking planning defect");
+  });
 });
