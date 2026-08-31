@@ -36,8 +36,8 @@
     },
     "proportional": {
       "crn": "crn:constal:production:52752121874141666554:default:scorer/horizon-proportional-small-task",
-      "version": "1",
-      "hash": "ff8e23d8097375e0ad35789c50e2ce0c49c94302dbec48fe6819e863e1af0155"
+      "version": "2",
+      "hash": "8903c6024e1e9ad97b10b9fc5d0a47fc41e4dd4bd686390ababe01dfc99d0abc"
     }
   },
   "results": {
