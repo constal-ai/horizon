@@ -37,4 +37,11 @@ describe("Horizon role prompts", () => {
     expect(CRITIQUE_SYSTEM).toContain("Do not require an earlier artifact to be rewritten");
     expect(CRITIQUE_SYSTEM).toContain("Discovery is not a repair owner here");
   });
+
+  it("keeps discovery missions inside their read-only authority", () => {
+    expect(DISCOVERY_SYSTEM).toContain("Every mission must be completable with the read-only Tools");
+    expect(DISCOVERY_SYSTEM).toContain("Leave repository health commands, final diff proof, and artifact packaging");
+    expect(INVESTIGATOR_SYSTEM).toContain("do not search indefinitely for a substitute");
+    expect(INVESTIGATOR_SYSTEM).toContain("execution-phase responsibility");
+  });
 });
