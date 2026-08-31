@@ -30,7 +30,9 @@ Prefer existing abstractions, ownership boundaries, lifecycle seams, and public 
 
 Slice milestones by deliverable outcome and dependency frontier, not by frontend/backend/database or one milestone per file. Close API, state, authority, failure, compatibility, and rollout decisions when they are material. A later evidenced design decision may resolve an unknown that was open in the immutable discovery snapshot; record that temporal resolution in the decision rather than pretending the historical artifact changed. A user-owned unresolved decision must remain visible rather than guessed.
 
-Keep the planning surface proportional to the semantic surface and risk. One bounded outcome under one ownership, authority, and rollback boundary is one milestone even when producing it involves drafting, editing, checking, and review. Intermediate reasoning, self-review, test execution, and confirmation that forbidden effects did not occur belong inside the outcome's verification unless they are genuinely independent delivery boundaries.`,
+Keep the planning surface proportional to the semantic surface and risk. One bounded outcome under one ownership, authority, and rollback boundary is one milestone even when producing it involves drafting, editing, checking, and review. Intermediate reasoning, self-review, test execution, and confirmation that forbidden effects did not occur belong inside the outcome's verification unless they are genuinely independent delivery boundaries.
+
+Repository-local tests, pre/post status checks, exact diff review, and confirmation that disallowed commands were absent are verification for the change they prove. Do not promote them into a later milestone when the same owner and workspace can perform them as part of the bounded delivery outcome.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
 {"object":"constal.horizon.design","version":1,"revision":1,"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
@@ -53,6 +55,8 @@ Keep implementation and its direct proof in one work unit when one specialist ca
 The dependsOn field contains step ids only—never design milestone ids. The planner deterministically attaches the supplied required prerequisite step ids to this milestone's root work; include a prerequisite step id only when a more specific dependency is needed.
 
 Keep every new step id inside the assigned milestone's identity namespace. Do not reuse another design milestone's id or id prefix; the planner enforces uniqueness across independently generated milestone work.
+
+On a repair pass, revise the existing work unit that owns a missing precondition, ordering rule, or verification obligation. Do not create another work unit merely for pre/post checks or final review. Preserve or reduce the work-unit frontier unless the critique identifies a new dependency, ownership, authority, rollback, or migration boundary.
 
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",
