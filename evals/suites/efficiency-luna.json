@@ -1,5 +1,5 @@
 {
-  "id": "horizon-efficiency-0-3-22-luna-v4",
+  "id": "horizon-efficiency-0-3-23-luna-v5",
   "dataset": {
     "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-efficiency",
     "version": "1",
@@ -7,7 +7,7 @@
   },
   "subject": {
     "agent": "crn:constal:production:52752121874141666554:default:agent/horizon",
-    "bundle": "2ea4975e21c3bbe2406e8445297c3e987a78ce4a7b79b89bbd1dd7174cb36bb5"
+    "bundle": "d0e269004ba0a5f009d12170745a3fe38673312710aa6b5793bce0984e871e12"
   },
   "mode": "fresh",
   "scorers": [
