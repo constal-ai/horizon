@@ -16,6 +16,9 @@ describe("Horizon GitHub Auth Provider", () => {
     expect(result).toEqual({ authenticated: true, subject: "github:123", claims: {
       provider: "github", installation: "123", sender_id: "7", sender_login: "wlan0",
     } });
+    expect(invoke).toHaveBeenCalledWith("verifier", "webhook.verify", {
+      bodyBase64: "e30=", signature: `sha256=${"a".repeat(64)}`,
+    });
     if (!result.authenticated) throw new Error("expected authenticated evidence");
     expect(Object.keys(result.claims ?? {})).toEqual(expect.arrayContaining(["sender_id", "sender_login"]));
   });
