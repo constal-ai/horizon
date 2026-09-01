@@ -111,7 +111,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.2",
+  version: "0.3.3",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],
@@ -153,7 +153,8 @@ export default channel({
     respond(result) {
       return { status: 202, headers: { "content-type": "application/json" },
         bodyBase64: encode({ accepted: true, delivery: result.event.id, session: result.event.session,
-          runId: result.runId, status: result.status }) };
+          runId: result.runId, status: result.status,
+          ...(result.error ? { error: boundedText(result.error, 4_096) } : {}) }) };
     },
     async send(message, context) {
       const match = message.destination.match(/^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#(\d+)$/u);

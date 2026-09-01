@@ -54,6 +54,16 @@ describe("Horizon GitHub Channel", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it("encodes bounded Agent admission failures for transport diagnostics", async () => {
+    const response = await horizonGitHub.protocol.respond({ event: { v: 1, id: "delivery-1", type: "github.issue_comment",
+      source: "crn:constal:production:tenant:default:channel/horizon-github" as never,
+      target: "crn:constal:production:tenant:default:agent/horizon" as never, session: "github-session", data: null,
+      occurredAt: 1 }, runId: "", status: "failed", error: "SessionRoutingChanged" }, context());
+    const body = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(response.bodyBase64!), (character) => character.charCodeAt(0))));
+    expect(body).toEqual({ accepted: true, delivery: "delivery-1", session: "github-session", runId: "", status: "failed",
+      error: "SessionRoutingChanged" });
+  });
+
   it("delivers durable Run presentations through the GitHub Connection", async () => {
     const invoke = vi.fn(async () => ({ comment: { id: 99, html_url: "https://github.com/constal-ai/horizon/issues/42#issuecomment-99" }, duplicate: false }));
     const receipt = await horizonGitHub.protocol.send!({ id: "message-1", destination: "constal-ai/horizon#42",
