@@ -236,7 +236,7 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
 
   let receipt: ConstalApiChangeReceipt;
   try {
-    receipt = await ctx.invoke<ConstalApiChangeReceipt>(ctx.resources.api!, "apply", {
+    receipt = await ctx.invokeAsync<ConstalApiChangeReceipt>(ctx.resources.api!, "apply", {
       plan: { id: plan.id, hash: plan.hash }, eventId: `horizon-setup-${plan.hash.slice(0, 32)}`,
     }, { dedupeKey: `horizon-setup-apply:${plan.hash}` });
   } catch (error) {

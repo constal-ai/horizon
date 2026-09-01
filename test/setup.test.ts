@@ -56,11 +56,12 @@ describe("Horizon durable setup workflow", () => {
           } } }] });
           return plan;
         }
-        if (operation === "apply") {
-          expect(args).toMatchObject({ plan: { id: plan.id, hash: plan.hash } });
-          return receipt;
-        }
         throw new Error(`unexpected operation ${operation}`);
+      },
+      invokeAsync: (_resource: string, operation: string, args: unknown) => {
+        expect(operation).toBe("apply");
+        expect(args).toMatchObject({ plan: { id: plan.id, hash: plan.hash } });
+        return handle(receipt);
       },
     } as unknown as Ctx;
 
