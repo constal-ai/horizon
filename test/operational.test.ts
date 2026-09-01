@@ -19,8 +19,10 @@ describe("Horizon behavior routing", () => {
   });
 
   it("offers no workspace capability to the operational loop", async () => {
-    const turn = vi.fn(async (input: { tools: string[] }) => {
+    const turn = vi.fn(async (input: { tools: string[]; context: unknown }) => {
       expect(input.tools).toEqual(["github_repositories", "github_repository", "github_tree", "github_file", "web_search", "web_fetch"]);
+      expect(input.context).toEqual({ eventClass: "github.question",
+        context: { repository: "constal-ai/horizon" }, constraints: [] });
       return { toolCalls: [], message: { role: "assistant", content: JSON.stringify({
         object: "constal.horizon.operational-result", version: 1, status: "complete",
         message: "The module validates setup screens.", handoff: "none", evidence: [],
@@ -29,7 +31,8 @@ describe("Horizon behavior routing", () => {
     const commit = vi.fn(async () => ({ hash: "a".repeat(64) }));
     const ctx = { turn, commit, resources: { model: "model", github: "github", web: "web", search: "search" } } as unknown as Ctx;
     await expect(runHorizonOperational(horizonRoutedEvent({ object: "constal.horizon.event", version: 1,
-      behavior: "operate", eventClass: "github.question", objective: "Explain it." })!, ctx))
+      behavior: "operate", eventClass: "github.question", objective: "Explain it.",
+      context: { repository: "constal-ai/horizon", approval: { permissions: ["write", "admin"] } } })!, ctx))
       .resolves.toMatchObject({ status: "complete" });
     expect(commit).toHaveBeenCalledOnce();
   });

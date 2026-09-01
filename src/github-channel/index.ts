@@ -3,6 +3,7 @@ import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
 import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
 
 const provider = { kind: "local", resourceKind: "auth-provider", id: "horizon-github" } as const;
+const CONSTAL_COMMENT_MARKER = /<!--\s*constal:[a-f0-9]{64}\s*-->/u;
 
 interface HorizonGitHubConfig {
   repositories: string[];
@@ -102,7 +103,8 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
       || action === "labeled" && selected.label !== "" && issueValue.labels.includes(selected.label);
     return activated && selected.events.includes("github.issue.activated") ? "github.issue.activated" : null;
   }
-  if (event === "issue_comment") return selected.events.includes("github.issue.comment") ? "github.issue.comment" : null;
+  if (event === "issue_comment") return action === "created" && selected.events.includes("github.issue.comment")
+    ? "github.issue.comment" : null;
   if (["pull_request_review_comment", "pull_request_review"].includes(event)) {
     return selected.events.includes("github.pull-request.comment") ? "github.pull-request.comment" : null;
   }
@@ -111,7 +113,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.3",
+  version: "0.3.4",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],
@@ -128,6 +130,9 @@ export default channel({
       const selected = config(context.config); const payload = decode(request.bodyBase64); const repo = repository(payload);
       if (!selected.repositories.some((candidate) => candidate.toLowerCase() === repo.fullName.toLowerCase())) {
         return ignored(delivery, "repository_not_selected");
+      }
+      if (event === "issue_comment" && CONSTAL_COMMENT_MARKER.test(boundedText(record(payload.comment).body))) {
+        return ignored(delivery, "constal_generated_comment");
       }
       const eventClass = route(event, payload, selected);
       if (!eventClass) return ignored(delivery, "event_not_configured");

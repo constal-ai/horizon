@@ -17,6 +17,13 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function operationalContext(value: unknown): unknown {
+  const source = record(value);
+  if (!source) return value ?? null;
+  const { approval: _approval, ...context } = source;
+  return context;
+}
+
 export function parseHorizonOperationalResult(value: unknown): HorizonOperationalResult | null {
   const source = record(value);
   if (!source || source.object !== "constal.horizon.operational-result" || source.version !== 1
@@ -36,7 +43,7 @@ export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx)
   const tools = availableTools(OPERATIONAL_TOOL_NAMES, ctx);
   const loop = await runReactLoop({
     role: "operational", system: HORIZON_OPERATIONAL_SYSTEM, objective: event.objective,
-    context: { eventClass: event.eventClass, context: event.context ?? null, constraints: event.constraints ?? [] },
+    context: { eventClass: event.eventClass, context: operationalContext(event.context), constraints: event.constraints ?? [] },
     tools, model: "model", maxRounds: 64, parse: parseHorizonOperationalResult,
   }, ctx);
   const result = loop.artifact;

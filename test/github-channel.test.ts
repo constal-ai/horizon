@@ -54,6 +54,20 @@ describe("Horizon GitHub Channel", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it("ignores Constal-generated comments instead of feeding presentations back into Horizon", async () => {
+    const value = { ...payload("ordinary issue"), action: "created", comment: {
+      body: `Horizon update\n\n<!-- constal:${"a".repeat(64)} -->`,
+    } };
+    await expect(horizonGitHub.protocol.receive(request("issue_comment", value), context()))
+      .resolves.toMatchObject({ ignored: true, reason: "constal_generated_comment" });
+  });
+
+  it("ignores edited issue comments", async () => {
+    const value = { ...payload("ordinary issue"), action: "edited", comment: { body: "Updated request" } };
+    await expect(horizonGitHub.protocol.receive(request("issue_comment", value), context()))
+      .resolves.toMatchObject({ ignored: true, reason: "event_not_configured" });
+  });
+
   it("encodes bounded Agent admission failures for transport diagnostics", async () => {
     const response = await horizonGitHub.protocol.respond({ event: { v: 1, id: "delivery-1", type: "github.issue_comment",
       source: "crn:constal:production:tenant:default:channel/horizon-github" as never,
