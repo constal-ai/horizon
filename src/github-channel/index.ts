@@ -82,12 +82,6 @@ function issue(payload: Record<string, unknown>) {
     }) : [] };
 }
 
-async function activeConversation(context: ChannelContext, repo: ReturnType<typeof repository>, issueNumber: number): Promise<boolean> {
-  const result = await context.invoke<{ comments?: Array<{ body?: unknown }> }>(context.resources.github!, "issue.comments.list",
-    { owner: repo.owner, repository: repo.name, issue: issueNumber, page: 1, perPage: 100 });
-  return Array.isArray(result.comments) && result.comments.some(({ body }) => typeof body === "string" && body.includes("<!-- constal:"));
-}
-
 function objective(eventClass: string, payload: Record<string, unknown>, issueValue: ReturnType<typeof issue>): string {
   if (eventClass === "github.issue.comment") {
     const comment = record(payload.comment);
@@ -117,10 +111,10 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.1",
+  version: "0.3.2",
   public: true,
   authProvider: provider,
-  needs: [{ binding: "github", kind: "service", ops: ["issue.comments.list", "issue.comment.create", "repository.permission.get"] }],
+  needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],
   protocol: {
     id: "horizon.github",
     version: "1",
@@ -138,12 +132,6 @@ export default channel({
       const eventClass = route(event, payload, selected);
       if (!eventClass) return ignored(delivery, "event_not_configured");
       const issueValue = issue(payload);
-      if (eventClass === "github.issue.comment") {
-        const comment = record(payload.comment); const body = boundedText(comment.body);
-        if (!body.includes(selected.mention) && !await activeConversation(context, repo, issueValue.number)) {
-          return ignored(delivery, "conversation_not_active");
-        }
-      }
       const behavior = selected.routes[eventClass];
       if (!behavior) return ignored(delivery, "behavior_not_configured");
       const installation = record(payload.installation); const sender = record(payload.sender);

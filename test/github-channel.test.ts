@@ -45,14 +45,13 @@ describe("Horizon GitHub Channel", () => {
       .resolves.toMatchObject({ ignored: true, reason: "event_not_configured", response: { status: 202 } });
   });
 
-  it("continues an active issue conversation without requiring another mention", async () => {
-    const invoke = vi.fn(async () => ({ comments: [{ body: "Working on it.\n\n<!-- constal:abc -->" }] }));
+  it("routes issue comments directly to their selected sink without reconstructing conversation state", async () => {
+    const invoke = vi.fn();
     const value = { ...payload("ordinary issue"), action: "created", comment: { body: "What is the current plan?" } };
     const event = await horizonGitHub.protocol.receive(request("issue_comment", value), context(invoke));
     expect(event).toMatchObject({ data: { behavior: "operate", eventClass: "github.issue.comment",
-      objective: "What is the current plan?" } });
-    expect(invoke).toHaveBeenCalledWith("github", "issue.comments.list",
-      { owner: "constal-ai", repository: "horizon", issue: 42, page: 1, perPage: 100 });
+      objective: "What is the current plan?" }, session: expect.stringMatching(/^github-[a-f0-9]{48}$/u) });
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("delivers durable Run presentations through the GitHub Connection", async () => {
