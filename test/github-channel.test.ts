@@ -32,7 +32,8 @@ function context(invoke = vi.fn()): ChannelContext {
 describe("Horizon GitHub Channel", () => {
   it("routes activated issue work into the durable planning and approval pipeline", async () => {
     const event = await horizonGitHub.protocol.receive(request("issues", payload()), context());
-    expect(event).toMatchObject({ type: "github.issues", data: {
+    expect(event).toMatchObject({ type: "github.issues", reply: { destination: "constal-ai/horizon#42",
+      metadata: { provider: "github", repository: "constal-ai/horizon", issue: 42 } }, data: {
       object: "constal.horizon.event", behavior: "issue-work", eventClass: "github.issue.activated",
       source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
     } });
@@ -54,10 +55,12 @@ describe("Horizon GitHub Channel", () => {
       { owner: "constal-ai", repository: "horizon", issue: 42, page: 1, perPage: 100 });
   });
 
-  it("delivers reconcile-safe issue comments through the GitHub Resource", async () => {
+  it("delivers durable Run presentations through the GitHub Connection", async () => {
     const invoke = vi.fn(async () => ({ comment: { id: 99, html_url: "https://github.com/constal-ai/horizon/issues/42#issuecomment-99" }, duplicate: false }));
     const receipt = await horizonGitHub.protocol.send!({ id: "message-1", destination: "constal-ai/horizon#42",
-      data: { body: "The plan is ready." } }, context(invoke));
+      data: { object: "constal.run.presentation", version: 1,
+        presentation: { object: "constal.await.presentation", version: 1, kind: "approval",
+          title: "Plan ready", body: "The plan is ready." } } }, context(invoke));
     expect(receipt).toMatchObject({ status: "delivered", externalId: "99", metadata: { provider: "github", duplicate: false } });
     expect(invoke).toHaveBeenCalledWith("github", "issue.comment.create", expect.objectContaining({
       owner: "constal-ai", repository: "horizon", issue: 42, body: "The plan is ready.", marker: expect.stringMatching(/^[a-f0-9]{64}$/u),

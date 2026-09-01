@@ -117,7 +117,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.1.0",
+  version: "0.2.0",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comments.list", "issue.comment.create", "repository.permission.get"] }],
@@ -150,6 +150,8 @@ export default channel({
       const session = `github-${(await hashValue({ installation: installation.id, repository: repo.id, issue: issueValue.number })).slice(0, 48)}`;
       return {
         id: delivery, type: `github.${event}`, session, deliver: "queue",
+        reply: { destination: `${repo.fullName}#${issueValue.number}`,
+          metadata: { provider: "github", repository: repo.fullName, issue: issueValue.number } },
         data: { object: "constal.horizon.event", version: 1, behavior, eventClass,
           objective: objective(eventClass, payload, issueValue),
           context: { provider: "github", repository: repo.fullName, issue: issueValue.number,
@@ -168,13 +170,16 @@ export default channel({
     async send(message, context) {
       const match = message.destination.match(/^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#(\d+)$/u);
       const data = record(message.data);
-      if (!match || typeof data.body !== "string" || !data.body.trim()) {
+      const presentation = data.presentation && typeof data.presentation === "object" && !Array.isArray(data.presentation)
+        ? data.presentation as Record<string, unknown> : null;
+      const body = typeof data.body === "string" ? data.body : typeof presentation?.body === "string" ? presentation.body : "";
+      if (!match || !body.trim()) {
         return { id: message.id, status: "failed", error: "GitHub issue-comment destination or body is invalid" };
       }
       const marker = await hashValue({ channel: context.channel, id: message.id, destination: message.destination });
       const result = await context.invoke<{ comment?: { id?: unknown; html_url?: unknown }; duplicate?: boolean }>(
         context.resources.github!, "issue.comment.create", {
-          owner: match[1], repository: match[2], issue: Number(match[3]), body: data.body, marker,
+          owner: match[1], repository: match[2], issue: Number(match[3]), body, marker,
         }, { dedupeKey: message.id });
       return { id: message.id, status: "delivered", externalId: String(result.comment?.id ?? marker),
         metadata: { provider: "github", duplicate: result.duplicate === true,

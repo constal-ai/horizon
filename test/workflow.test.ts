@@ -134,7 +134,7 @@ describe("Horizon workflow", () => {
     expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 12, replans: 0 });
     expect((committed as Array<{ kind?: string }>).map(({ kind }) => kind)).toEqual([
       "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
-      "horizon.verification", "horizon.progress", "horizon.reconciliation", "horizon.result",
+      "horizon.verification", "horizon.milestone", "horizon.progress", "horizon.reconciliation", "horizon.result",
     ]);
   });
 
