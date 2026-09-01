@@ -13,7 +13,7 @@ describe("Horizon managed Agent package", () => {
     expect({ id: manifest.id, version: manifest.version, mode: manifest.mode })
       .toEqual({ id: agent.id, version: agent.version, mode: agent.mode });
     expect(pkg.version).toBe(agent.version);
-    expect(pkg.dependencies).toEqual({ "@constal/sdk": "2.3.0" });
+    expect(pkg.dependencies).toEqual({ "@constal/sdk": "2.4.0" });
   });
 
   it("declares every model-facing Tool and long-horizon subtask exactly once", async () => {
