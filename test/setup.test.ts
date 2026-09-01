@@ -54,6 +54,8 @@ describe("Horizon durable setup workflow", () => {
           expect(args).toMatchObject({ operations: [{ operation: "channel.install", input: { configuration: {
             routes: { "github.issue.activated": "issue-work", "github.issue.comment": "operate" },
           } } }] });
+          expect((args as { operations: Array<{ input: { configuration: Record<string, unknown> } }> })
+            .operations[0]!.input.configuration).not.toHaveProperty("connection");
           return plan;
         }
         throw new Error(`unexpected operation ${operation}`);

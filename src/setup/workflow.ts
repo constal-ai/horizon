@@ -198,13 +198,14 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
   const approverPermissions = strings(response.values?.approverPermissions, ["write", "maintain", "admin"], 3);
   const configuration: SetupConfiguration = { connection, repositories, ...selectedRouting,
     approverPermissions, semanticApproval: true };
+  const { connection: _connection, ...channelConfiguration } = configuration;
 
   let plan: ConstalApiChangePlan;
   try {
     plan = await ctx.invoke<ConstalApiChangePlan>(ctx.resources.api!, "plan", {
       objective: "Install or update Horizon for GitHub using the reviewed repository, event-routing, and approval configuration.",
       operations: [{ id: "install-channel", operation: "channel.install", input: {
-        namespace: ctx.run.namespace, package: channelPackage, id: "horizon-github", configuration,
+        namespace: ctx.run.namespace, package: channelPackage, id: "horizon-github", configuration: channelConfiguration,
         target: { resourceKind: "agent", selector: { matchLabels: { "channels.constal.ai/horizon-github": "enabled" } } },
         scopedBindings: [{ key: "github-user", subject: `github:${connection.installationId}`, target: connection.credential }],
         ingressRoutes: [{ provider: "github", key: `installation:${connection.installationId}` }],
