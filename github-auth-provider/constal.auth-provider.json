@@ -10,5 +10,5 @@
     "verifier": "crn:constal:production:platform:default:service/github-webhook-verifier"
   },
   "policies": [],
-  "expectedCurrentDeploymentRevision": "9d8d78e8-c5c6-41c8-8de4-e70c1351faf5"
+  "expectedCurrentDeploymentRevision": "57ff4b0a-4fa1-4bcc-8afd-0a810d221b70"
 }
