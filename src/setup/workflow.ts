@@ -12,7 +12,6 @@ const STEP_LABELS = ["Introduction", "Connect GitHub", "Repositories", "Events &
 
 interface ConnectionReceipt {
   credential: { crn: string; hash: string };
-  principal: string;
   installationId: number;
   accountLogin: string;
   repositories: string[];
@@ -67,15 +66,13 @@ function connectionReceipt(value: unknown): ConnectionReceipt {
   const source = record(value); const credential = record(source?.credential);
   if (!source || !credential || typeof credential.crn !== "string" || !credential.crn.includes(":credential/")
     || typeof credential.hash !== "string" || !/^[a-f0-9]{64}$/u.test(credential.hash)
-    || typeof source.principal !== "string" || !source.principal.includes(":principal/")
     || !Number.isSafeInteger(source.installationId) || Number(source.installationId) < 1
     || typeof source.accountLogin !== "string" || !source.accountLogin
     || !Array.isArray(source.repositories) || source.repositories.length > 500
     || source.repositories.some((item) => typeof item !== "string" || !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u.test(item))) {
     throw new TypeError("GitHub Credential interaction returned an invalid non-secret receipt");
   }
-  return { credential: { crn: credential.crn, hash: credential.hash }, principal: source.principal,
-    installationId: Number(source.installationId),
+  return { credential: { crn: credential.crn, hash: credential.hash }, installationId: Number(source.installationId),
     accountLogin: source.accountLogin, repositories: [...new Set(source.repositories as string[])].sort() };
 }
 

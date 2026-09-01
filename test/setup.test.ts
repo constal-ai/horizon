@@ -21,8 +21,7 @@ describe("Horizon durable setup workflow", () => {
     const values: Record<string, unknown> = {
       introduction: {},
       github: { credential: { crn: "crn:constal:production:tenant:default:credential/horizon-github", hash: "d".repeat(64) },
-        principal: "crn:constal:production:tenant:identity:principal/github-installation", installationId: 123,
-        accountLogin: "constal-ai",
+        installationId: 123, accountLogin: "constal-ai",
         repositories: ["constal-ai/horizon", "constal-ai/coreagents"] },
       repositories: { repositories: ["constal-ai/horizon"] },
       routing: { events: ["github.issue.activated", "github.issue.comment"], routes: {

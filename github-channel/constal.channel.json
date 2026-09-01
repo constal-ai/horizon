@@ -3,7 +3,7 @@
   "kind": "channel",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "entry": "src/github-channel/index.ts",
   "config": {
     "repositories": ["constal-ai/horizon"],
@@ -21,7 +21,11 @@
   },
   "public": true,
   "customerIdentity": "none",
-  "authProvider": "crn:constal:production:52752121874141666554:default:auth-provider/horizon-github",
+  "authProvider": {
+    "kind": "local",
+    "resourceKind": "auth-provider",
+    "id": "horizon-github"
+  },
   "target": {
     "resourceKind": "agent",
     "selector": { "matchLabels": { "channels.constal.ai/horizon-github": "enabled" } }

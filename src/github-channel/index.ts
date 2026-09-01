@@ -1,8 +1,8 @@
-import { authProviderName, channel, hashValue, type ChannelContext, type ChannelRequest } from "@constal/sdk";
+import { channel, hashValue, type ChannelContext, type ChannelRequest } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
 import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
 
-const provider = authProviderName("crn:constal:production:default:default:auth-provider/horizon-github");
+const provider = { kind: "local", resourceKind: "auth-provider", id: "horizon-github" } as const;
 
 interface HorizonGitHubConfig {
   repositories: string[];
@@ -117,7 +117,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.2.1",
+  version: "0.3.0",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comments.list", "issue.comment.create", "repository.permission.get"] }],
