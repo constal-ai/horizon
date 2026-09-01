@@ -14,6 +14,7 @@ describe("Horizon managed Agent package", () => {
       .toEqual({ id: agent.id, version: agent.version, mode: agent.mode });
     expect(pkg.version).toBe(agent.version);
     expect(pkg.dependencies).toEqual({ "@constal/sdk": "2.5.0" });
+    expect(manifest.labels).toEqual({ "channels.constal.ai/horizon-github": "enabled" });
   });
 
   it("declares every model-facing Tool and long-horizon subtask exactly once", async () => {

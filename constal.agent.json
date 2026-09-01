@@ -3,9 +3,12 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "entry": "src/index.ts",
   "mode": "script",
+  "labels": {
+    "channels.constal.ai/horizon-github": "enabled"
+  },
   "bindings": {
     "model": "crn:constal:production:platform:default:model/gpt-5.6-luna",
     "sandbox": "crn:constal:production:platform:default:sandbox-pool/constal-code",
