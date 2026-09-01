@@ -17,6 +17,12 @@ describe("Horizon role prompts", () => {
     expect(prompt).toContain("evidence");
   });
 
+  it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM, CRITIQUE_SYSTEM])(
+    "keeps planning revision identity out of the semantic model contract", (prompt) => {
+      expect(prompt).not.toContain('"revision":1');
+      expect(prompt).not.toContain("Use the revision supplied in context");
+    });
+
   it("makes planning immutable and execution responsibility-scoped", () => {
     expect(SOURCE_RESOLVER_SYSTEM).toContain("one exact GitHub repository");
     expect(DISCOVERY_SYSTEM).toContain("separate child Agent");

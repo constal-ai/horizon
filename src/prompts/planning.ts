@@ -17,9 +17,7 @@ Verification principles must demand the smallest evidence that proves the user-v
 Resolve repository-answerable questions from the supplied investigations or focused reads. Preserve a question only when its answer materially changes product behavior, public contract, authority, risk tolerance, or execution scope.`,
   tools: "Use read-only repository or primary-source Tools only to close one concrete rubric gap. Do not design or edit the solution.",
   output: `Return exactly:
-{"object":"constal.horizon.rubric","version":1,"revision":1,"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"id":"id","question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}
-
-Use the revision supplied in context.`,
+{"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"id":"id","question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}`,
 });
 
 export const DESIGN_SYSTEM = composePrompt({
@@ -43,9 +41,9 @@ Horizon begins execution from a committed clean Git baseline, and every Tool and
 Horizon already runs an independent Verifier and Reconciler after each work unit. Integrated evidence acceptance belongs to those runtime roles; do not define a design milestone whose only outcome is reviewing, accepting, or reconciling evidence from another milestone.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
-{"object":"constal.horizon.design","version":1,"revision":1,"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
+{"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
 
-Use the revision supplied in context. Milestone dependencies must be acyclic.`,
+Milestone dependencies must be acyclic.`,
 });
 
 export const DECOMPOSITION_SYSTEM = composePrompt({
@@ -56,7 +54,7 @@ A semantic decision may be its own work unit. A decision needing several observa
   context: "Dynamic context supplies the rubric, full design, one assigned milestone, already accepted prerequisite steps, discovery evidence, previous plan and completed work during replanning, and critique feedback on repair passes.",
   rules: `${COMMON_RULES}
 
-Steps must be self-contained natural-language specifications, not file checklists. State the assigned milestone id, specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
+Steps must be self-contained natural-language specifications, not file checklists. State the specialist responsibility, dependencies, observable verification, and semantic stop condition. Generate steps only for the assigned milestone.
 
 Keep implementation and its direct proof in one work unit when one specialist can perform both without crossing an ownership, authority, rollback, migration, or dependency boundary. A review, diff inspection, test command, or no-side-effect check is verification—not a separate work unit—unless it can proceed independently or controls a materially different risk. A bounded single-file change should normally remain one execution loop; split it only when the supplied evidence establishes a real boundary.
 
@@ -73,9 +71,9 @@ Do not create an execution work unit solely to review, integrate, accept, or rec
 Preserve stable step ids for unchanged responsibilities across plan revisions. Never silently rewrite a completed responsibility; if new evidence invalidates it, change its specification so the outer workflow can invalidate and rerun it.`,
   tools: "Use read-only repository Tools only to ground scope, existing commands, and proof surfaces. Do not edit or execute the implementation.",
   output: `Return exactly:
-{"object":"constal.horizon.milestone-work","version":1,"revision":1,"milestoneId":"exact assigned milestone id","steps":[{"id":"stable id","milestoneId":"exact assigned milestone id","title":"work unit","responsibility":"one coherent semantic responsibility","specification":"self-contained execution specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"completion or honest plateau condition"}]}
+{"steps":[{"id":"stable id","title":"work unit","responsibility":"one coherent semantic responsibility","specification":"self-contained execution specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"completion or honest plateau condition"}]}
 
-Use the revision supplied in context. Dependencies may reference accepted prerequisite step ids or earlier steps in this milestone.`,
+Dependencies may reference accepted prerequisite step ids or earlier steps in this milestone.`,
 });
 
 export const ASSERTION_SYSTEM = composePrompt({
@@ -89,9 +87,7 @@ Assertions must be observable and executable by an independent verifier. Do not 
 Require only evidence the verifier can independently reproduce after execution. For a normal Git workspace change, inspect the final content and diff/status and run the requested checks. The committed workspace baseline is already authoritative; do not require the verifier to recreate a pre-edit filesystem inventory. Do not require proof of a universal negative such as "no deploy happened" when Policy, unavailable Tools, and the durable Run journal are the enforcement and audit boundary. A user prohibition without an executable failure path is a constraint, not a synthetic negative-path test.`,
   tools: "Use read-only repository Tools only to confirm available proof surfaces and repository-native test commands.",
   output: `Return exactly:
-{"object":"constal.horizon.step-assertions","version":1,"revision":1,"stepId":"exact assigned id","assertions":[{"id":"stable assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}
-
-Use the revision supplied in context.`,
+{"assertions":[{"id":"stable assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}`,
 });
 
 export const CRITIQUE_SYSTEM = composePrompt({
@@ -117,7 +113,7 @@ Judge the plan together with Horizon's stable role contracts. Execution speciali
 Inspect the complete current planning state and report every presently visible blocking finding in the same critique. Do not stop after the first defect when another material contradiction, dependency gap, authority issue, or unverifiable claim is already observable.`,
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
-{"object":"constal.horizon.plan-critique","version":1,"revision":1,"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":"one material user decision or null","blockedReason":"specific reason or null"}
+{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":"one material user decision or null","blockedReason":"specific reason or null"}
 
-Use the revision supplied in context. accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
+accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
 });

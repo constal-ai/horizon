@@ -7,6 +7,7 @@ import { ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM,
 import { PLANNER_SYSTEM } from "../prompts/planner.js";
 import { runReactLoop } from "../react-loop.js";
 import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
+import { milestoneWorkArtifact, planningArtifact } from "../planning-envelope.js";
 
 export interface PlanningPhaseResult<T> {
   artifact: T;
@@ -33,33 +34,35 @@ function context(planning: HzPlanInput): Record<string, unknown> {
 }
 
 export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
-  id: "horizon-rubric", version: "2",
+  id: "horizon-rubric", version: "3",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<RubricInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "rubric", system: RUBRIC_SYSTEM,
       objective: "Define the evidence-grounded success rubric.",
       context: { ...context(input.planning), priorRubric: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: (value) => parseHzRubric(value, input.planning.revision) }, ctx);
+      parse: (value) => parseHzRubric(planningArtifact(value,
+        { object: "constal.horizon.rubric", revision: input.planning.revision }), input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });
 
 export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
-  id: "horizon-design", version: "5",
+  id: "horizon-design", version: "6",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DesignInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "design", system: DESIGN_SYSTEM,
       objective: "Close architecture decisions and define delivery milestones.",
       context: { ...context(input.planning), rubric: input.rubric, priorDesign: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: (value) => parseHzDesign(value, input.planning.revision) }, ctx);
+      parse: (value) => parseHzDesign(planningArtifact(value,
+        { object: "constal.horizon.design", revision: input.planning.revision }), input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });
 
 export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>({
-  id: "horizon-milestone-decomposition", version: "5",
+  id: "horizon-milestone-decomposition", version: "6",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DecompositionInput>(ctx, envelope);
     const milestone = input.design.milestones.find(({ id }) => id === input.milestoneId);
@@ -71,13 +74,14 @@ export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>(
         acceptedPrerequisiteSteps: input.acceptedSteps, requiredPrerequisiteStepIds: input.requiredPrerequisiteStepIds,
         priorMilestoneSteps: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: (value) => parseHzMilestoneWork(value, input.planning.revision, input.milestoneId) }, ctx);
+      parse: (value) => parseHzMilestoneWork(milestoneWorkArtifact(value,
+        input.planning.revision, input.milestoneId), input.planning.revision, input.milestoneId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });
 
 export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
-  id: "horizon-assertions", version: "2",
+  id: "horizon-assertions", version: "3",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<AssertionInput>(ctx, envelope);
     const step = input.workPlan.steps.find(({ id }) => id === input.stepId);
@@ -87,13 +91,15 @@ export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assignedStep: step, priorAssertions: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: (value) => parseHzStepAssertions(value, input.planning.revision, input.stepId) }, ctx);
+      parse: (value) => parseHzStepAssertions(planningArtifact(value,
+        { object: "constal.horizon.step-assertions", revision: input.planning.revision, stepId: input.stepId }),
+      input.planning.revision, input.stepId) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });
 
 export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
-  id: "horizon-plan-critique", version: "4",
+  id: "horizon-plan-critique", version: "5",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<CritiqueInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,
@@ -101,13 +107,14 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, priorCritique: input.prior },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: (value) => parseHzPlanCritique(value, input.planning.revision) }, ctx);
+      parse: (value) => parseHzPlanCritique(planningArtifact(value,
+        { object: "constal.horizon.plan-critique", revision: input.planning.revision }), input.planning.revision) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });
 
 export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
-  id: "horizon-plan-finalizer", version: "2",
+  id: "horizon-plan-finalizer", version: "3",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<FinalizerInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-finalizer", system: PLANNER_SYSTEM,
@@ -115,7 +122,8 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, critique: input.critique },
       tools: [], model: "model", stream: true, maxRounds: HORIZON_STANDARD_LOOP_TURNS,
-      parse: parseHzPlanNarrative }, ctx);
+      parse: (value) => parseHzPlanNarrative(planningArtifact(value,
+        { object: "constal.horizon.plan-narrative" })) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };
   },
 });

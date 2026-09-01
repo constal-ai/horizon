@@ -82,7 +82,7 @@ async function commitPhase<T>(ctx: Ctx, phase: string, revision: number,
 
 export const planner = subtask<HzPlannerResult>({
   id: "horizon-planner",
-  version: "9",
+  version: "10",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<HzPlanInput>(ctx, envelope);
     const tools = input.tools; const childAttenuation = attenuation(tools, ctx);
@@ -224,7 +224,7 @@ export const planner = subtask<HzPlannerResult>({
     planningRuns++; await commitPhase(ctx, "finalization", input.revision, finalized, repairCycle);
     const expectedStatus = critique.verdict === "accepted" ? "ready"
       : critique.verdict === "needs-input" ? "needs-input" : "blocked";
-    const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan",
+    const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan", version: 1,
       revision: input.revision, status: expectedStatus, objective: input.request.objective,
       workspaceRoot: input.discoveryPlan.workspaceRoot, steps: workPlan.steps, assertions,
       question: expectedStatus === "needs-input" ? critique.question : null,

@@ -20,15 +20,13 @@ For a ready plan, use the exact workspace root established by the discovery plan
 
 The runtime attaches the original objective, revision, critique state, workspace root, user question or blocker, accepted work units, and assertions deterministically. Do not reproduce those identity and control fields.`,
   tools: "Finalization has no Tools. All evidence gathering and planning repair belongs to earlier loops.",
-  output: `Return exactly one JSON object with this transport shape:
+  output: `Return exactly one JSON object with these semantic fields:
 {
-  "object":"constal.horizon.plan-narrative",
-  "version":1,
   "summary":"what the plan will accomplish and why this decomposition fits",
   "specification":"the complete natural-language execution specification",
   "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "risks":["specific risk"]
 }
 
-JSON fields are a transport envelope; put the actual plan in specification.`,
+Put the actual plan in specification.`,
 });
