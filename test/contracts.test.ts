@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzPlanNarrative,
+import { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzPlanNarrative,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzSourceResolution, parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
@@ -100,7 +100,19 @@ describe("Horizon transport contracts", () => {
     expect(parseHzMilestoneWork({ object: "constal.horizon.milestone-work", version: 1, revision: 1,
       milestoneId: "behavior", steps: plan.steps }, 1, "behavior")).not.toBeNull();
     expect(parseHzStepAssertions(plan.assertions[0], 1, "implement")).not.toBeNull();
+    expect(parseHzAssertionPlan({ object: "constal.horizon.assertion-plan", version: 1, revision: 1,
+      assertions: plan.assertions }, 1, ["implement", "verify"])).not.toBeNull();
     expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
       verdict: "accepted", summary: "The artifacts converge.", findings: [], question: null, blockedReason: null }, 1)).not.toBeNull();
+  });
+
+  it("rejects repair scopes and assertion coverage that do not match durable identities", () => {
+    expect(parseHzAssertionPlan({ object: "constal.horizon.assertion-plan", version: 1, revision: 1,
+      assertions: [plan.assertions[0]] }, 1, ["implement", "verify"])).toBeNull();
+    expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
+      verdict: "repair", summary: "One work boundary is invalid.", findings: [{ id: "boundary", owner: "decomposition",
+        severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: ["implement"],
+        issue: "Ownership is duplicated.", evidence: ["Current plan."], repair: "Choose one owner." }],
+      question: null, blockedReason: null }, 1)).not.toBeNull();
   });
 });

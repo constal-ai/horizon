@@ -24,7 +24,8 @@ describe("Horizon managed Agent package", () => {
     expect(new Set(tools).size).toBe(tools.length);
     expect(agent.subtasks?.map(({ id }) => id)).toEqual([
       "horizon-source-resolver", "horizon-discovery-framer", "horizon-investigator", "horizon-planner", "horizon-rubric", "horizon-design",
-      "horizon-milestone-decomposition", "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer",
+      "horizon-milestone-decomposition", "horizon-work-plan-repair", "horizon-assertions", "horizon-assertion-plan-repair",
+      "horizon-plan-critique", "horizon-plan-finalizer",
       "horizon-executor", "horizon-verifier", "horizon-reconciler", "horizon-approval-interpreter",
     ]);
     expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress"]);

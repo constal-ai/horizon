@@ -25,3 +25,17 @@ export function milestoneWorkArtifact(value: unknown, revision: number, mileston
     }) : source.steps,
   }, { object: "constal.horizon.milestone-work", revision, milestoneId });
 }
+
+export function assertionPlanArtifact(value: unknown, revision: number): unknown {
+  const source = record(value);
+  if (!source) return value;
+  return planningArtifact({ ...source,
+    assertions: Array.isArray(source.assertions) ? source.assertions.map((value) => {
+      const assertion = record(value);
+      return assertion ? planningArtifact(assertion, {
+        object: "constal.horizon.step-assertions", revision,
+        ...(typeof assertion.stepId === "string" ? { stepId: assertion.stepId } : {}),
+      }) : value;
+    }) : source.assertions,
+  }, { object: "constal.horizon.assertion-plan", revision });
+}

@@ -50,13 +50,15 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
 
 function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design], options: {
   workByMilestone?: Record<string, typeof workPlan.steps>;
+  workPlanRepairs?: HzWorkPlan[];
   assertionsByStep?: Record<string, HzStepAssertions>;
+  assertionPlanRepairs?: HzStepAssertions[][];
   finalPlan?: HzPlan;
 } = {}) {
-  const spawned: string[] = []; const committed: Array<{ kind?: string; phase?: string }> = [];
+  const spawned: string[] = []; const committed: Array<Record<string, unknown>> = [];
   const artifacts = new Map<string, string>([["planning-input", JSON.stringify(input)]]); let artifactSequence = 0;
   const decompositionInputs: Array<{ milestoneId: string; acceptedSteps: typeof workPlan.steps }> = [];
-  let designIndex = 0; let criticIndex = 0;
+  let designIndex = 0; let criticIndex = 0; let workRepairIndex = 0; let assertionRepairIndex = 0;
   const ctx = {
     resources: { model: "model", cas: "cas" },
     invoke: async (_resource: unknown, operation: string, args: { text?: string; ref?: string }) => {
@@ -79,15 +81,24 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
         return handle({ artifact: { object: "constal.horizon.milestone-work", version: 1, revision: 1,
           milestoneId: phase.milestoneId, steps: options.workByMilestone?.[phase.milestoneId] ?? [step] }, toolEvidence: [] });
       }
+      if (task.id === "horizon-work-plan-repair") return handle({
+        artifact: options.workPlanRepairs?.[Math.min(workRepairIndex++, options.workPlanRepairs.length - 1)] ?? workPlan,
+        toolEvidence: [],
+      });
       if (task.id === "horizon-assertions") {
         const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { stepId: string };
         return handle({ artifact: options.assertionsByStep?.[phase.stepId] ?? assertions, toolEvidence: [] });
       }
+      if (task.id === "horizon-assertion-plan-repair") return handle({ artifact: {
+        object: "constal.horizon.assertion-plan", version: 1, revision: 1,
+        assertions: options.assertionPlanRepairs?.[Math.min(assertionRepairIndex++, options.assertionPlanRepairs.length - 1)]
+          ?? [assertions],
+      }, toolEvidence: [] });
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });
       throw new Error(`unexpected task ${task.id}`);
     },
-    commit: async (artifact: { kind?: string; phase?: string }) => {
+    commit: async (artifact: Record<string, unknown>) => {
       committed.push(artifact);
       return { hash: `fact-${committed.length}`, artifact, artifactHash: `artifact-${committed.length}` } as unknown as Fact<unknown>;
     },
@@ -121,7 +132,11 @@ describe("Horizon multi-loop planner", () => {
   it("reruns the owning phase and every dependent planning loop before re-critique", async () => {
     const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Design ownership is incomplete.",
       findings: [{ id: "ownership", owner: "design", severity: "blocking", issue: "Recovery ownership is incomplete.",
-        evidence: ["src/runtime.ts"], repair: "Close the ownership and lifecycle decision." }] };
+        affectedMilestones: ["behavior"], affectedSteps: [], evidence: ["src/runtime.ts"],
+        repair: "Close the ownership and lifecycle decision." },
+      { id: "downstream-work", owner: "decomposition", severity: "blocking", issue: "The current work reflects the incomplete design.",
+        affectedMilestones: ["behavior"], affectedSteps: ["implement"], evidence: ["Current work plan."],
+        repair: "Regenerate work after the design is closed." }] };
     const revisedDesign: HzDesign = { ...design, summary: "Runtime owns recovery and its complete lifecycle." };
     const fixture = planningContext([repair, accepted], [design, revisedDesign]);
     const result = await planner.run(fixture.envelope, fixture.ctx);
@@ -155,6 +170,101 @@ describe("Horizon multi-loop planner", () => {
     ]);
   });
 
+  it("repairs a cross-milestone ownership defect once as a whole work plan", async () => {
+    const deliveryStep = { ...step, id: "deliver", milestoneId: "delivery", title: "Deliver",
+      responsibility: "Deliver the result and own another unavailable fallback.", dependsOn: [step.id] };
+    const repairedBoundary = { ...step, id: "resolve-boundary",
+      responsibility: "Own boundary availability and produce one explicit delivery status.",
+      specification: "Resolve availability once and expose the status consumed by delivery." };
+    const repairedDelivery = { ...deliveryStep, responsibility: "Deliver from the resolved boundary status.",
+      specification: "Consume the boundary status and deliver without defining a second fallback.",
+      dependsOn: [repairedBoundary.id] };
+    const twoMilestones: HzDesign = { ...design, milestones: [design.milestones[0]!, {
+      id: "delivery", title: "Delivery", outcome: "The result is delivered once.", dependsOn: ["behavior"],
+      responsibilities: ["Deliver the result."], risks: ["Duplicate fallback ownership."] }] };
+    const repairedPlan: HzWorkPlan = { ...workPlan, steps: [repairedBoundary, repairedDelivery] };
+    const boundaryAssertions: HzStepAssertions = { ...assertions, stepId: repairedBoundary.id };
+    const deliveryAssertions: HzStepAssertions = { ...assertions, stepId: repairedDelivery.id,
+      assertions: [{ ...assertions.assertions[0]!, id: "delivery-once", claim: "Delivery consumes one boundary status." }] };
+    const repair: HzPlanCritique = { ...accepted, verdict: "repair",
+      summary: "Fallback ownership and its handoff conflict across milestones.", findings: [
+        { id: "single-fallback-owner", owner: "decomposition", severity: "blocking",
+          affectedMilestones: ["behavior", "delivery"], affectedSteps: [step.id, deliveryStep.id],
+          issue: "Two work units own the same unavailable fallback.", evidence: ["Current work plan."],
+          repair: "Choose one owner and rewire the consumer." },
+        { id: "boundary-status-handoff", owner: "decomposition", severity: "blocking",
+          affectedMilestones: ["behavior", "delivery"], affectedSteps: [step.id, deliveryStep.id],
+          issue: "Delivery has no defined boundary status input.", evidence: ["Current dependency graph."],
+          repair: "Define one status producer and consumer." },
+      ] };
+    const repairedFinal: HzPlan = { ...finalPlan, steps: repairedPlan.steps,
+      assertions: [boundaryAssertions, deliveryAssertions] };
+    const fixture = planningContext([repair, accepted, accepted], [twoMilestones], {
+      workByMilestone: { behavior: [step], delivery: [deliveryStep] }, workPlanRepairs: [repairedPlan],
+      assertionsByStep: { [repairedBoundary.id]: boundaryAssertions, [repairedDelivery.id]: deliveryAssertions },
+      finalPlan: repairedFinal,
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(repairedFinal);
+    expect(result.planningRuns).toBe(12);
+    expect(fixture.spawned.filter((id) => id === "horizon-milestone-decomposition")).toHaveLength(2);
+    expect(fixture.spawned.filter((id) => id === "horizon-work-plan-repair")).toHaveLength(1);
+    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition",
+      "horizon-milestone-decomposition", "horizon-plan-critique", "horizon-work-plan-repair",
+      "horizon-plan-critique", "horizon-assertions", "horizon-assertions", "horizon-plan-critique",
+      "horizon-plan-finalizer"]);
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.planning-repair",
+      owner: "decomposition", repairCycle: 1, beforeHash: expect.any(String), afterHash: expect.any(String),
+      findingIds: ["boundary-status-handoff", "single-fallback-owner"] }));
+  });
+
+  it("repairs assertion ownership once without regenerating every per-step assertion loop", async () => {
+    const repairedAssertions: HzStepAssertions = { ...assertions,
+      assertions: [{ ...assertions.assertions[0]!, evidenceRequired: ["Replay and denial-path checks pass."] }] };
+    const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Negative-path proof is incomplete.",
+      findings: [{ id: "negative-proof", owner: "assertions", severity: "blocking",
+        affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "The denial path has no independent proof.", evidence: ["Current assertion plan."],
+        repair: "Add the executable denial-path observation." }] };
+    const repairedFinal: HzPlan = { ...finalPlan, assertions: [repairedAssertions] };
+    const fixture = planningContext([accepted, repair, accepted], [design], {
+      assertionPlanRepairs: [[repairedAssertions]], finalPlan: repairedFinal,
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(repairedFinal);
+    expect(result.planningRuns).toBe(10);
+    expect(fixture.spawned.filter((id) => id === "horizon-assertions")).toHaveLength(1);
+    expect(fixture.spawned.filter((id) => id === "horizon-assertion-plan-repair")).toHaveLength(1);
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.planning-repair",
+      owner: "assertions" }));
+  });
+
+  it("stops after two repairs of the same stable work-plan scope even when wording changes", async () => {
+    const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Ownership remains duplicated.",
+      findings: [{ id: "duplicate-owner", owner: "decomposition", severity: "blocking",
+        affectedMilestones: ["behavior"], affectedSteps: [step.id], issue: "The same responsibility still has two owners.",
+        evidence: ["Current plan."], repair: "Leave one owner." }] };
+    const changedOnce: HzWorkPlan = { ...workPlan,
+      steps: [{ ...step, specification: "First attempted ownership repair." }] };
+    const changedTwice: HzWorkPlan = { ...workPlan,
+      steps: [{ ...step, specification: "Second attempted ownership repair." }] };
+    const fixture = planningContext([repair, repair, repair], [design], {
+      workPlanRepairs: [changedOnce, changedTwice], finalPlan: { ...finalPlan, status: "blocked", steps: changedTwice.steps,
+        blockedReason: "Planning did not converge." },
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan.status).toBe("blocked");
+    expect(result.plan.blockedReason).toContain("2 repairs of the same decomposition scope");
+    expect(fixture.spawned.filter((id) => id === "horizon-work-plan-repair")).toHaveLength(2);
+    expect(fixture.spawned.filter((id) => id === "horizon-milestone-decomposition")).toHaveLength(1);
+  });
+
   it("routes an evidence-insoluble semantic decision to a durable user question", async () => {
     const question = { prompt: "Which public contract should the implementation use?", options: [
       "Preserve v1 behavior to maintain compatibility.",
@@ -163,6 +273,7 @@ describe("Horizon multi-loop planner", () => {
     ] as [string, string, string] };
     const userFinding: HzPlanCritique = { ...accepted, verdict: "repair", summary: "A product decision remains.",
       findings: [{ id: "public-contract", owner: "user", severity: "blocking",
+        affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "Should the public contract preserve v1 or adopt v2?", evidence: ["Both contracts exist."],
         repair: "Obtain the user's intended compatibility boundary." }], question };
     const needsInput: HzPlan = { ...finalPlan, status: "needs-input",
@@ -177,6 +288,7 @@ describe("Horizon multi-loop planner", () => {
   it("blocks when owner-routed planning repair leaves the artifacts unchanged", async () => {
     const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Assertion proof is incomplete.",
       findings: [{ id: "negative-proof", owner: "assertions", severity: "blocking",
+        affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "The negative path is not independently proven.", evidence: ["Current assertion set."],
         repair: "Add executable negative-path proof." }] };
     const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
@@ -191,6 +303,7 @@ describe("Horizon multi-loop planner", () => {
   it("detects an A to B to A planning repair cycle", async () => {
     const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Design remains inconsistent.",
       findings: [{ id: "design-cycle", owner: "design", severity: "blocking", issue: "Ownership is inconsistent.",
+        affectedMilestones: ["behavior"], affectedSteps: [],
         evidence: ["Design artifacts."], repair: "Reconcile ownership." }] };
     const alternate: HzDesign = { ...design, summary: "Alternate ownership design." };
     const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,

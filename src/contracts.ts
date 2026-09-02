@@ -110,12 +110,21 @@ export interface HzStepAssertions {
   assertions: HzAssertion[];
 }
 
+export interface HzAssertionPlan {
+  object: "constal.horizon.assertion-plan";
+  version: 1;
+  revision: number;
+  assertions: HzStepAssertions[];
+}
+
 export type HzCritiqueOwner = "rubric" | "design" | "decomposition" | "assertions" | "user";
 
 export interface HzCritiqueFinding {
   id: string;
   owner: HzCritiqueOwner;
   severity: "blocking" | "advisory";
+  affectedMilestones: string[];
+  affectedSteps: string[];
   issue: string;
   evidence: string[];
   repair: string;
@@ -685,13 +694,35 @@ export function parseHzStepAssertions(value: unknown, expectedRevision?: number,
   return { object: "constal.horizon.step-assertions", version: 1, revision, stepId, assertions };
 }
 
+export function parseHzAssertionPlan(value: unknown, expectedRevision?: number,
+  expectedStepIds?: readonly string[]): HzAssertionPlan | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  if (!source || source.object !== "constal.horizon.assertion-plan" || source.version !== 1 || revision === null
+    || !Array.isArray(source.assertions) || source.assertions.length === 0 || source.assertions.length > 128) return null;
+  const assertions = source.assertions.map((entry) => parseHzStepAssertions(entry, revision));
+  if (!assertions.every((entry): entry is HzStepAssertions => entry !== null)
+    || new Set(assertions.map(({ stepId }) => stepId)).size !== assertions.length) return null;
+  if (expectedStepIds) {
+    const expected = [...new Set(expectedStepIds)].sort();
+    const actual = assertions.map(({ stepId }) => stepId).sort();
+    if (expected.length !== expectedStepIds.length || expected.length !== actual.length
+      || expected.some((stepId, index) => stepId !== actual[index])) return null;
+  }
+  return { object: "constal.horizon.assertion-plan", version: 1, revision, assertions };
+}
+
 function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
   const source = item(value); const id = string(source?.id, 256); const owner = source?.owner; const severity = source?.severity;
+  const affectedMilestones = strings(source?.affectedMilestones, 64, 256);
+  const affectedSteps = strings(source?.affectedSteps, 128, 256);
   const issue = string(source?.issue, 32_768); const evidence = strings(source?.evidence, 128, 16_384);
   const repair = string(source?.repair, 32_768);
   if (!source || !id || !["rubric", "design", "decomposition", "assertions", "user"].includes(String(owner))
-    || !["blocking", "advisory"].includes(String(severity)) || !issue || !evidence || !repair) return null;
-  return { id, owner: owner as HzCritiqueOwner, severity: severity as HzCritiqueFinding["severity"], issue, evidence, repair };
+    || !["blocking", "advisory"].includes(String(severity)) || !affectedMilestones || !affectedSteps
+    || new Set(affectedMilestones).size !== affectedMilestones.length || new Set(affectedSteps).size !== affectedSteps.length
+    || !issue || !evidence || !repair) return null;
+  return { id, owner: owner as HzCritiqueOwner, severity: severity as HzCritiqueFinding["severity"],
+    affectedMilestones, affectedSteps, issue, evidence, repair };
 }
 
 export function parseHzPlanCritique(value: unknown, expectedRevision?: number): HzPlanCritique | null {
