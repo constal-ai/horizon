@@ -99,7 +99,7 @@ export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
 });
 
 export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
-  id: "horizon-plan-critique", version: "5",
+  id: "horizon-plan-critique", version: "6",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<CritiqueInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,

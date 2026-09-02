@@ -4,6 +4,8 @@ Horizon is Constal's long-horizon software agent. It investigates a repository, 
 
 It is a standalone Agent package built with `@constal/sdk`. It uses Constal's existing Model, Sandbox Pool, CAS, GitHub, and Web Resources; it does not create a parallel runtime, source store, credential system, or deployment path.
 
+GitHub issues use two durable Session lanes. The foreground Session remains responsive to questions, decisions, and steering while the work Session owns investigation, planning, approval, execution, and recovery. The foreground supervisor reads the authenticated private issue, recent comments, authoritative Run detail, and open waits before deciding whether to answer, resolve a work decision, steer active work, or start new work. Every work control is applied through a reviewed Constal API ChangePlan.
+
 ## Long-horizon architecture
 
 ```text
