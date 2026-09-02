@@ -169,9 +169,9 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
   const latest = objectRef(latestItem);
   const root = objectRef(rootItem);
   const currentRun = latest ? await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: latest, page: { limit: 500 } })) : null;
+    { ref: latest, page: { limit: 100 } })) : null;
   const rootDetail = root ? latest?.id === root.id ? currentRun : await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: root, page: { limit: 500 } })) : null;
+    { ref: root, page: { limit: 100 } })) : null;
   const waits = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "wait", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
