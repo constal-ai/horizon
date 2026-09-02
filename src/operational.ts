@@ -190,9 +190,7 @@ function workActivity(current: ApiGetResult | null | { error: string }, waits: A
   const runId = typeof value?.runId === "string" ? value.runId : null;
   const status = typeof value?.status === "string" ? value.status : null;
   const task = record(value?.task); const phase = typeof task?.id === "string" ? task.id : runId ? "horizon" : null;
-  const open = queryItems(waits); const userWait = open.find((item) => {
-    const fields = record(item.fields); return fields?.waitKind === "await" || fields?.kind === "await";
-  });
+  const userWait = conversationalWaitItems(current, waits)[0];
   if (userWait) return { state: "waiting-user", runId, phase,
     detail: "The work Run is waiting for an authenticated answer to one presented decision." };
   if (!current) return { state: "idle", runId: null, phase: null, detail: "No work Run has been observed for this issue." };
@@ -208,6 +206,28 @@ function workActivity(current: ApiGetResult | null | { error: string }, waits: A
     detail: "The current work component yielded durably while one of its child agents executes." };
   return { state: "transitioning", runId, phase,
     detail: "The work Run yielded at a durable boundary and is not paused; no user decision is currently open." };
+}
+
+function conversationalWaitItems(current: ApiGetResult | null | { error: string },
+  waits: ApiQueryResult | { error: string }): Record<string, unknown>[] {
+  const listed = queryItems(waits).filter((item) => {
+    const fields = record(item.fields); return fields?.waitKind === "await" || fields?.kind === "await";
+  });
+  const exact = current && "value" in current ? record(current.value) : null;
+  const run = record(exact?.run) ?? exact;
+  const embedded = Array.isArray(run?.awaiting) ? run.awaiting.flatMap((item) => {
+    const wait = record(item);
+    if (!wait || wait.kind !== "await" || typeof wait.id !== "string" || !wait.id) return [];
+    return [{ kind: "wait", id: wait.id, state: "waiting",
+      fields: { ...wait, waitKind: "await", promise: wait.id } }];
+  }) : [];
+  const unique = new Map<string, Record<string, unknown>>();
+  for (const item of [...listed, ...embedded]) {
+    const fields = record(item.fields); const promise = typeof fields?.promise === "string" ? fields.promise
+      : typeof fields?.id === "string" ? fields.id : typeof item.id === "string" ? item.id : "";
+    if (promise && !unique.has(promise)) unique.set(promise, item);
+  }
+  return [...unique.values()];
 }
 
 function action(value: unknown): HorizonOperationalAction | null {
@@ -264,10 +284,7 @@ function activeWork(snapshot: SupervisionSnapshot): boolean {
 }
 
 function conversationalWaits(snapshot: SupervisionSnapshot): Record<string, unknown>[] {
-  return queryItems(snapshot.waits).filter((item) => {
-    const fields = record(item.fields);
-    return fields?.waitKind === "await" || fields?.kind === "await";
-  });
+  return conversationalWaitItems(snapshot.currentRun, snapshot.waits);
 }
 
 async function applyWorkOperations(ctx: Ctx, operations: Array<{ id: string; operation: HorizonControlOperation;

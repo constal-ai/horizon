@@ -24,14 +24,14 @@ function query(items: unknown[]) {
     evidence: { source: "coordinator", observedAt: 1, authoritativeFor: [], lagMs: 0, complete: true, warnings: [], queryHash: "a".repeat(64) } };
 }
 
-function readFixture(options: { waits?: unknown[]; runStatus?: string } = {}) {
+function readFixture(options: { waits?: unknown[]; runStatus?: string; awaiting?: unknown[] } = {}) {
   const invoke = vi.fn(async (resource: string, operation: string, args: Record<string, unknown>, _options?: unknown) => {
     if (resource === "github" && operation === "issue.get") return { issue: { number: 10, title: "Implement reactions" } };
     if (resource === "github" && operation === "issue.comments.list") return { comments: [{ id: 1, body: "Progress?" }] };
     if (resource === "api" && operation === "query" && args.kind === "run") return query([runItem(options.runStatus)]);
     if (resource === "api" && operation === "get") return { object: "constal.api.object", ref: runItem(),
       value: { runId: "run-1", status: options.runStatus ?? "suspended", task: { id: "horizon-planner", version: "11" },
-        awaiting: [{ id: "spawn-1", label: "spawn:horizon-design", kind: "spawn", childRunId: "child-1" }] },
+        awaiting: options.awaiting ?? [{ id: "spawn-1", label: "spawn:horizon-design", kind: "spawn", childRunId: "child-1" }] },
       evidence: { source: "coordinator" } };
     if (resource === "api" && operation === "query" && args.kind === "wait") return query(options.waits ?? []);
     throw new Error(`unexpected invocation ${resource}#${operation}`);
@@ -122,6 +122,32 @@ describe("Horizon behavior routing", () => {
         value: expect.objectContaining({ object: "constal.horizon.event", objective: "Use reactions only." }) }),
     })] }), expect.any(Object));
     expect(invokeAsync).toHaveBeenCalledOnce();
+  });
+
+  it("answers the exact Run wait when the open-waits collection is temporarily empty", async () => {
+    const reads = readFixture({ waits: [], awaiting: [{ id: "promise-exact", label: "horizon-plan-1", kind: "await" }] });
+    const plan = { object: "constal.change-plan", id: "plan-exact", hash: "b".repeat(64) };
+    const invoke = vi.fn(async (resource: string, operation: string, args: Record<string, unknown>, options?: unknown) => {
+      if (resource === "api" && operation === "plan") return plan;
+      return reads(resource, operation, args, options);
+    });
+    const invokeAsync = vi.fn(async () => ({ object: "constal.change-receipt", id: "receipt-exact", state: "succeeded" }));
+    const turn = vi.fn(async (input: { context: { supervision: { activity: { state: string } } } }) => {
+      expect(input.context.supervision.activity.state).toBe("waiting-user");
+      return { toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+        object: "constal.horizon.operational-result", version: 1, status: "complete",
+        message: "I recorded option 3 and will continue the same work.", action: { kind: "answer-work", answer: "3" },
+        evidence: ["The exact active Run contains one open planning decision."],
+      }) }, artifact: null };
+    });
+    const ctx = { invoke, invokeAsync, turn, commit: vi.fn(async () => ({ hash: "a".repeat(64) })),
+      resources: { model: "model", github: "github", api: "api" }, run: { id: "front", namespace: "default" } } as unknown as Ctx;
+    await expect(runHorizonOperational(event("3"), ctx)).resolves.toMatchObject({
+      control: { operation: "run.wait.resolve", receipt: "receipt-exact", state: "succeeded" },
+    });
+    expect(invoke).toHaveBeenCalledWith("api", "plan", expect.objectContaining({ operations: [expect.objectContaining({
+      operation: "run.wait.resolve", input: expect.objectContaining({ promise: "promise-exact" }),
+    })] }), expect.any(Object));
   });
 
   it("applies an exact natural-language pause through the governed Run control", async () => {
