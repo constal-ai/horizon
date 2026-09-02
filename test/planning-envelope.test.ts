@@ -6,7 +6,7 @@ describe("runtime-owned planning envelopes", () => {
   it("replaces stale assertion identity without changing semantic content", () => {
     const semantic = {
       object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "stale-step",
-      assertions: [{ id: "proof", claim: "The behavior is observed.",
+      assertions: [{ claim: "The behavior is observed.",
         evidenceRequired: ["A focused test passes."], negativePath: false }],
     };
     const artifact = planningArtifact(semantic,
@@ -29,7 +29,7 @@ describe("runtime-owned planning envelopes", () => {
   });
 
   it("adds runtime identity to a complete repaired assertion plan", () => {
-    const semantic = { assertions: [{ stepId: "implement", assertions: [{ id: "proof",
+    const semantic = { assertions: [{ stepId: "implement", assertions: [{
       claim: "The behavior is observed.", evidenceRequired: ["A focused test passes."], negativePath: false }] }] };
     expect(parseHzAssertionPlan(assertionPlanArtifact(semantic, 4), 4, ["implement"])).toEqual({
       object: "constal.horizon.assertion-plan", version: 1, revision: 4,

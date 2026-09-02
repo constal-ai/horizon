@@ -39,7 +39,7 @@ function executionCritique(input: HzPlanInput, owner: HzPlanningOwner): HzPlanCr
   if (!input.replanBrief) throw new TypeError("Phase-local replanning requires a correction brief");
   const step = attempt ? input.previousState?.workPlan.steps.find(({ id }) => id === attempt.stepId) : null;
   return { object: "constal.horizon.plan-critique", version: 1, revision: input.revision, verdict: "repair",
-    summary: input.replanBrief, findings: [{ id: attempt ? `execution-${attempt.id}` : `revision-${input.revision}`, owner, severity: "blocking",
+    summary: input.replanBrief, findings: [{ owner, severity: "blocking",
       affectedMilestones: step ? [step.milestoneId] : [], affectedSteps: step ? [step.id] : [],
       issue: input.replanBrief, evidence: attempt ? [attempt.stepFact, attempt.verificationFact] : [], repair: input.replanBrief }],
     question: null, blockedReason: null };
@@ -63,7 +63,7 @@ function repairFindingKey(finding: HzCritiqueFinding): string {
   const milestones = [...finding.affectedMilestones].sort();
   const steps = [...finding.affectedSteps].sort();
   const scope = milestones.length > 0 || steps.length > 0
-    ? canonicalJson({ milestones, steps }) : finding.id;
+    ? canonicalJson({ milestones, steps }) : "global";
   return `${finding.owner}:${scope}`;
 }
 
@@ -263,7 +263,7 @@ export const planner = subtask<HzPlannerResult>({
     };
 
     const beginRepair = (owner: RepairOwner, findings: readonly HzCritiqueFinding[]): {
-      findingIds: string[]; findingKeys: string[]; attempts: Record<string, number>;
+      findingKeys: string[]; attempts: Record<string, number>;
     } | null => {
       const owned = findings.filter((finding) => finding.owner === owner);
       const findingKeys = [...new Set(owned.map(repairFindingKey))].sort();
@@ -273,13 +273,13 @@ export const planner = subtask<HzPlannerResult>({
         const attempt = (repairAttempts.get(key) ?? 0) + 1;
         repairAttempts.set(key, attempt); attempts[key] = attempt;
       }
-      return { findingIds: owned.map(({ id }) => id).sort(), findingKeys, attempts };
+      return { findingKeys, attempts };
     };
 
     const commitRepair = async (stage: "structure" | "complete", owner: RepairOwner,
       repair: NonNullable<ReturnType<typeof beginRepair>>, beforeHash: string, afterHash: string): Promise<void> => {
       await ctx.commit({ kind: "horizon.planning-repair", revision: input.revision, stage, repairCycle, owner,
-        findingIds: repair.findingIds, findingKeys: repair.findingKeys, attempts: repair.attempts,
+        findingKeys: repair.findingKeys, attempts: repair.attempts,
         beforeHash, afterHash }, { tier: "audit" });
     };
 
@@ -332,7 +332,7 @@ export const planner = subtask<HzPlannerResult>({
         if (!critique.question) throw new TypeError("A user-owned planning finding requires one structured decision question");
         critique = { ...critique, verdict: "needs-input" };
         await ctx.commit({ kind: "horizon.planning-route", revision: input.revision,
-          from: "repair", to: "needs-input", finding: userFinding.id }, { tier: "audit" });
+          from: "repair", to: "needs-input", finding: repairFindingKey(userFinding) }, { tier: "audit" });
         break;
       }
       if (repairCycle >= MAX_REPAIR_CYCLES) {
@@ -391,7 +391,7 @@ export const planner = subtask<HzPlannerResult>({
         if (!critique.question) throw new TypeError("A user-owned planning finding requires one structured decision question");
         critique = { ...critique, verdict: "needs-input" };
         await ctx.commit({ kind: "horizon.planning-route", revision: input.revision,
-          from: "repair", to: "needs-input", finding: userFinding.id }, { tier: "audit" });
+          from: "repair", to: "needs-input", finding: repairFindingKey(userFinding) }, { tier: "audit" });
         break;
       }
       if (repairCycle >= MAX_REPAIR_CYCLES) {

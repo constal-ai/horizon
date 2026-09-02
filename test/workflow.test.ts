@@ -34,7 +34,7 @@ const plan: HzPlan = {
     specification: "Inspect, edit, and verify the existing implementation.", dependsOn: [], verification: ["focused test passes"],
     stopWhen: "The focused test passes." }],
   assertions: [{ object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "implement",
-    assertions: [{ id: "focused-behavior", claim: "The focused behavior works.",
+    assertions: [{ claim: "The focused behavior works.",
       evidenceRequired: ["The focused test passes."], negativePath: false }] }],
 };
 

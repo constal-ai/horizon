@@ -303,12 +303,13 @@ function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[]
   };
 }
 
-function unplannedBlockedResult(summary: string, workspace: PreparedWorkspace | null = null): HzRunResult {
+function unplannedBlockedResult(summary: string, workspace: PreparedWorkspace | null = null,
+  specialistRuns = 0): HzRunResult {
   return { object: "constal.horizon.result", version: 1, status: "blocked", summary, plan: null,
     workspace: workspace ? { receipt: workspace.receiptRef, cacheHit: workspace.receipt.cache.hit,
       image: workspace.receipt.cache.image } : null,
     checkpoints: [], completedSteps: [], remainingUnknowns: [], artifact: null, publication: null,
-    longHorizon: { durablePlan: true, specialistRuns: 0, replans: 0, plateauCycles: 0 } };
+    longHorizon: { durablePlan: true, specialistRuns, replans: 0, plateauCycles: 0 } };
 }
 
 async function recordApplicationFailure(ctx: Ctx, stage: string, error: unknown): Promise<string> {
@@ -316,7 +317,7 @@ async function recordApplicationFailure(ctx: Ctx, stage: string, error: unknown)
   const detail = applicationError(error);
   const summary = `Horizon stopped during ${stage}: ${detail.message}`;
   try { await ctx.commit({ kind: "horizon.application-failure", stage, error: detail }, { tier: "audit" }); }
-  catch (commitError) { rethrowRuntimeControl(commitError); }
+  catch (commitError) { rethrowRuntimeControl(commitError); throw commitError; }
   return summary;
 }
 
@@ -421,7 +422,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       investigations: discovery.investigations, revision: 1, previousPlan: null, previousState: null,
       completed, completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer, tools: [] }, ctx);
   } catch (error) {
-    return unplannedBlockedResult(await recordApplicationFailure(ctx, activeStage, error), workspace);
+    return unplannedBlockedResult(await recordApplicationFailure(ctx, activeStage, error), workspace, specialistRuns);
   }
   remainingUnknowns = current.plan.unknowns;
   specialistRuns += current.planningRuns;
@@ -471,6 +472,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling while user decisions remained open.",
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
+      activeStage = "planning question reconciliation";
       const reconciledPriorQuestion = questionHistory.length > 0;
       const alreadyAnswered = await questionWasAnswered(current.plan.question!, questionHistory, ctx);
       if (reconciledPriorQuestion) specialistRuns++;
@@ -708,6 +710,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (decision.action === "ask") {
+      activeStage = "execution question reconciliation";
       const reconciledPriorQuestion = questionHistory.length > 0;
       const alreadyAnswered = await questionWasAnswered(decision.question!, questionHistory, ctx);
       if (reconciledPriorQuestion) specialistRuns++;

@@ -54,7 +54,6 @@ export interface HzRubric {
 }
 
 export interface HzDesignDecision {
-  id: string;
   question: string;
   decision: string;
   rationale: string;
@@ -95,7 +94,6 @@ export interface HzMilestoneWork {
 }
 
 export interface HzAssertion {
-  id: string;
   claim: string;
   evidenceRequired: string[];
   negativePath: boolean;
@@ -138,7 +136,6 @@ export interface HzAssertionPlan {
 export type HzCritiqueOwner = HzPlanningOwner | "continuity" | "user";
 
 export interface HzCritiqueFinding {
-  id: string;
   owner: HzCritiqueOwner;
   severity: "blocking" | "advisory";
   affectedMilestones: string[];
@@ -695,10 +692,10 @@ export function parseHzRubric(value: unknown, expectedRevision?: number): HzRubr
 }
 
 function parseHzDesignDecision(value: unknown): HzDesignDecision | null {
-  const source = item(value); const id = string(source?.id, 256); const question = string(source?.question, 16_384);
+  const source = item(value); const question = string(source?.question, 16_384);
   const decision = string(source?.decision, 32_768); const rationale = string(source?.rationale, 32_768);
   const evidence = strings(source?.evidence, 128, 16_384);
-  return source && id && question && decision && rationale && evidence ? { id, question, decision, rationale, evidence } : null;
+  return source && question && decision && rationale && evidence ? { question, decision, rationale, evidence } : null;
 }
 
 function parseHzMilestone(value: unknown): HzMilestone | null {
@@ -733,7 +730,6 @@ export function parseHzDesign(value: unknown, expectedRevision?: number): HzDesi
   const decisions = source.decisions.map(parseHzDesignDecision); const milestones = source.milestones.map(parseHzMilestone);
   if (!decisions.every((entry): entry is HzDesignDecision => entry !== null)
     || !milestones.every((entry): entry is HzMilestone => entry !== null)
-    || new Set(decisions.map(({ id }) => id)).size !== decisions.length
     || new Set(milestones.map(({ id }) => id)).size !== milestones.length || !graphIsAcyclic(milestones)) return null;
   return { object: "constal.horizon.design", version: 1, revision, summary, decisions, milestones };
 }
@@ -763,10 +759,10 @@ export function parseHzMilestoneWork(value: unknown, expectedRevision?: number,
 }
 
 function parseHzAssertion(value: unknown): HzAssertion | null {
-  const source = item(value); const id = string(source?.id, 256); const claim = string(source?.claim, 16_384);
+  const source = item(value); const claim = string(source?.claim, 16_384);
   const evidenceRequired = strings(source?.evidenceRequired, 64, 16_384);
-  return source && id && claim && evidenceRequired && evidenceRequired.length > 0 && typeof source.negativePath === "boolean"
-    ? { id, claim, evidenceRequired, negativePath: source.negativePath } : null;
+  return source && claim && evidenceRequired && evidenceRequired.length > 0 && typeof source.negativePath === "boolean"
+    ? { claim, evidenceRequired, negativePath: source.negativePath } : null;
 }
 
 export function parseHzStepAssertions(value: unknown, expectedRevision?: number, expectedStepId?: string): HzStepAssertions | null {
@@ -776,8 +772,7 @@ export function parseHzStepAssertions(value: unknown, expectedRevision?: number,
     || expectedStepId !== undefined && stepId !== expectedStepId || !Array.isArray(source.assertions)
     || source.assertions.length === 0 || source.assertions.length > 64) return null;
   const assertions = source.assertions.map(parseHzAssertion);
-  if (!assertions.every((entry): entry is HzAssertion => entry !== null)
-    || new Set(assertions.map(({ id }) => id)).size !== assertions.length) return null;
+  if (!assertions.every((entry): entry is HzAssertion => entry !== null)) return null;
   return { object: "constal.horizon.step-assertions", version: 1, revision, stepId, assertions };
 }
 
@@ -839,16 +834,16 @@ export function parseHzQuestionReconciliation(value: unknown): HzQuestionReconci
 }
 
 function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
-  const source = item(value); const id = string(source?.id, 256); const owner = source?.owner; const severity = source?.severity;
+  const source = item(value); const owner = source?.owner; const severity = source?.severity;
   const affectedMilestones = strings(source?.affectedMilestones, 64, 256);
   const affectedSteps = strings(source?.affectedSteps, 128, 256);
   const issue = string(source?.issue, 32_768); const evidence = strings(source?.evidence, 128, 16_384);
   const repair = string(source?.repair, 32_768);
-  if (!source || !id || !["rubric", "design", "decomposition", "assertions", "continuity", "user"].includes(String(owner))
+  if (!source || !["rubric", "design", "decomposition", "assertions", "continuity", "user"].includes(String(owner))
     || !["blocking", "advisory"].includes(String(severity)) || !affectedMilestones || !affectedSteps
     || new Set(affectedMilestones).size !== affectedMilestones.length || new Set(affectedSteps).size !== affectedSteps.length
     || !issue || !evidence || !repair) return null;
-  return { id, owner: owner as HzCritiqueOwner, severity: severity as HzCritiqueFinding["severity"],
+  return { owner: owner as HzCritiqueOwner, severity: severity as HzCritiqueFinding["severity"],
     affectedMilestones, affectedSteps, issue, evidence, repair };
 }
 
@@ -860,8 +855,7 @@ export function parseHzPlanCritique(value: unknown, expectedRevision?: number): 
     || !["accepted", "repair", "needs-input", "blocked"].includes(String(verdict)) || !summary || question === undefined
     || blockedReason === undefined || !Array.isArray(source.findings) || source.findings.length > 128) return null;
   const findings = source.findings.map(parseHzCritiqueFinding);
-  if (!findings.every((entry): entry is HzCritiqueFinding => entry !== null)
-    || new Set(findings.map(({ id }) => id)).size !== findings.length) return null;
+  if (!findings.every((entry): entry is HzCritiqueFinding => entry !== null)) return null;
   const blocking = findings.some(({ severity }) => severity === "blocking");
   const userDecision = findings.some(({ owner, severity }) => owner === "user" && severity === "blocking");
   if (verdict === "accepted" && blocking || verdict === "repair" && !blocking

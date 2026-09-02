@@ -74,7 +74,7 @@ describe("Horizon role prompts", () => {
     expect(WORK_PLAN_REPAIR_SYSTEM).toContain("exactly one owner");
     expect(ASSERTION_PLAN_REPAIR_SYSTEM).toContain("exactly one assertion set for every current work unit");
     expect(CRITIQUE_SYSTEM).toContain("affectedMilestones");
-    expect(CRITIQUE_SYSTEM).toContain("Preserve the same finding id");
+    expect(CRITIQUE_SYSTEM).toContain("Do not invent identifiers for findings");
     expect(RECONCILER_SYSTEM).toContain("Operation-level retry is not your decision");
     expect(EXECUTOR_SYSTEM).toContain("previous governed attempt");
     expect(QUESTION_RECONCILIATION_SYSTEM).toContain("semantic choice and consequence");

@@ -22,10 +22,10 @@ const plan = {
   ],
   assertions: [
     { object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "implement",
-      assertions: [{ id: "implement-positive", claim: "The durable behavior is observable.",
+      assertions: [{ claim: "The durable behavior is observable.",
         evidenceRequired: ["Focused replay test passes."], negativePath: false }] },
     { object: "constal.horizon.step-assertions", version: 1, revision: 1, stepId: "verify",
-      assertions: [{ id: "verify-proof", claim: "Independent proof covers the changed behavior.",
+      assertions: [{ claim: "Independent proof covers the changed behavior.",
         evidenceRequired: ["The relevant suite and diff review pass."], negativePath: false }] },
   ],
 };
@@ -93,7 +93,7 @@ describe("Horizon transport contracts", () => {
       objective: plan.objective, successCriteria: ["Replay proof passes."], constraints: ["Reuse the runtime."],
       nonGoals: ["No new scheduler."], openQuestions: [], verificationPrinciples: ["Observe replay behavior."] }, 1)).not.toBeNull();
     expect(parseHzDesign({ object: "constal.horizon.design", version: 1, revision: 1, summary: "Reuse runtime ownership.",
-      decisions: [{ id: "runtime-owner", question: "Who owns recovery?", decision: "The runtime.",
+      decisions: [{ question: "Who owns recovery?", decision: "The runtime.",
         rationale: "It already owns the ledger.", evidence: ["src/runtime.ts"] }],
       milestones: [{ id: "behavior", title: "Durable behavior", outcome: "Replay succeeds.", dependsOn: [],
         responsibilities: ["Implement recovery."], risks: ["Duplicate effect."] }] }, 1)).not.toBeNull();
@@ -111,7 +111,7 @@ describe("Horizon transport contracts", () => {
     expect(parseHzAssertionPlan({ object: "constal.horizon.assertion-plan", version: 1, revision: 1,
       assertions: [plan.assertions[0]] }, 1, ["implement", "verify"])).toBeNull();
     expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
-      verdict: "repair", summary: "One work boundary is invalid.", findings: [{ id: "boundary", owner: "decomposition",
+      verdict: "repair", summary: "One work boundary is invalid.", findings: [{ owner: "decomposition",
         severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "Ownership is duplicated.", evidence: ["Current plan."], repair: "Choose one owner." }],
       question: null, blockedReason: null }, 1)).not.toBeNull();

@@ -41,7 +41,7 @@ Horizon begins execution from a committed clean Git baseline, and every Tool and
 Horizon already runs an independent Verifier and Reconciler after each work unit. Integrated evidence acceptance belongs to those runtime roles; do not define a design milestone whose only outcome is reviewing, accepting, or reconciling evidence from another milestone.`,
   tools: "Use read-only repository Tools to validate a concrete design claim. Do not edit source or decompose milestones into steps.",
   output: `Return exactly:
-{"summary":"architecture narrative","decisions":[{"id":"id","question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
+{"summary":"architecture narrative","decisions":[{"question":"decision closed","decision":"chosen direction","rationale":"why","evidence":["reference"]}],"milestones":[{"id":"id","title":"outcome","outcome":"observable checkpoint","dependsOn":["milestone id"],"responsibilities":["owned semantic responsibility"],"risks":["specific risk"]}]}
 
 Milestone dependencies must be acyclic.`,
 });
@@ -109,7 +109,7 @@ Assertions must be observable and executable by an independent verifier. Do not 
 Require only evidence the verifier can independently reproduce after execution. For a normal Git workspace change, inspect the final content and diff/status and run the requested checks. The committed workspace baseline is already authoritative; do not require the verifier to recreate a pre-edit filesystem inventory. Do not require proof of a universal negative such as "no deploy happened" when Policy, unavailable Tools, and the durable Run journal are the enforcement and audit boundary. A user prohibition without an executable failure path is a constraint, not a synthetic negative-path test.`,
   tools: "Use read-only repository Tools only to confirm available proof surfaces and repository-native test commands.",
   output: `Return exactly:
-{"assertions":[{"id":"stable assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}`,
+{"assertions":[{"claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}`,
 });
 
 export const ASSERTION_PLAN_REPAIR_SYSTEM = composePrompt({
@@ -120,7 +120,7 @@ You may merge, remove, move, or add assertions across work units. Return the com
   context: "Dynamic context supplies the full rubric, design, work plan, current assertion plan, discovery evidence, and the critique whose assertion findings this pass owns.",
   rules: `${COMMON_RULES}
 
-Return exactly one assertion set for every current work unit and no assertion set for an unknown work unit. Preserve stable assertion ids for obligations that remain materially unchanged.
+Return exactly one assertion set for every current work unit and no assertion set for an unknown work unit.
 
 Assign each proof obligation to the work unit whose behavior it establishes. Remove duplicated or contradictory proof. Assertions must be independently observable and executable, cover material negative paths, and remain proportional to the behavior under test.
 
@@ -129,7 +129,7 @@ Use the committed Git baseline, final content and diff, repository-native checks
 Repair the complete set of supplied assertion findings in one pass. Do not make cosmetic edits to create the appearance of progress.`,
   tools: "Use read-only repository Tools only when an exact proof surface needs confirmation. Do not edit source or execute the plan.",
   output: `Return exactly:
-{"assertions":[{"stepId":"existing step id","assertions":[{"id":"stable assertion id","claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}]}`,
+{"assertions":[{"stepId":"existing step id","assertions":[{"claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}]}`,
 });
 
 export const CONTINUITY_SYSTEM = composePrompt({
@@ -175,9 +175,9 @@ Inspect the complete current planning state and report every presently visible b
   context: "Dynamic context supplies critiqueStage. During structure, assertions and continuity are intentionally empty: judge rubric, architecture, proportionality, milestones, and work decomposition without treating their absence as a defect. During complete, reconcile the populated per-step assertions and, on replanning, every completed-work continuity decision. Dynamic context also supplies immutable discovery history, previous plan, exact execution evidence, and the prior critique on repeated passes.",
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
-{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"stable finding id","owner":"rubric|design|decomposition|assertions|continuity|user","severity":"blocking|advisory","affectedMilestones":["exact milestone id"],"affectedSteps":["exact step id"],"issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":"specific reason or null"}
+{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"owner":"rubric|design|decomposition|assertions|continuity|user","severity":"blocking|advisory","affectedMilestones":["exact milestone id"],"affectedSteps":["exact step id"],"issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":"specific reason or null"}
 
-Use exact ids from the supplied artifacts in affectedMilestones and affectedSteps. Use an empty array when a finding applies to the whole layer rather than inventing an id. Preserve the same finding id on later critiques while the same defect remains unresolved.
+Use exact graph addresses from the supplied artifacts in affectedMilestones and affectedSteps. Use an empty array when a finding applies to the whole layer. Do not invent identifiers for findings.
 
 Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
 });

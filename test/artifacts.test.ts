@@ -1,6 +1,6 @@
 import type { Ctx } from "@constal/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { loadArtifact } from "../src/artifacts.js";
+import { HORIZON_ARTIFACT_ENVELOPE_MAX_BYTES, loadArtifact, storeArtifact } from "../src/artifacts.js";
 
 describe("Horizon CAS handoffs", () => {
   it("reads planning envelopes within the pinned getText contract", async () => {
@@ -12,5 +12,11 @@ describe("Horizon CAS handoffs", () => {
     const value = await loadArtifact<{ ready: boolean }>({ resources: { cas: "cas" }, invoke } as unknown as Ctx,
       { ref: "a".repeat(64) });
     expect(value).toEqual({ ready: true });
+  });
+
+  it("rejects an unreadable handoff before storing it", async () => {
+    const ctx = { invoke: async () => { throw new Error("must not store"); } } as unknown as Ctx;
+    await expect(storeArtifact(ctx, "x".repeat(HORIZON_ARTIFACT_ENVELOPE_MAX_BYTES + 1)))
+      .rejects.toThrow("bound CAS text-read contract");
   });
 });
