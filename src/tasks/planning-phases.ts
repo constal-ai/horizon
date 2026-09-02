@@ -1,10 +1,10 @@
 import { subtask } from "@constal/sdk";
 import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
-import { parseHzAssertionPlan, parseHzDesign, parseHzMilestoneWork, parseHzPlanCritique, parseHzPlanNarrative, parseHzRubric,
-  parseHzStepAssertions, parseHzWorkPlan, type HzAssertionPlan, type HzDesign, type HzMilestoneWork, type HzPlanCritique,
-  type HzPlanInput, type HzPlanNarrative, type HzPlanStep,
+import { parseHzAssertionPlan, parseHzDesign, parseHzMilestoneWork, parseHzPlanContinuity, parseHzPlanCritique,
+  parseHzPlanNarrative, parseHzRubric, parseHzStepAssertions, parseHzWorkPlan, type HzAssertionPlan, type HzDesign,
+  type HzMilestoneWork, type HzPlanContinuity, type HzPlanCritique, type HzPlanInput, type HzPlanNarrative, type HzPlanStep,
   type HzRubric, type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
-import { ASSERTION_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM,
+import { ASSERTION_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM,
   RUBRIC_SYSTEM, WORK_PLAN_REPAIR_SYSTEM } from "../prompts/planning.js";
 import { PLANNER_SYSTEM } from "../prompts/planner.js";
 import { runReactLoop } from "../react-loop.js";
@@ -26,15 +26,18 @@ interface AssertionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDe
 interface WorkPlanRepairInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
   critique: HzPlanCritique; tools: string[] }
 interface AssertionPlanRepairInput extends WorkPlanRepairInput { assertions: HzStepAssertions[] }
+interface ContinuityInput extends AssertionPlanRepairInput {}
 interface CritiqueInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
-  assertions: HzStepAssertions[]; critiqueStage: "structure" | "complete"; prior: HzPlanCritique | null; tools: string[] }
+  assertions: HzStepAssertions[]; continuity: HzPlanContinuity; critiqueStage: "structure" | "complete";
+  prior: HzPlanCritique | null; tools: string[] }
 export interface FinalizerInput extends CritiqueInput { critique: HzPlanCritique; tools: [] }
 
 function context(planning: HzPlanInput): Record<string, unknown> {
   return {
     request: planning.request, revision: planning.revision, discoveryPlan: planning.discoveryPlan,
     investigations: planning.investigations, previousPlan: planning.previousPlan, completed: planning.completed,
-    replanBrief: planning.replanBrief, answer: planning.answer,
+    replanBrief: planning.replanBrief, restartAt: planning.restartAt, executionEvidence: planning.executionEvidence,
+    answer: planning.answer,
   };
 }
 
@@ -142,6 +145,24 @@ export const assertionPlanRepairAgent = subtask<PlanningPhaseResult<HzAssertionP
   },
 });
 
+export const continuityAgent = subtask<PlanningPhaseResult<HzPlanContinuity>>({
+  id: "horizon-plan-continuity", version: "1",
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<ContinuityInput>(ctx, envelope);
+    const completedIds = input.planning.completed.map(({ stepId }) => stepId);
+    const loop = await runReactLoop({ role: "plan-continuity", system: CONTINUITY_SYSTEM,
+      objective: "Reconcile previously verified work with the new immutable planning revision.",
+      context: { ...context(input.planning), previousPlanningState: input.planning.previousState,
+        rubric: input.rubric, design: input.design, workPlan: input.workPlan, assertions: input.assertions,
+        completed: input.planning.completed, critique: input.critique },
+      tools: [], model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
+      parse: (value) => parseHzPlanContinuity(planningArtifact(value,
+        { object: "constal.horizon.plan-continuity", revision: input.planning.revision }), input.planning.revision,
+      completedIds, input.workPlan.steps.map(({ id }) => id)) }, ctx);
+    return { artifact: loop.artifact, toolEvidence: loop.evidence };
+  },
+});
+
 function critiqueArtifact(value: unknown, input: CritiqueInput): HzPlanCritique | null {
   const critique = parseHzPlanCritique(planningArtifact(value,
     { object: "constal.horizon.plan-critique", revision: input.planning.revision }), input.planning.revision);
@@ -159,7 +180,8 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,
       objective: "Reconcile all planning artifacts and decide whether the plan can become immutable.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
-        workPlan: input.workPlan, assertions: input.assertions, critiqueStage: input.critiqueStage,
+        workPlan: input.workPlan, assertions: input.assertions, continuity: input.continuity,
+        critiqueStage: input.critiqueStage,
         priorCritique: input.prior },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => critiqueArtifact(value, input) }, ctx);
@@ -174,7 +196,8 @@ export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
     const loop = await runReactLoop({ role: "plan-finalizer", system: PLANNER_SYSTEM,
       objective: "Render the converged immutable execution specification.",
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
-        workPlan: input.workPlan, assertions: input.assertions, critique: input.critique },
+        workPlan: input.workPlan, assertions: input.assertions, continuity: input.continuity,
+        critique: input.critique },
       tools: [], model: "model", stream: true, maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzPlanNarrative(planningArtifact(value,
         { object: "constal.horizon.plan-narrative" })) }, ctx);

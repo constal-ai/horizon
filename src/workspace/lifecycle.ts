@@ -5,7 +5,7 @@ import {
 import { storeArtifact } from "../artifacts.js";
 import {
   type HzEnvironmentCommand, type HzRequest, type HzResolvedSource, type HzSourceInput,
-  type HzWorkspaceCheckpoint, type HzWorkspaceReceipt,
+  type HzWorkspaceAnchor, type HzWorkspaceCheckpoint, type HzWorkspaceReceipt, type HzWorkspaceState,
 } from "../contracts.js";
 import { HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS, HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 import { sourceResolver } from "../tasks/source.js";
@@ -169,6 +169,30 @@ function parseInspection(result: SandboxCommandResult): { commit: string; tree: 
 
 async function inspectWorkspace(selected: Sandbox): Promise<{ commit: string; tree: string; status: string }> {
   return parseInspection(await rawCommand(selected, "node", [HORIZON_RUNNER_PATH, "inspect", HORIZON_WORKSPACE_ROOT]));
+}
+
+export async function inspectWorkspaceState(ctx: Ctx): Promise<HzWorkspaceState> {
+  const selected = await ctx.sandboxPool(ctx.resources.sandbox!).createSandbox(ctx.run.agent.crn, ctx.run.session);
+  const inspection = await inspectWorkspace(selected);
+  return { tree: inspection.tree, status: inspection.status };
+}
+
+export async function restoreWorkspaceAnchor(anchor: HzWorkspaceAnchor, reason: string,
+  ctx: Ctx): Promise<HzWorkspaceState> {
+  if (!anchor.image) throw new WorkspacePreparationError("The selected verified workspace point has no restorable image.");
+  const pool = ctx.sandboxPool(ctx.resources.sandbox!);
+  const image = imageHandle(ctx, pool, anchor.image, anchor.cacheKey);
+  const selected = await pool.createSandbox(ctx.run.agent.crn, ctx.run.session, { image }, {
+    dedupeKey: `horizon-restore:${await hashValue({ anchor: anchor.receipt, image: anchor.image, reason })}`,
+    timeoutMs: TIMEOUT_MS,
+  });
+  const inspection = await inspectWorkspace(selected);
+  if (inspection.tree !== anchor.tree || inspection.status !== anchor.status) {
+    throw new WorkspacePreparationError("The restored workspace does not match its verified checkpoint receipt.");
+  }
+  const state = { tree: inspection.tree, status: inspection.status };
+  await ctx.commit({ kind: "horizon.workspace-restored", reason, anchor, state }, { tier: "audit" });
+  return state;
 }
 
 async function workspaceExists(selected: Sandbox): Promise<boolean> {

@@ -1,18 +1,19 @@
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzMilestoneWork, parseHzPlan, parseHzWorkPlan, type HzCritiqueFinding, type HzCritiqueOwner, type HzDesign,
-  type HzMilestone, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzRubric,
+  type HzMilestone, type HzPlanContinuity, type HzPlanCritique, type HzPlanInput, type HzPlannerResult, type HzPlanningOwner,
+  type HzPlanningState, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
 import { HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL_MS, HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
-import { assertionAgent, assertionPlanRepairAgent, critiqueAgent, decompositionAgent, designAgent, planFinalizer, rubricAgent,
+import { assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgent, decompositionAgent, designAgent, planFinalizer, rubricAgent,
   workPlanRepairAgent,
   type PlanningPhaseResult } from "./planning-phases.js";
 
 const MAX_REPAIR_CYCLES = 4;
 const MAX_FINDING_REPAIR_ATTEMPTS = 2;
 type RepairOwner = Exclude<HzCritiqueOwner, "user">;
-const REPAIR_ORDER: readonly RepairOwner[] = ["rubric", "design", "decomposition", "assertions"];
+const REPAIR_ORDER: readonly RepairOwner[] = ["rubric", "design", "decomposition", "assertions", "continuity"];
 
 function attenuation(tools: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
   return { bindings: [...new Set([...bindingsForTools(tools, ctx), "cas"])].sort(), tools: [...tools].sort() };
@@ -24,9 +25,34 @@ function blockedCritique(input: HzPlanInput, summary: string): HzPlanCritique {
 }
 
 function planningFingerprint(rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
-  assertions: HzStepAssertions[]): Promise<string> {
+  assertions: HzStepAssertions[], continuity: HzPlanContinuity | null = null): Promise<string> {
   return hashValue({ rubric, design, workPlan,
-    assertions: [...assertions].sort((left, right) => left.stepId.localeCompare(right.stepId)) });
+    assertions: [...assertions].sort((left, right) => left.stepId.localeCompare(right.stepId)), continuity });
+}
+
+function emptyContinuity(revision: number): HzPlanContinuity {
+  return { object: "constal.horizon.plan-continuity", version: 1, revision, decisions: [] };
+}
+
+function executionCritique(input: HzPlanInput, owner: HzPlanningOwner): HzPlanCritique {
+  const attempt = input.executionEvidence;
+  if (!input.replanBrief) throw new TypeError("Phase-local replanning requires a correction brief");
+  const step = attempt ? input.previousState?.workPlan.steps.find(({ id }) => id === attempt.stepId) : null;
+  return { object: "constal.horizon.plan-critique", version: 1, revision: input.revision, verdict: "repair",
+    summary: input.replanBrief, findings: [{ id: attempt ? `execution-${attempt.id}` : `revision-${input.revision}`, owner, severity: "blocking",
+      affectedMilestones: step ? [step.milestoneId] : [], affectedSteps: step ? [step.id] : [],
+      issue: input.replanBrief, evidence: attempt ? [attempt.stepFact, attempt.verificationFact] : [], repair: input.replanBrief }],
+    question: null, blockedReason: null };
+}
+
+function rebasePlanningArtifacts(state: HzPlanningState, revision: number): {
+  rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan; assertions: HzStepAssertions[];
+} {
+  return {
+    rubric: { ...state.rubric, revision }, design: { ...state.design, revision },
+    workPlan: { ...state.workPlan, revision },
+    assertions: state.assertions.map((assertion) => ({ ...assertion, revision })),
+  };
 }
 
 function earliestRepairOwner(findings: readonly HzCritiqueFinding[]): RepairOwner | null {
@@ -210,10 +236,25 @@ export const planner = subtask<HzPlannerResult>({
       await commitPhase(ctx, "repair:assertions", input.revision, result, repairCycle);
       return result.artifact.assertions;
     };
-    const runCritique = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
-      assertions: HzStepAssertions[], stage: "structure" | "complete"): Promise<HzPlanCritique> => {
+    const runContinuity = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
+      assertions: HzStepAssertions[], repairCritique: HzPlanCritique): Promise<HzPlanContinuity> => {
+      if (input.completed.length === 0) return emptyContinuity(input.revision);
       const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan,
-        assertions, critiqueStage: stage, prior: critique, tools });
+        assertions, critique: repairCritique, tools: [] });
+      const result = await ctx.spawn(continuityAgent, phaseInput, {
+        retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+          microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
+        attenuation: { bindings: ["cas", "model"], tools: [] },
+      });
+      planningRuns++; evidence.push(...result.toolEvidence);
+      await commitPhase(ctx, "continuity", input.revision, result, repairCycle);
+      return result.artifact;
+    };
+    const runCritique = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
+      assertions: HzStepAssertions[], continuity: HzPlanContinuity,
+      stage: "structure" | "complete"): Promise<HzPlanCritique> => {
+      const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan,
+        assertions, continuity, critiqueStage: stage, prior: critique, tools });
       const result = await ctx.spawn(critiqueAgent, phaseInput, { retries: 1, dedupe: "specHash",
         budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
           wallMs: HORIZON_LOOP_WALL_MS }, attenuation: childAttenuation });
@@ -248,16 +289,42 @@ export const planner = subtask<HzPlannerResult>({
         repairCycle, findingKeys, fingerprint, reason }, { tier: "audit" });
     };
 
-    let rubric = await runRubric(null);
-    let design = await runDesign(rubric, null);
-    let workPlan = await runDecomposition(rubric, design, null);
+    let rubric: HzRubric; let design: HzDesign; let workPlan: HzWorkPlan;
+    let assertions: HzStepAssertions[] = []; let continuity = emptyContinuity(input.revision);
+    if (!input.previousState) {
+      if (input.restartAt !== null || input.executionEvidence !== null) {
+        throw new TypeError("Initial planning cannot begin from an execution repair owner");
+      }
+      rubric = await runRubric(null); design = await runDesign(rubric, null);
+      workPlan = await runDecomposition(rubric, design, null);
+    } else {
+      if (!input.previousPlan || input.previousState.revision !== input.previousPlan.revision || !input.restartAt) {
+        throw new TypeError("Replanning requires the previous immutable planning state and one owning layer");
+      }
+      ({ rubric, design, workPlan, assertions } = rebasePlanningArtifacts(input.previousState, input.revision));
+      critique = executionCritique(input, input.restartAt);
+      if (input.restartAt === "rubric") {
+        rubric = await runRubric(rubric); design = await runDesign(rubric, design);
+        workPlan = await runDecomposition(rubric, design, null); assertions = [];
+      } else if (input.restartAt === "design") {
+        design = await runDesign(rubric, design); workPlan = await runDecomposition(rubric, design, null); assertions = [];
+      } else if (input.restartAt === "decomposition") {
+        workPlan = await runWorkPlanRepair(rubric, design, workPlan, critique); assertions = [];
+      } else {
+        assertions = await runAssertionPlanRepair(rubric, design, workPlan, assertions, critique);
+      }
+      await ctx.commit({ kind: "horizon.execution-replan-entry", revision: input.revision,
+        owner: input.restartAt, attempt: input.executionEvidence?.id ?? null,
+        stepFact: input.executionEvidence?.stepFact ?? null,
+        verificationFact: input.executionEvidence?.verificationFact ?? null }, { tier: "audit" });
+    }
 
     const seenFingerprints = new Set<string>([await planningFingerprint(rubric, design, workPlan, [])]);
 
     // Reconcile architecture, scope, proportionality, and work boundaries
     // before multiplying the plan into one assertion Agent per work unit.
     for (;;) {
-      critique = await runCritique(rubric, design, workPlan, [], "structure");
+      critique = await runCritique(rubric, design, workPlan, [], emptyContinuity(input.revision), "structure");
       if (critique.verdict !== "repair") break;
       const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
       const userFinding = blocking.find(({ owner }) => owner === "user");
@@ -271,8 +338,8 @@ export const planner = subtask<HzPlannerResult>({
       if (repairCycle >= MAX_REPAIR_CYCLES) {
         critique = blockedCritique(input, "Structural planning repair exceeded its convergence safety ceiling."); break;
       }
-      if (blocking.some(({ owner }) => owner === "assertions")) {
-        critique = blockedCritique(input, "Structural critique incorrectly required assertion repair before assertions existed."); break;
+      if (blocking.some(({ owner }) => owner === "assertions" || owner === "continuity")) {
+        critique = blockedCritique(input, "Structural critique required repair of an artifact that does not exist at this stage."); break;
       }
       const owner = earliestRepairOwner(blocking);
       if (!owner) throw new TypeError("Structural critique did not identify a repairable planning owner");
@@ -294,7 +361,7 @@ export const planner = subtask<HzPlannerResult>({
       } else if (owner === "decomposition") {
         workPlan = await runWorkPlanRepair(rubric, design, workPlan, critiqueForOwner(critique, owner));
       } else {
-        throw new TypeError("Structural critique cannot route to assertion repair");
+        throw new TypeError("Structural critique cannot route to assertion or continuity repair");
       }
       const nextFingerprint = await planningFingerprint(rubric, design, workPlan, []);
       await commitRepair("structure", owner, repair, beforeHash, nextFingerprint);
@@ -307,12 +374,16 @@ export const planner = subtask<HzPlannerResult>({
       seenFingerprints.add(nextFingerprint);
     }
 
-    let assertions: HzStepAssertions[] = [];
-    if (critique.verdict === "accepted") assertions = await runAssertions(rubric, design, workPlan, []);
-    seenFingerprints.add(await planningFingerprint(rubric, design, workPlan, assertions));
+    if (critique.verdict === "accepted" && assertions.length === 0) {
+      assertions = await runAssertions(rubric, design, workPlan, []);
+    }
+    if (critique.verdict === "accepted") {
+      continuity = await runContinuity(rubric, design, workPlan, assertions, critique);
+    }
+    seenFingerprints.add(await planningFingerprint(rubric, design, workPlan, assertions, continuity));
 
     if (critique.verdict === "accepted") for (;;) {
-      critique = await runCritique(rubric, design, workPlan, assertions, "complete");
+      critique = await runCritique(rubric, design, workPlan, assertions, continuity, "complete");
       if (critique.verdict !== "repair") break;
       const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
       const userFinding = blocking.find(({ owner }) => owner === "user");
@@ -334,26 +405,32 @@ export const planner = subtask<HzPlannerResult>({
         const reason = `Planning did not converge after ${MAX_FINDING_REPAIR_ATTEMPTS} repairs of the same ${owner} scope.`;
         critique = blockedCritique(input, reason);
         await commitPlateau("complete", reason, findingKeys,
-          await planningFingerprint(rubric, design, workPlan, assertions));
+          await planningFingerprint(rubric, design, workPlan, assertions, continuity));
         break;
       }
-      const beforeHash = await planningFingerprint(rubric, design, workPlan, assertions);
+      const beforeHash = await planningFingerprint(rubric, design, workPlan, assertions, continuity);
       repairCycle++;
       if (owner === "rubric") {
         rubric = await runRubric(rubric); design = await runDesign(rubric, design);
         workPlan = await runDecomposition(rubric, design, null);
         assertions = await runAssertions(rubric, design, workPlan, []);
+        continuity = await runContinuity(rubric, design, workPlan, assertions, critique);
       } else if (owner === "design") {
         design = await runDesign(rubric, design); workPlan = await runDecomposition(rubric, design, null);
         assertions = await runAssertions(rubric, design, workPlan, []);
+        continuity = await runContinuity(rubric, design, workPlan, assertions, critique);
       } else if (owner === "decomposition") {
         workPlan = await runWorkPlanRepair(rubric, design, workPlan, critiqueForOwner(critique, owner));
         assertions = await runAssertions(rubric, design, workPlan, []);
-      } else {
+        continuity = await runContinuity(rubric, design, workPlan, assertions, critique);
+      } else if (owner === "assertions") {
         assertions = await runAssertionPlanRepair(rubric, design, workPlan, assertions,
           critiqueForOwner(critique, owner));
+        continuity = await runContinuity(rubric, design, workPlan, assertions, critique);
+      } else {
+        continuity = await runContinuity(rubric, design, workPlan, assertions, critiqueForOwner(critique, owner));
       }
-      const nextFingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+      const nextFingerprint = await planningFingerprint(rubric, design, workPlan, assertions, continuity);
       await commitRepair("complete", owner, repair, beforeHash, nextFingerprint);
       if (seenFingerprints.has(nextFingerprint)) {
         const reason = "Planning repair returned to an already-observed artifact state.";
@@ -368,8 +445,8 @@ export const planner = subtask<HzPlannerResult>({
       critique = blockedCritique(input, "Planning converged without a governed materialized repository workspace.");
     }
 
-    const finalizerInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, assertions,
-      prior: critique, critique, tools: [] });
+    const finalizerInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan, assertions, continuity,
+      critiqueStage: "complete", prior: critique, critique, tools: [] });
     const finalized = await ctx.spawn(planFinalizer, finalizerInput, { retries: 1, dedupe: "specHash",
       budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
         wallMs: HORIZON_LOOP_WALL_MS }, attenuation: { bindings: ["cas", "model"], tools: [] } });
@@ -388,6 +465,8 @@ export const planner = subtask<HzPlannerResult>({
       || expectedStatus === "needs-input" && canonicalJson(plan.question) !== canonicalJson(critique.question)) {
       throw new TypeError("Horizon finalization changed or misrepresented the converged planning artifacts");
     }
-    return { plan, toolEvidence: evidence, planningRuns };
+    const state: HzPlanningState = { object: "constal.horizon.planning-state", version: 1,
+      revision: input.revision, rubric, design, workPlan, assertions, continuity, critique };
+    return { plan, state, toolEvidence: evidence, planningRuns };
   },
 });

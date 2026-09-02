@@ -1,5 +1,5 @@
 import { agent, type HistoryView } from "@constal/sdk";
-import { assertionAgent, assertionPlanRepairAgent, critiqueAgent, decompositionAgent, designAgent, discoveryFramer, executor,
+import { assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgent, decompositionAgent, designAgent, discoveryFramer, executor,
   investigator, planFinalizer, planner, reconciler, rubricAgent, verifier, approvalInterpreter,
   workPlanRepairAgent } from "./tasks/index.js";
 import { sourceResolver } from "./tasks/source.js";
@@ -64,12 +64,12 @@ export default agent({
   tools: TOOLS,
   views: [horizonProgress],
   subtasks: [sourceResolver, discoveryFramer, investigator, planner, rubricAgent, designAgent, decompositionAgent,
-    workPlanRepairAgent, assertionAgent, assertionPlanRepairAgent, critiqueAgent, planFinalizer, executor, verifier,
-    reconciler, approvalInterpreter],
+    workPlanRepairAgent, assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgent, planFinalizer,
+    executor, verifier, reconciler, approvalInterpreter],
   onMessage: routeHorizon,
 });
 
-export { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzPlanNarrative,
+export { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanContinuity, parseHzPlanCritique, parseHzPlanNarrative,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzVerification, parseHzWorkPlan } from "./contracts.js";
 export { EvidencePlateauDetector } from "./react-loop.js";

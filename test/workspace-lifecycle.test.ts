@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import type { CRN, CreateSandboxOptions, Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
-import type { HzRequest, HzWorkspaceReceipt } from "../src/contracts.js";
-import { captureWorkspaceCheckpoint, prepareWorkspace } from "../src/workspace/lifecycle.js";
+import type { HzRequest, HzWorkspaceAnchor, HzWorkspaceReceipt } from "../src/contracts.js";
+import { captureWorkspaceCheckpoint, inspectWorkspaceState, prepareWorkspace, restoreWorkspaceAnchor } from "../src/workspace/lifecycle.js";
 import { WORKSPACE_RUNNER_SOURCE } from "../src/workspace/runner-source.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -33,7 +33,7 @@ class FakeBackend {
     createImage: async () => { throw new Error("lifecycle publishes through the governed operation"); },
     createSandbox: async (agent: CRN, session: string, options?: CreateSandboxOptions) => {
       const existing = this.sandboxes.get(session);
-      if (existing) return existing;
+      if (existing && !options?.image) return existing;
       const source = options?.image ? this.images.get(options.image.id) : undefined;
       const sandbox = new FakeSandbox(this, agent, session, source);
       this.sandboxes.set(session, sandbox); this.current = sandbox;
@@ -165,6 +165,23 @@ describe("Horizon prepared Session workspaces", () => {
     expect(captured.checkpoint).toMatchObject({ stepId: "implement", tree: "changed-tree", status: " M src/index.ts",
       image: expect.stringMatching(/^image-/u) });
     expect(backend.images.has(captured.checkpoint.cacheKey)).toBe(true);
+  });
+
+  it("explicitly restores and verifies one exact workspace checkpoint image", async () => {
+    const backend = new FakeBackend(); const ctx = backend.context("session-a");
+    const workspace = await prepareWorkspace(request, ctx);
+    const sandbox = backend.sandboxes.get("session-a")!;
+    sandbox.tree = "verified-tree"; sandbox.status = " M src/index.ts";
+    const captured = await captureWorkspaceCheckpoint({ workspace, planFact: "plan", stepFact: "step",
+      verificationFact: "verification", stepId: "implement" }, ctx);
+    const anchor: HzWorkspaceAnchor = { kind: "verified", stepId: "implement", receipt: captured.receiptRef,
+      cacheKey: captured.checkpoint.cacheKey, image: captured.checkpoint.image, tree: captured.checkpoint.tree,
+      status: captured.checkpoint.status };
+    sandbox.tree = "broken-tree"; sandbox.status = " M wrong.ts";
+
+    await expect(restoreWorkspaceAnchor(anchor, "abandon the failed attempt", ctx))
+      .resolves.toEqual({ tree: "verified-tree", status: " M src/index.ts" });
+    await expect(inspectWorkspaceState(ctx)).resolves.toEqual({ tree: "verified-tree", status: " M src/index.ts" });
   });
 
   it("continues with durable receipts when provider snapshots are unavailable", async () => {

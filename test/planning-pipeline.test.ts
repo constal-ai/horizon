@@ -1,6 +1,7 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
-import type { HzDesign, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
+import type { HzDesign, HzExecutionAttempt, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative, HzPlanningState,
+  HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
 import { planner, scopeMilestoneStepIds } from "../src/tasks/planner.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -45,20 +46,42 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
       evidenceNeeded: ["Source"], stopWhen: "Ownership is proven." }], unknowns: [], blockedReason: null },
   investigations: [{ object: "constal.horizon.investigation", version: 1, focusId: "runtime", status: "complete",
     summary: "Runtime owns recovery.", findings: ["Runtime ownership."], evidence: ["src/runtime.ts"], unknowns: [],
-    planImplications: ["Reuse runtime."], blockedReason: null }], revision: 1, previousPlan: null, completed: [],
-  replanBrief: null, answer: null, tools: [] };
+    planImplications: ["Reuse runtime."], blockedReason: null }], revision: 1, previousPlan: null, previousState: null,
+  completed: [], restartAt: null, executionEvidence: null, replanBrief: null, answer: null, tools: [] };
+
+const priorState: HzPlanningState = { object: "constal.horizon.planning-state", version: 1, revision: 1,
+  rubric, design, workPlan, assertions: [assertions],
+  continuity: { object: "constal.horizon.plan-continuity", version: 1, revision: 1, decisions: [] },
+  critique: accepted };
+const executionEvidence: HzExecutionAttempt = { object: "constal.horizon.execution-attempt", version: 1,
+  id: "attempt-1", ordinal: 1, planFact: "plan-1", stepId: step.id, executionReused: false,
+  previousAttemptRef: null, restorePoint: { kind: "prepared", stepId: null, receipt: "workspace",
+    cacheKey: "c".repeat(64), image: "image", tree: "before", status: "" },
+  workspaceBefore: { tree: "before", status: "" }, workspaceAfter: { tree: "after", status: " M src/index.ts" },
+  stepFact: "step-fact", verificationFact: "verification-fact",
+  execution: { object: "constal.horizon.step-result", version: 1, stepId: step.id, status: "failed",
+    summary: "The planned seam was stale.", changedFiles: [], verification: ["Focused proof failed."],
+    observations: ["The live seam differs."], unknowns: [], blockedReason: null },
+  executionToolEvidence: [], verification: { object: "constal.horizon.verification", version: 1,
+    stepId: step.id, verdict: "failed", summary: "The plan used a stale seam.",
+    checks: [{ target: "Focused behavior", outcome: "failed", evidence: "Observed stale seam." }],
+    unknowns: [], failureBrief: "Repair the owning work unit.", blockedReason: null }, verificationToolEvidence: [] };
 
 function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design], options: {
+  planningInput?: HzPlanInput;
   workByMilestone?: Record<string, typeof workPlan.steps>;
   workPlanRepairs?: HzWorkPlan[];
   assertionsByStep?: Record<string, HzStepAssertions>;
   assertionPlanRepairs?: HzStepAssertions[][];
+  continuityRepairs?: Array<HzPlanningState["continuity"]["decisions"]>;
   finalPlan?: HzPlan;
 } = {}) {
+  const planningInput = options.planningInput ?? input;
   const spawned: string[] = []; const committed: Array<Record<string, unknown>> = [];
-  const artifacts = new Map<string, string>([["planning-input", JSON.stringify(input)]]); let artifactSequence = 0;
+  const artifacts = new Map<string, string>([["planning-input", JSON.stringify(planningInput)]]); let artifactSequence = 0;
   const decompositionInputs: Array<{ milestoneId: string; acceptedSteps: typeof workPlan.steps }> = [];
   let designIndex = 0; let criticIndex = 0; let workRepairIndex = 0; let assertionRepairIndex = 0;
+  let continuityIndex = 0;
   const ctx = {
     resources: { model: "model", cas: "cas" },
     invoke: async (_resource: unknown, operation: string, args: { text?: string; ref?: string }) => {
@@ -90,9 +113,13 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
         return handle({ artifact: options.assertionsByStep?.[phase.stepId] ?? assertions, toolEvidence: [] });
       }
       if (task.id === "horizon-assertion-plan-repair") return handle({ artifact: {
-        object: "constal.horizon.assertion-plan", version: 1, revision: 1,
+        object: "constal.horizon.assertion-plan", version: 1, revision: planningInput.revision,
         assertions: options.assertionPlanRepairs?.[Math.min(assertionRepairIndex++, options.assertionPlanRepairs.length - 1)]
           ?? [assertions],
+      }, toolEvidence: [] });
+      if (task.id === "horizon-plan-continuity") return handle({ artifact: {
+        object: "constal.horizon.plan-continuity", version: 1, revision: planningInput.revision,
+        decisions: options.continuityRepairs?.[Math.min(continuityIndex++, options.continuityRepairs.length - 1)] ?? [],
       }, toolEvidence: [] });
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });
@@ -127,6 +154,77 @@ describe("Horizon multi-loop planner", () => {
     expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-phase").map(({ phase }) => phase))
       .toEqual(["rubric", "design", "decomposition:behavior", "critique:structure", "assertions:implement",
         "critique:complete", "finalization"]);
+  });
+
+  it("enters execution replanning at whole-work-plan repair without rerunning upstream phases", async () => {
+    const revisedStep = { ...step, specification: "Use the live seam observed by the failed execution attempt." };
+    const revisedWork: HzWorkPlan = { ...workPlan, revision: 2, steps: [revisedStep] };
+    const revisedAssertions: HzStepAssertions = { ...assertions, revision: 2 };
+    const acceptedRevision: HzPlanCritique = { ...accepted, revision: 2 };
+    const revisedFinal: HzPlan = { ...finalPlan, revision: 2, steps: [revisedStep], assertions: [revisedAssertions] };
+    const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
+      restartAt: "decomposition", executionEvidence,
+      replanBrief: "The failed attempt proved that the work unit owns a stale implementation seam." };
+    const fixture = planningContext([acceptedRevision, acceptedRevision], [design], { planningInput,
+      workPlanRepairs: [revisedWork], assertionsByStep: { [step.id]: revisedAssertions }, finalPlan: revisedFinal });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(revisedFinal);
+    expect(result.state.workPlan).toEqual(revisedWork);
+    expect(result.planningRuns).toBe(6);
+    expect(fixture.spawned).toEqual(["horizon-work-plan-repair", "horizon-plan-critique", "horizon-assertions",
+      "horizon-plan-critique", "horizon-plan-finalizer"]);
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.execution-replan-entry",
+      owner: "decomposition", attempt: executionEvidence.id }));
+  });
+
+  it("enters assertion replanning without rerunning implementation planning", async () => {
+    const revisedAssertions: HzStepAssertions = { ...assertions, revision: 2,
+      assertions: [{ ...assertions.assertions[0]!, evidenceRequired: ["Reproduce the exact observed failure path."] }] };
+    const acceptedRevision: HzPlanCritique = { ...accepted, revision: 2 };
+    const revisedFinal: HzPlan = { ...finalPlan, revision: 2, assertions: [revisedAssertions] };
+    const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
+      restartAt: "assertions", executionEvidence,
+      replanBrief: "The implementation is complete, but the proof contract targeted the wrong observation." };
+    const fixture = planningContext([acceptedRevision, acceptedRevision], [design], { planningInput,
+      assertionPlanRepairs: [[revisedAssertions]], finalPlan: revisedFinal });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(revisedFinal);
+    expect(result.planningRuns).toBe(5);
+    expect(fixture.spawned).toEqual(["horizon-assertion-plan-repair", "horizon-plan-critique",
+      "horizon-plan-critique", "horizon-plan-finalizer"]);
+  });
+
+  it("subjects completed-work continuity to cross-plan critique and global repair", async () => {
+    const revisedAssertions: HzStepAssertions = { ...assertions, revision: 2 };
+    const acceptedRevision: HzPlanCritique = { ...accepted, revision: 2 };
+    const continuityRepair: HzPlanCritique = { ...acceptedRevision, verdict: "repair",
+      summary: "The changed proof contract requires fresh verification.", findings: [{ id: "proof-continuity",
+        owner: "continuity", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "The completed result was retained despite a changed proof contract.", evidence: ["verification-fact"],
+        repair: "Classify the result for reverification." }] };
+    const revisedFinal: HzPlan = { ...finalPlan, revision: 2, assertions: [revisedAssertions] };
+    const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
+      completed: [{ ...executionEvidence.execution, status: "complete" }], restartAt: "assertions", executionEvidence,
+      replanBrief: "The proof contract changed after the completed implementation." };
+    const retain = [{ priorStepId: step.id, nextStepId: step.id, disposition: "retain" as const,
+      reason: "The implementation is unchanged.", evidence: ["step-fact"] }];
+    const reverify = [{ ...retain[0]!, disposition: "reverify" as const,
+      reason: "The changed proof contract requires independent verification." }];
+    const fixture = planningContext([acceptedRevision, continuityRepair, acceptedRevision], [design], { planningInput,
+      assertionPlanRepairs: [[revisedAssertions]], continuityRepairs: [retain, reverify], finalPlan: revisedFinal });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(revisedFinal);
+    expect(result.state.continuity.decisions).toEqual(reverify);
+    expect(fixture.spawned.filter((id) => id === "horizon-plan-continuity")).toHaveLength(2);
+    expect(fixture.spawned.filter((id) => id === "horizon-assertion-plan-repair")).toHaveLength(1);
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.planning-repair",
+      owner: "continuity" }));
   });
 
   it("reruns the owning phase and every dependent planning loop before re-critique", async () => {

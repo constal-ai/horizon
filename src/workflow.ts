@@ -1,7 +1,8 @@
 import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
 import { storeArtifact } from "./artifacts.js";
-import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
-  type HzRunResult, type HzStepResult } from "./contracts.js";
+import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigationResult,
+  type HzPlan, type HzPlanContinuity, type HzPlanInput, type HzPlanningState, type HzPlateauState, type HzRequest,
+  type HzRunResult, type HzStepResult, type HzWorkspaceAnchor, type HzWorkspaceState } from "./contracts.js";
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { approvalInterpreter, parseApprovalDecision } from "./tasks/approval.js";
 import { horizonRoutedEvent, type HorizonRoutedEvent } from "./behaviors.js";
@@ -11,7 +12,8 @@ import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
 import { milestoneMarkdown, planMarkdown, questionMarkdown, waitPresentation } from "./github-conversation.js";
 import { publishWorkspace } from "./github-publication.js";
-import { archiveWorkspace, captureWorkspaceCheckpoint, prepareWorkspace, WorkspacePreparationError,
+import { archiveWorkspace, captureWorkspaceCheckpoint, inspectWorkspaceState, prepareWorkspace, restoreWorkspaceAnchor,
+  WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
 
 const MAX_PLAN_REVISIONS = 64;
@@ -97,9 +99,10 @@ function attenuation(names: readonly string[], ctx: Pick<Ctx, "resources">): Spa
   return { bindings: bindingsForTools(names, ctx), tools: [...names].sort() };
 }
 
-function nextStep(plan: HzPlan, completed: readonly HzStepResult[]): HzPlan["steps"][number] | null {
+function nextStep(plan: HzPlan, completed: readonly HzStepResult[], reserved = new Set<string>()): HzPlan["steps"][number] | null {
   const done = new Set(completed.filter(({ status }) => status === "complete").map(({ stepId }) => stepId));
-  return plan.steps.find(({ id, dependsOn }) => !done.has(id) && dependsOn.every((dependency) => done.has(dependency))) ?? null;
+  return plan.steps.find(({ id, dependsOn }) => !done.has(id) && !reserved.has(id)
+    && dependsOn.every((dependency) => done.has(dependency))) ?? null;
 }
 
 function updateCompleted(completed: HzStepResult[], result: HzStepResult, verified: boolean): HzStepResult[] {
@@ -107,28 +110,37 @@ function updateCompleted(completed: HzStepResult[], result: HzStepResult, verifi
   return [...completed.filter(({ stepId }) => stepId !== result.stepId), result];
 }
 
-export function reconcileCompletedForPlan(previous: HzPlan, next: HzPlan, completed: HzStepResult[]): {
-  completed: HzStepResult[];
-  invalidated: string[];
+export function applyPlanContinuity(next: HzPlan, completed: HzStepResult[], continuity: HzPlanContinuity): {
+  completed: HzStepResult[]; reverify: string[]; invalidated: string[];
 } {
-  const previousSteps = new Map(previous.steps.map((step) => [step.id, step]));
   const nextSteps = new Map(next.steps.map((step) => [step.id, step]));
-  const previousAssertions = new Map(previous.assertions.map((entry) => [entry.stepId, entry]));
-  const nextAssertions = new Map(next.assertions.map((entry) => [entry.stepId, entry]));
-  const invalidated: string[] = [];
-  const retained = completed.filter((result) => {
-    const nextStep = nextSteps.get(result.stepId);
-    if (!nextStep) return true;
-    const priorStep = previousSteps.get(result.stepId);
-    const previousAssertion = previousAssertions.get(result.stepId); const nextAssertion = nextAssertions.get(result.stepId);
-    const unchanged = priorStep !== undefined && canonicalJson({ step: priorStep,
-      assertions: previousAssertion ? { stepId: previousAssertion.stepId, assertions: previousAssertion.assertions } : null })
-      === canonicalJson({ step: nextStep,
-        assertions: nextAssertion ? { stepId: nextAssertion.stepId, assertions: nextAssertion.assertions } : null });
-    if (!unchanged) invalidated.push(result.stepId);
-    return unchanged;
-  });
-  return { completed: retained, invalidated: [...new Set(invalidated)].sort() };
+  const decisions = new Map(continuity.decisions.map((decision) => [decision.priorStepId, decision]));
+  const retained = new Map<string, HzStepResult>(); const reverify = new Set<string>(); const invalidated = new Set<string>();
+  for (const result of completed) {
+    const decision = decisions.get(result.stepId);
+    if (!decision || decision.disposition === "dropped" || decision.disposition === "rerun") {
+      invalidated.add(result.stepId); continue;
+    }
+    if (!decision.nextStepId || !nextSteps.has(decision.nextStepId)) {
+      throw new TypeError(`Horizon continuity references an unknown successor for ${result.stepId}`);
+    }
+    if (decision.disposition === "retain") retained.set(decision.nextStepId, { ...result, stepId: decision.nextStepId });
+    else reverify.add(decision.nextStepId);
+  }
+  // A retained result whose new prerequisites are not themselves retained must be
+  // reverified after those prerequisites complete; it cannot satisfy readiness yet.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [stepId] of retained) {
+      const step = nextSteps.get(stepId)!;
+      if (step.dependsOn.some((dependency) => !retained.has(dependency))) {
+        retained.delete(stepId); reverify.add(stepId); changed = true;
+      }
+    }
+  }
+  for (const stepId of reverify) invalidated.add(stepId);
+  return { completed: [...retained.values()], reverify: [...reverify].sort(), invalidated: [...invalidated].sort() };
 }
 
 function unknownFrontier(unknowns: readonly HzPlan["unknowns"][number][]): unknown[] {
@@ -147,6 +159,8 @@ export async function attemptProgressDigest<V extends {
   executionTools: readonly unknown[];
   verification: V;
   verificationTools: readonly unknown[];
+  workspaceBefore: HzWorkspaceState;
+  workspaceAfter: HzWorkspaceState;
 }): Promise<string> {
   return hashValue({
     execution: { status: input.execution.status, changedFiles: [...input.execution.changedFiles].sort(),
@@ -157,6 +171,7 @@ export async function attemptProgressDigest<V extends {
         .sort((left, right) => left.target.localeCompare(right.target) || left.outcome.localeCompare(right.outcome)),
       unknowns: unknownFrontier(input.verification.unknowns) },
     verificationTools: input.verificationTools,
+    workspace: { before: input.workspaceBefore, after: input.workspaceAfter },
   });
 }
 
@@ -168,6 +183,44 @@ async function progressState(previous: HzPlateauState, completed: readonly HzSte
     remainingUnknowns,
   });
   return { fingerprint, stableCycles: previous.fingerprint === fingerprint ? previous.stableCycles + 1 : 0 };
+}
+
+interface StoredAttempt { attempt: HzExecutionAttempt; ref: string }
+
+async function recordExecutionAttempt(input: Omit<HzExecutionAttempt, "object" | "version" | "id">,
+  ctx: Ctx): Promise<StoredAttempt> {
+  const id = await hashValue(input);
+  const attempt: HzExecutionAttempt = { object: "constal.horizon.execution-attempt", version: 1, id, ...input };
+  const stored = await storeArtifact(ctx, attempt);
+  await ctx.commit({ kind: "horizon.execution-attempt", id, step: attempt.stepId, ordinal: attempt.ordinal,
+    planFact: attempt.planFact, stepFact: attempt.stepFact, verificationFact: attempt.verificationFact,
+    executionReused: attempt.executionReused, workspaceBefore: attempt.workspaceBefore,
+    workspaceAfter: attempt.workspaceAfter, ref: stored.ref }, { tier: "audit" });
+  return { attempt, ref: stored.ref };
+}
+
+function preparedAnchor(workspace: PreparedWorkspace): HzWorkspaceAnchor {
+  return { kind: "prepared", stepId: null, receipt: workspace.receiptRef,
+    cacheKey: workspace.receipt.cache.key, image: workspace.receipt.cache.image,
+    tree: workspace.receipt.baseline.tree, status: "" };
+}
+
+function verifiedAnchor(stepId: string, receipt: string, checkpoint: {
+  cacheKey: string; image: string | null; tree: string; status: string;
+}): HzWorkspaceAnchor {
+  return { kind: "verified", stepId, receipt, cacheKey: checkpoint.cacheKey,
+    image: checkpoint.image, tree: checkpoint.tree, status: checkpoint.status };
+}
+
+function retainedPrefixAnchor(lineage: readonly HzWorkspaceAnchor[], retained: ReadonlySet<string>): {
+  anchor: HzWorkspaceAnchor; retainedAtAnchor: Set<string>;
+} {
+  const retainedAtAnchor = new Set<string>(); let anchor = lineage[0]!;
+  for (const candidate of lineage.slice(1)) {
+    if (!candidate.stepId || !retained.has(candidate.stepId)) break;
+    retainedAtAnchor.add(candidate.stepId); anchor = candidate;
+  }
+  return { anchor, retainedAtAnchor };
 }
 
 async function answerQuestion(question: HzDecisionQuestion, revision: number, ctx: Ctx): Promise<string> {
@@ -234,7 +287,9 @@ function blockedResult(plan: HzPlan, planFact: string, completed: HzStepResult[]
   };
 }
 
-async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPlan; fact: string; planningRuns: number }> {
+async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{
+  plan: HzPlan; state: HzPlanningState; fact: string; planningRuns: number;
+}> {
   const tools = availableTools(PLANNER_TOOL_NAMES, ctx);
   const planningInput = await storeArtifact(ctx, { ...input, tools });
   const baseAttenuation = attenuation(tools, ctx);
@@ -245,9 +300,11 @@ async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{ plan: HzPla
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: plannerAttenuation,
   });
-  const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan,
-    previousRevision: input.previousPlan?.revision ?? null, toolEvidence: result.toolEvidence }, { tier: "audit" });
-  return { plan: result.plan, fact: fact.hash, planningRuns: result.planningRuns };
+  const planningState = await storeArtifact(ctx, result.state);
+  const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan, planningState,
+    previousRevision: input.previousPlan?.revision ?? null, restartAt: input.restartAt,
+    executionAttempt: input.executionEvidence?.id ?? null, toolEvidence: result.toolEvidence }, { tier: "audit" });
+  return { plan: result.plan, state: result.state, fact: fact.hash, planningRuns: result.planningRuns };
 }
 
 async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: Ctx): Promise<{
@@ -297,6 +354,12 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   }
   let completed: HzStepResult[] = [];
   const checkpoints: HzRunResult["checkpoints"] = [];
+  const checkpointLineage: HzWorkspaceAnchor[] = [preparedAnchor(workspace)];
+  let restorePoint = checkpointLineage[0]!;
+  const latestAttempts = new Map<string, StoredAttempt>();
+  const successfulAttempts = new Map<string, StoredAttempt>();
+  const pendingReverify = new Map<string, StoredAttempt>();
+  let attemptOrdinal = 0;
   let resultDigests: string[] = [];
   let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
@@ -307,10 +370,44 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   const discovery = await discover(request, workspace, ctx);
   specialistRuns += discovery.specialistRuns;
   let current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
-    investigations: discovery.investigations, revision: 1, previousPlan: null,
-    completed, replanBrief: null, answer, tools: [] }, ctx);
+    investigations: discovery.investigations, revision: 1, previousPlan: null, previousState: null,
+    completed, restartAt: null, executionEvidence: null, replanBrief: null, answer, tools: [] }, ctx);
   remainingUnknowns = current.plan.unknowns;
   specialistRuns += current.planningRuns;
+
+  const adoptRevision = async (previous: typeof current, next: typeof current,
+    disposition: "keep-current" | "restore-last-verified", reason: string): Promise<void> => {
+    const reconciled = applyPlanContinuity(next.plan, completed, next.state.continuity);
+    const invalidated = new Set(reconciled.invalidated);
+    completed = reconciled.completed;
+    pendingReverify.clear();
+    if (disposition === "restore-last-verified") {
+      const prefix = retainedPrefixAnchor(checkpointLineage, new Set(completed.map(({ stepId }) => stepId)));
+      await restoreWorkspaceAnchor(prefix.anchor, reason, ctx);
+      const physicallyRetained = prefix.retainedAtAnchor;
+      for (const result of completed) if (!physicallyRetained.has(result.stepId)) invalidated.add(result.stepId);
+      completed = completed.filter(({ stepId }) => physicallyRetained.has(stepId));
+      const anchorIndex = checkpointLineage.findIndex(({ receipt }) => receipt === prefix.anchor.receipt);
+      checkpointLineage.splice(Math.max(1, anchorIndex + 1));
+      restorePoint = prefix.anchor;
+    } else {
+      const prefix = retainedPrefixAnchor(checkpointLineage, new Set(completed.map(({ stepId }) => stepId)));
+      restorePoint = prefix.anchor;
+      for (const stepId of reconciled.reverify) {
+        const prior = successfulAttempts.get(stepId);
+        if (prior) pendingReverify.set(stepId, prior);
+        else invalidated.add(stepId);
+      }
+    }
+    for (const stepId of invalidated) successfulAttempts.delete(stepId);
+    if (invalidated.size > 0 || reconciled.reverify.length > 0) {
+      await ctx.commit({ kind: "horizon.plan-invalidation", previousPlanFact: previous.fact,
+        nextPlanFact: next.fact, invalidated: [...invalidated].sort(), reverify: [...pendingReverify.keys()].sort(),
+        workspaceDisposition: disposition }, { tier: "audit" });
+    }
+    current = next; remainingUnknowns = current.plan.unknowns;
+    specialistRuns += current.planningRuns; replans++; approvedPlanFact = null;
+  };
 
   while (transitions++ < MAX_WORKFLOW_TRANSITIONS) {
     if (current.plan.status === "blocked") {
@@ -330,22 +427,25 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       }
       answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
       answeredQuestions.set(key, answer);
-      const previous = current.plan;
+      const previous = current;
       const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-        revision: previous.revision + 1, previousPlan: previous, completed,
+        revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+        restartAt: "rubric", executionEvidence: null,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
-      const reconciled = reconcileCompletedForPlan(previous, next.plan, completed);
-      if (reconciled.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
-        previousPlanFact: current.fact, nextPlanFact: next.fact, steps: reconciled.invalidated }, { tier: "audit" });
-      completed = reconciled.completed; current = next; remainingUnknowns = current.plan.unknowns;
-      specialistRuns += current.planningRuns; replans++;
+      await adoptRevision(previous, next, "keep-current", "Reconcile the user answer with the prior immutable plan.");
       continue;
     }
 
-    const step = nextStep(current.plan, completed);
+    const done = new Set(completed.filter(({ status }) => status === "complete").map(({ stepId }) => stepId));
+    const reverifyEntry = [...pendingReverify.entries()].find(([stepId]) => {
+      const candidate = current.plan.steps.find(({ id }) => id === stepId);
+      return candidate?.dependsOn.every((dependency) => done.has(dependency));
+    }) ?? null;
+    const step = reverifyEntry
+      ? current.plan.steps.find(({ id }) => id === reverifyEntry[0]) ?? null
+      : nextStep(current.plan, completed, new Set(pendingReverify.keys()));
     if (!step) {
-      const done = new Set(completed.filter(({ status }) => status === "complete").map(({ stepId }) => stepId));
-      if (current.plan.steps.every(({ id }) => done.has(id))) {
+      if (pendingReverify.size === 0 && current.plan.steps.every(({ id }) => done.has(id))) {
         const packaged = await packageWorkspace(current.plan, ctx);
         if (!packaged.artifact) {
           await ctx.commit({ kind: "horizon.package-failed", planFact: current.fact,
@@ -377,7 +477,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         const final = await ctx.commit({ kind: "horizon.result", result }, { tier: "audit" });
         return { ...result, summary: `${result.summary}\n\nDurable result: ${final.hash}` };
       }
-      return blockedResult(current.plan, current.fact, completed, "No dependency-ready Horizon work unit remains; the immutable plan requires reconciliation.",
+      return blockedResult(current.plan, current.fact, completed, "No dependency-ready execution or reverification unit remains; the immutable plan requires reconciliation.",
         current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
 
@@ -392,51 +492,76 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
             current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
         }
-        const previous = current.plan;
+        const previous = current;
         const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-          revision: previous.revision + 1, previousPlan: previous, completed,
+          revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+          restartAt: "rubric", executionEvidence: null,
           replanBrief: "Revise the plan according to the authorized review guidance before any further repository mutation.",
           answer: approval.guidance, tools: [] }, ctx);
-        const reconciled = reconcileCompletedForPlan(previous, next.plan, completed);
-        if (reconciled.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
-          previousPlanFact: current.fact, nextPlanFact: next.fact, steps: reconciled.invalidated }, { tier: "audit" });
-        completed = reconciled.completed; current = next; remainingUnknowns = current.plan.unknowns;
-        specialistRuns += current.planningRuns; replans++; approvedPlanFact = null;
+        await adoptRevision(previous, next, "keep-current",
+          "Revise the plan according to the authorized review guidance before further mutation.");
         continue;
       }
       approvedPlanFact = current.fact;
     }
 
-    const executorTools = availableTools(EXECUTOR_TOOL_NAMES, ctx);
-    const executed = await ctx.spawn(executor, { request, plan: current.plan, planFact: current.fact, step, completed,
-      tools: executorTools }, {
-      retries: 1, dedupe: "specHash", budget: { turns: HORIZON_EXECUTION_LOOP_TURNS,
-        microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
-      attenuation: attenuation(executorTools, ctx),
-    });
-    specialistRuns++;
-    const stepFact = await ctx.commit({ kind: "horizon.step-result", planFact: current.fact, result: executed.result,
-      toolEvidence: executed.toolEvidence }, { tier: "audit" });
+    const workspaceBefore = await inspectWorkspaceState(ctx);
+    const reused = reverifyEntry?.[0] === step.id ? reverifyEntry[1] : null;
+    let executed: { result: HzStepResult; toolEvidence: HzExecutionAttempt["executionToolEvidence"] };
+    let stepFactHash: string;
+    if (reused) {
+      executed = { result: reused.attempt.execution, toolEvidence: reused.attempt.executionToolEvidence };
+      stepFactHash = reused.attempt.stepFact;
+      await ctx.commit({ kind: "horizon.execution-reused", planFact: current.fact, step: step.id,
+        priorAttempt: reused.attempt.id, stepFact: stepFactHash }, { tier: "audit" });
+    } else {
+      const executorTools = availableTools(EXECUTOR_TOOL_NAMES, ctx);
+      const executorInput = await storeArtifact(ctx, { request, plan: current.plan, planFact: current.fact, step, completed,
+        previousAttempt: latestAttempts.get(step.id)?.attempt ?? null, tools: executorTools });
+      executed = await ctx.spawn(executor, executorInput, {
+        retries: 1, dedupe: "specHash", budget: { turns: HORIZON_EXECUTION_LOOP_TURNS,
+          microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
+        attenuation: attenuation(executorTools, ctx),
+      });
+      specialistRuns++;
+      const stepFact = await ctx.commit({ kind: "horizon.step-result", planFact: current.fact, result: executed.result,
+        toolEvidence: executed.toolEvidence }, { tier: "audit" });
+      stepFactHash = stepFact.hash;
+    }
     const verifierTools = availableTools(VERIFIER_TOOL_NAMES, ctx);
-    const verified = await ctx.spawn(verifier, { request, plan: current.plan, planFact: current.fact, step,
-      execution: executed.result, executionToolEvidence: executed.toolEvidence, tools: verifierTools }, {
+    const verifierInput = await storeArtifact(ctx, { request, plan: current.plan, planFact: current.fact, step,
+      execution: executed.result, executionToolEvidence: executed.toolEvidence, tools: verifierTools });
+    const verified = await ctx.spawn(verifier, verifierInput, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(verifierTools, ctx),
     });
     specialistRuns++;
     const verificationFact = await ctx.commit({ kind: "horizon.verification", planFact: current.fact,
-      stepFact: stepFact.hash, verification: verified.verification, toolEvidence: verified.toolEvidence }, { tier: "audit" });
+      stepFact: stepFactHash, verification: verified.verification, toolEvidence: verified.toolEvidence,
+      executionReused: !!reused }, { tier: "audit" });
+    const workspaceAfter = await inspectWorkspaceState(ctx);
+    const storedAttempt = await recordExecutionAttempt({ ordinal: ++attemptOrdinal, planFact: current.fact,
+      stepId: step.id, executionReused: !!reused, previousAttemptRef: latestAttempts.get(step.id)?.ref ?? null,
+      restorePoint, workspaceBefore, workspaceAfter, stepFact: stepFactHash,
+      verificationFact: verificationFact.hash, execution: executed.result,
+      executionToolEvidence: executed.toolEvidence, verification: verified.verification,
+      verificationToolEvidence: verified.toolEvidence }, ctx);
+    latestAttempts.set(step.id, storedAttempt);
     if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
       try {
-        const captured = await captureWorkspaceCheckpoint({ workspace, planFact: current.fact, stepFact: stepFact.hash,
+        const captured = await captureWorkspaceCheckpoint({ workspace, planFact: current.fact, stepFact: stepFactHash,
           verificationFact: verificationFact.hash, stepId: step.id }, ctx);
         checkpoints.push({ stepId: step.id, receipt: captured.receiptRef, image: captured.checkpoint.image,
           tree: captured.checkpoint.tree });
+        restorePoint = verifiedAnchor(step.id, captured.receiptRef, captured.checkpoint);
+        checkpointLineage.push(restorePoint);
+        successfulAttempts.set(step.id, storedAttempt);
+        pendingReverify.delete(step.id);
       } catch (error) {
         const reason = error instanceof Error ? error.message : "Workspace checkpoint capture failed.";
         await ctx.commit({ kind: "horizon.workspace-checkpoint-failed", planFact: current.fact,
-          stepFact: stepFact.hash, verificationFact: verificationFact.hash, step: step.id, reason }, { tier: "audit" });
+          stepFact: stepFactHash, verificationFact: verificationFact.hash, step: step.id, reason }, { tier: "audit" });
         return blockedResult(current.plan, current.fact, completed,
           `The work unit passed independent verification, but its durable workspace checkpoint could not be captured: ${reason}`,
           verified.verification.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
@@ -444,7 +569,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     }
     const resultDigest = await attemptProgressDigest({ execution: executed.result,
       executionTools: executed.toolEvidence, verification: verified.verification,
-      verificationTools: verified.toolEvidence });
+      verificationTools: verified.toolEvidence, workspaceBefore, workspaceAfter });
     resultDigests = [...new Set([...resultDigests, resultDigest])];
     completed = updateCompleted(completed, executed.result, verified.verification.verdict === "passed");
     if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
@@ -460,20 +585,22 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       verificationFact: verificationFact.hash, plateau }, { tier: "audit" });
 
     const reconcilerTools = availableTools(RECONCILER_TOOL_NAMES, ctx);
-    const reconciled = await ctx.spawn(reconciler, { request, plan: current.plan, planFact: current.fact,
-      completed, latest: executed.result, verification: verified.verification, plateau, tools: reconcilerTools }, {
+    const reconcilerInput = await storeArtifact(ctx, { request, plan: current.plan, planFact: current.fact,
+      completed, attempt: storedAttempt.attempt, restoreAvailable: restorePoint.image !== null,
+      plateau, tools: reconcilerTools });
+    const reconciled = await ctx.spawn(reconciler, reconcilerInput, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
       attenuation: attenuation(reconcilerTools, ctx),
     });
     specialistRuns++;
-    await ctx.commit({ kind: "horizon.reconciliation", planFact: current.fact, stepFact: stepFact.hash,
-      verificationFact: verificationFact.hash, reconciliation: reconciled.reconciliation,
+    await ctx.commit({ kind: "horizon.reconciliation", planFact: current.fact, stepFact: stepFactHash,
+      verificationFact: verificationFact.hash, attempt: storedAttempt.ref, reconciliation: reconciled.reconciliation,
       toolEvidence: reconciled.toolEvidence }, { tier: "audit" });
 
     const decision = reconciled.reconciliation;
     remainingUnknowns = decision.remainingUnknowns;
-    if (plateau.stableCycles >= 2 && (decision.action === "continue" || decision.action === "replan")) {
+    if (plateau.stableCycles >= 2 && ["continue", "repair-step", "reverify", "replan"].includes(decision.action)) {
       await ctx.commit({ kind: "horizon.plateau", planFact: current.fact, step: step.id,
         stableCycles: plateau.stableCycles, fingerprint: plateau.fingerprint,
         attemptedTransition: decision.action, remainingUnknowns }, { tier: "audit" });
@@ -487,6 +614,23 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
     }
     if (decision.action === "complete") continue;
+    if (decision.action === "repair-step") {
+      pendingReverify.delete(step.id);
+      if (decision.workspaceDisposition === "restore-last-verified") {
+        try { await restoreWorkspaceAnchor(restorePoint, decision.summary, ctx); }
+        catch (error) {
+          const reason = error instanceof Error ? error.message : "Workspace restoration failed.";
+          return blockedResult(current.plan, current.fact, completed,
+            `Horizon selected verified workspace restoration, but it could not be completed: ${reason}`,
+            decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
+        }
+      }
+      continue;
+    }
+    if (decision.action === "reverify") {
+      pendingReverify.set(step.id, storedAttempt);
+      continue;
+    }
     if (current.plan.revision >= MAX_PLAN_REVISIONS) {
       return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
         decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
@@ -501,15 +645,17 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
       answeredQuestions.set(key, answer);
     }
-    const previous = current.plan;
+    const previous = current;
     const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-      revision: previous.revision + 1, previousPlan: previous, completed,
+      revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+      restartAt: decision.planningOwner!, executionEvidence: storedAttempt.attempt,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
-    const planReconciliation = reconcileCompletedForPlan(previous, next.plan, completed);
-    if (planReconciliation.invalidated.length > 0) await ctx.commit({ kind: "horizon.plan-invalidation",
-      previousPlanFact: current.fact, nextPlanFact: next.fact, steps: planReconciliation.invalidated }, { tier: "audit" });
-    completed = planReconciliation.completed; current = next; remainingUnknowns = current.plan.unknowns;
-    specialistRuns += current.planningRuns; replans++;
+    await adoptRevision(previous, next, decision.workspaceDisposition, decision.summary);
+    if (decision.planningOwner === "assertions" && decision.workspaceDisposition === "keep-current"
+      && storedAttempt.attempt.execution.status === "complete"
+      && next.plan.steps.some(({ id }) => id === storedAttempt.attempt.stepId)) {
+      pendingReverify.set(storedAttempt.attempt.stepId, storedAttempt);
+    }
   }
   return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",
     current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);

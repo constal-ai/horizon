@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanCritique, parseHzPlanNarrative,
+import { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanContinuity, parseHzPlanCritique, parseHzPlanNarrative,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzSourceResolution, parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
@@ -57,8 +57,9 @@ describe("Horizon transport contracts", () => {
     expect(parseHzStepResult({ object: "constal.horizon.step-result", version: 1, stepId: "implement", status: "complete",
       summary: "Implemented and tested.", changedFiles: ["src/index.ts"], verification: ["tests passed"],
       observations: ["Existing boundary reused"], unknowns: [], blockedReason: null }, "implement")?.status).toBe("complete");
-    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 1, action: "replan",
+    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "replan",
       summary: "The live API differs from planning evidence.", remainingUnknowns: [unknown],
+      planningOwner: "design", workspaceDisposition: "keep-current",
       replanBrief: "Preserve completed work and replace the remaining API assumption with the observed contract.",
       question: null, blockedReason: null })?.action).toBe("replan");
   });
@@ -114,5 +115,22 @@ describe("Horizon transport contracts", () => {
         severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "Ownership is duplicated.", evidence: ["Current plan."], repair: "Choose one owner." }],
       question: null, blockedReason: null }, 1)).not.toBeNull();
+  });
+
+  it("requires complete structurally valid continuity and explicit execution routes", () => {
+    expect(parseHzPlanContinuity({ object: "constal.horizon.plan-continuity", version: 1, revision: 2,
+      decisions: [{ priorStepId: "implement", nextStepId: "implement", disposition: "reverify",
+        reason: "The proof contract changed.", evidence: ["verification-fact"] }] }, 2,
+    ["implement"], ["implement"])).not.toBeNull();
+    expect(parseHzPlanContinuity({ object: "constal.horizon.plan-continuity", version: 1, revision: 2,
+      decisions: [{ priorStepId: "implement", nextStepId: "missing", disposition: "retain",
+        reason: "Incorrect successor.", evidence: [] }] }, 2, ["implement"], ["implement"])).toBeNull();
+    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "repair-step",
+      summary: "Continue the useful partial implementation.", remainingUnknowns: [], planningOwner: null,
+      workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null })).not.toBeNull();
+    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "replan",
+      summary: "The architecture assumption failed.", remainingUnknowns: [], planningOwner: null,
+      workspaceDisposition: "keep-current", replanBrief: "Repair the design.", question: null,
+      blockedReason: null })).toBeNull();
   });
 });

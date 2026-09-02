@@ -1,4 +1,5 @@
 import { subtask } from "@constal/sdk";
+import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzStepResult, type HzExecutorInput, type HzExecutorResult } from "../contracts.js";
 import { EXECUTOR_SYSTEM } from "../prompts/executor.js";
 import { runReactLoop } from "../react-loop.js";
@@ -8,7 +9,8 @@ import { EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../tool
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
   version: "9",
-  async run(input: HzExecutorInput, ctx) {
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<HzExecutorInput>(ctx, envelope);
     const conversation = await runReactLoop({
       role: `executor-${input.step.id}`,
       system: EXECUTOR_SYSTEM,
@@ -20,6 +22,7 @@ export const executor = subtask<HzExecutorResult>({
         assignedStep: input.step,
         assertions: input.plan.assertions.find(({ stepId }) => stepId === input.step.id)?.assertions ?? [],
         completedDependencies: input.completed.filter(({ stepId }) => input.step.dependsOn.includes(stepId)),
+        previousAttempt: input.previousAttempt,
       },
       tools: input.tools,
       plateauStages: [EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES]

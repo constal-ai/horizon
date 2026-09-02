@@ -110,6 +110,25 @@ export interface HzStepAssertions {
   assertions: HzAssertion[];
 }
 
+export type HzPlanningOwner = "rubric" | "design" | "decomposition" | "assertions";
+
+export type HzContinuityDisposition = "retain" | "reverify" | "rerun" | "dropped";
+
+export interface HzContinuityDecision {
+  priorStepId: string;
+  nextStepId: string | null;
+  disposition: HzContinuityDisposition;
+  reason: string;
+  evidence: string[];
+}
+
+export interface HzPlanContinuity {
+  object: "constal.horizon.plan-continuity";
+  version: 1;
+  revision: number;
+  decisions: HzContinuityDecision[];
+}
+
 export interface HzAssertionPlan {
   object: "constal.horizon.assertion-plan";
   version: 1;
@@ -117,7 +136,7 @@ export interface HzAssertionPlan {
   assertions: HzStepAssertions[];
 }
 
-export type HzCritiqueOwner = "rubric" | "design" | "decomposition" | "assertions" | "user";
+export type HzCritiqueOwner = HzPlanningOwner | "continuity" | "user";
 
 export interface HzCritiqueFinding {
   id: string;
@@ -216,14 +235,17 @@ export interface HzVerification {
   blockedReason: string | null;
 }
 
-export type HzReconcileAction = "continue" | "replan" | "ask" | "complete" | "blocked";
+export type HzReconcileAction = "continue" | "repair-step" | "reverify" | "replan" | "ask" | "complete" | "blocked";
+export type HzWorkspaceDisposition = "keep-current" | "restore-last-verified";
 
 export interface HzReconciliation {
   object: "constal.horizon.reconciliation";
-  version: 1;
+  version: 2;
   action: HzReconcileAction;
   summary: string;
   remainingUnknowns: HzUnknown[];
+  planningOwner: HzPlanningOwner | null;
+  workspaceDisposition: HzWorkspaceDisposition;
   replanBrief: string | null;
   question: HzDecisionQuestion | null;
   blockedReason: string | null;
@@ -315,13 +337,63 @@ export interface HzWorkspaceCheckpoint {
   cacheKey: string;
 }
 
+export interface HzWorkspaceAnchor {
+  kind: "prepared" | "verified";
+  stepId: string | null;
+  receipt: string;
+  cacheKey: string;
+  image: string | null;
+  tree: string;
+  status: string;
+}
+
+export interface HzWorkspaceState {
+  tree: string;
+  status: string;
+}
+
+export interface HzExecutionAttempt {
+  object: "constal.horizon.execution-attempt";
+  version: 1;
+  id: string;
+  ordinal: number;
+  planFact: string;
+  stepId: string;
+  executionReused: boolean;
+  previousAttemptRef: string | null;
+  restorePoint: HzWorkspaceAnchor;
+  workspaceBefore: HzWorkspaceState;
+  workspaceAfter: HzWorkspaceState;
+  stepFact: string;
+  verificationFact: string;
+  execution: HzStepResult;
+  executionToolEvidence: HzToolEvidence[];
+  verification: HzVerification;
+  verificationToolEvidence: HzToolEvidence[];
+}
+
+export interface HzPlanningState {
+  object: "constal.horizon.planning-state";
+  version: 1;
+  revision: number;
+  rubric: HzRubric;
+  design: HzDesign;
+  workPlan: HzWorkPlan;
+  assertions: HzStepAssertions[];
+  continuity: HzPlanContinuity;
+  critique: HzPlanCritique;
+}
+
 export interface HzPlanInput {
   request: HzRequest;
   discoveryPlan: HzDiscoveryPlan;
   investigations: HzInvestigationResult[];
   revision: number;
   previousPlan: HzPlan | null;
+  previousState: HzPlanningState | null;
   completed: HzStepResult[];
+  restartAt: HzPlanningOwner | null;
+  executionEvidence: HzExecutionAttempt | null;
   replanBrief: string | null;
   answer: string | null;
   tools: string[];
@@ -354,6 +426,7 @@ export interface HzInvestigatorOutput {
 
 export interface HzPlannerResult {
   plan: HzPlan;
+  state: HzPlanningState;
   toolEvidence: HzToolEvidence[];
   planningRuns: number;
 }
@@ -364,6 +437,7 @@ export interface HzExecutorInput {
   planFact: string;
   step: HzPlanStep;
   completed: HzStepResult[];
+  previousAttempt: HzExecutionAttempt | null;
   tools: string[];
 }
 
@@ -392,8 +466,8 @@ export interface HzReconcilerInput {
   plan: HzPlan;
   planFact: string;
   completed: HzStepResult[];
-  latest: HzStepResult;
-  verification: HzVerification;
+  attempt: HzExecutionAttempt;
+  restoreAvailable: boolean;
   plateau: HzPlateauState;
   tools: string[];
 }
@@ -711,13 +785,45 @@ export function parseHzAssertionPlan(value: unknown, expectedRevision?: number,
   return { object: "constal.horizon.assertion-plan", version: 1, revision, assertions };
 }
 
+function parseHzContinuityDecision(value: unknown): HzContinuityDecision | null {
+  const source = item(value); const priorStepId = string(source?.priorStepId, 256);
+  const nextStepId = nullableString(source?.nextStepId, 256); const disposition = source?.disposition;
+  const reason = string(source?.reason, 32_768); const evidence = strings(source?.evidence, 128, 16_384);
+  if (!source || !priorStepId || nextStepId === undefined
+    || !["retain", "reverify", "rerun", "dropped"].includes(String(disposition)) || !reason || !evidence) return null;
+  if (disposition === "dropped" ? nextStepId !== null : nextStepId === null) return null;
+  if ((disposition === "retain" || disposition === "reverify") && nextStepId !== priorStepId) return null;
+  return { priorStepId, nextStepId, disposition: disposition as HzContinuityDisposition, reason, evidence };
+}
+
+export function parseHzPlanContinuity(value: unknown, expectedRevision?: number,
+  expectedPriorStepIds?: readonly string[], nextStepIds?: readonly string[]): HzPlanContinuity | null {
+  const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision);
+  if (!source || source.object !== "constal.horizon.plan-continuity" || source.version !== 1 || revision === null
+    || !Array.isArray(source.decisions) || source.decisions.length > 128) return null;
+  const decisions = source.decisions.map(parseHzContinuityDecision);
+  if (!decisions.every((entry): entry is HzContinuityDecision => entry !== null)
+    || new Set(decisions.map(({ priorStepId }) => priorStepId)).size !== decisions.length) return null;
+  if (expectedPriorStepIds) {
+    const expected = [...new Set(expectedPriorStepIds)].sort();
+    const actual = decisions.map(({ priorStepId }) => priorStepId).sort();
+    if (expected.length !== expectedPriorStepIds.length || expected.length !== actual.length
+      || expected.some((stepId, index) => stepId !== actual[index])) return null;
+  }
+  if (nextStepIds) {
+    const next = new Set(nextStepIds);
+    if (decisions.some(({ nextStepId }) => nextStepId !== null && !next.has(nextStepId))) return null;
+  }
+  return { object: "constal.horizon.plan-continuity", version: 1, revision, decisions };
+}
+
 function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
   const source = item(value); const id = string(source?.id, 256); const owner = source?.owner; const severity = source?.severity;
   const affectedMilestones = strings(source?.affectedMilestones, 64, 256);
   const affectedSteps = strings(source?.affectedSteps, 128, 256);
   const issue = string(source?.issue, 32_768); const evidence = strings(source?.evidence, 128, 16_384);
   const repair = string(source?.repair, 32_768);
-  if (!source || !id || !["rubric", "design", "decomposition", "assertions", "user"].includes(String(owner))
+  if (!source || !id || !["rubric", "design", "decomposition", "assertions", "continuity", "user"].includes(String(owner))
     || !["blocking", "advisory"].includes(String(severity)) || !affectedMilestones || !affectedSteps
     || new Set(affectedMilestones).size !== affectedMilestones.length || new Set(affectedSteps).size !== affectedSteps.length
     || !issue || !evidence || !repair) return null;
@@ -829,11 +935,20 @@ export function parseHzVerification(value: unknown, expectedStepId?: string): Hz
 export function parseHzReconciliation(value: unknown): HzReconciliation | null {
   const source = item(value); const action = source?.action; const summary = string(source?.summary, 32_768);
   const remainingUnknowns = unknowns(source?.remainingUnknowns); const replanBrief = nullableString(source?.replanBrief, 65_536);
+  const planningOwner = source?.planningOwner === null ? null : source?.planningOwner;
+  const workspaceDisposition = source?.workspaceDisposition;
   const question = decisionQuestion(source?.question); const blockedReason = nullableString(source?.blockedReason, 16_384);
-  if (!source || source.object !== "constal.horizon.reconciliation" || source.version !== 1
-    || !["continue", "replan", "ask", "complete", "blocked"].includes(String(action)) || !summary || !remainingUnknowns
+  if (!source || source.object !== "constal.horizon.reconciliation" || source.version !== 2
+    || !["continue", "repair-step", "reverify", "replan", "ask", "complete", "blocked"].includes(String(action))
+    || !summary || !remainingUnknowns
+    || planningOwner !== null && !["rubric", "design", "decomposition", "assertions"].includes(String(planningOwner))
+    || !["keep-current", "restore-last-verified"].includes(String(workspaceDisposition))
     || replanBrief === undefined || question === undefined || blockedReason === undefined) return null;
-  if (action === "replan" && !replanBrief || action === "ask" && !question || action === "blocked" && !blockedReason) return null;
-  return { object: "constal.horizon.reconciliation", version: 1, action: action as HzReconcileAction,
-    summary, remainingUnknowns, replanBrief, question, blockedReason };
+  if ((action === "replan" || action === "ask") && (!replanBrief || planningOwner === null)
+    || action === "ask" && !question || action === "blocked" && !blockedReason
+    || action !== "replan" && action !== "ask" && planningOwner !== null
+    || action === "reverify" && workspaceDisposition !== "keep-current") return null;
+  return { object: "constal.horizon.reconciliation", version: 2, action: action as HzReconcileAction,
+    summary, remainingUnknowns, planningOwner: planningOwner as HzPlanningOwner | null,
+    workspaceDisposition: workspaceDisposition as HzWorkspaceDisposition, replanBrief, question, blockedReason };
 }
