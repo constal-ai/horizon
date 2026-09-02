@@ -113,7 +113,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.5",
+  version: "0.3.6",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],

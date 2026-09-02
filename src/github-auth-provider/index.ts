@@ -2,7 +2,7 @@ import { authProvider } from "@constal/sdk";
 
 export default authProvider({
   id: "horizon-github",
-  version: "0.2.2",
+  version: "0.2.3",
   needs: [{ binding: "verifier", kind: "service", ops: ["webhook.verify"] }],
   async authenticate({ request }, context) {
     const result = await context.invoke<{ verified: boolean; installation?: string; sender?: { id: string; login: string } }>(
