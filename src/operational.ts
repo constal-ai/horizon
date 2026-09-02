@@ -3,6 +3,8 @@ import { HORIZON_OPERATIONAL_SYSTEM } from "./prompts/operational.js";
 import { runReactLoop } from "./react-loop.js";
 import { availableTools, OPERATIONAL_TOOL_NAMES } from "./tools/index.js";
 import type { HorizonRoutedEvent } from "./behaviors.js";
+import type { HzRunResult } from "./contracts.js";
+import { startIssueWork } from "./tasks/issue-work.js";
 
 export interface HorizonOperationalResult {
   object: "constal.horizon.operational-result";
@@ -39,7 +41,13 @@ export function parseHorizonOperationalResult(value: unknown): HorizonOperationa
     handoff: source.handoff as HorizonOperationalResult["handoff"], evidence: source.evidence.map(String) };
 }
 
-export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx): Promise<HorizonOperationalResult> {
+function issueWorkInput(event: HorizonRoutedEvent) {
+  return { objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
+    constraints: event.constraints ?? [], ...(event.source === undefined ? {} : { source: event.source }),
+    ...(event.environment === undefined ? {} : { environment: event.environment }) };
+}
+
+export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx): Promise<HorizonOperationalResult | HzRunResult> {
   const tools = availableTools(OPERATIONAL_TOOL_NAMES, ctx);
   const loop = await runReactLoop({
     role: "operational", system: HORIZON_OPERATIONAL_SYSTEM, objective: event.objective,
@@ -49,5 +57,5 @@ export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx)
   const result = loop.artifact;
   await ctx.commit({ kind: "horizon.operational-result", eventClass: event.eventClass,
     result, toolEvidence: loop.evidence }, { tier: "audit" });
-  return result;
+  return result.status === "handoff" ? startIssueWork(issueWorkInput(event), ctx) : result;
 }

@@ -9,6 +9,7 @@ import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
 import { terminalMarkdown, waitPresentation } from "./github-conversation.js";
 import { runHorizonSetup } from "./setup/workflow.js";
+import { issueWorkAgent, startIssueWork } from "./tasks/issue-work.js";
 
 async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>[1]) {
   if (message && typeof message === "object" && !Array.isArray(message)
@@ -17,15 +18,15 @@ async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>
   if (!event) return runHorizon(message, ctx);
   if (event.behavior === "operate") {
     const result = await runHorizonOperational(event, ctx);
-    await ctx.commit({ kind: "horizon.channel-update", phase: "operational", result }, { tier: "audit",
-      presentation: waitPresentation("operational", "Horizon", terminalMarkdown(result)) });
+    await ctx.commit({ kind: "horizon.channel-update", phase: result.object === "constal.horizon.operational-result" ? "operational" : "terminal",
+      status: result.status, result }, { tier: "audit", presentation: result.object === "constal.horizon.operational-result"
+      ? waitPresentation("operational", "Horizon", terminalMarkdown(result))
+      : waitPresentation("terminal", result.status === "complete" ? "Horizon completed" : "Horizon is blocked", terminalMarkdown(result)) });
     return result;
   }
-  await ctx.commit({ kind: "horizon.channel-update", phase: "accepted" }, { tier: "audit",
-    presentation: waitPresentation("accepted", "Horizon started", "Horizon has started investigating this issue. It will ask questions here when information is missing and will present an exact plan for approval before changing the repository.") });
-  const result = await runHorizon({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
+  const result = await startIssueWork({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
     constraints: event.constraints ?? [], ...(event.source === undefined ? {} : { source: event.source }),
-    ...(event.environment === undefined ? {} : { environment: event.environment }) }, ctx, { requirePlanApproval: true });
+    ...(event.environment === undefined ? {} : { environment: event.environment }) }, ctx);
   await ctx.commit({ kind: "horizon.channel-update", phase: "terminal", status: result.status }, { tier: "audit",
     presentation: waitPresentation("terminal", result.status === "complete" ? "Horizon completed" : "Horizon is blocked", terminalMarkdown(result)) });
   return result;
@@ -39,7 +40,7 @@ export default agent({
   tools: TOOLS,
   views: [horizonProgress],
   subtasks: [sourceResolver, discoveryFramer, investigator, planner, rubricAgent, designAgent, decompositionAgent,
-    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler, approvalInterpreter],
+    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler, approvalInterpreter, issueWorkAgent],
   onMessage: routeHorizon,
 });
 

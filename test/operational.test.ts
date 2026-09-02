@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Ctx } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG, horizonRoutedEvent } from "../src/behaviors.js";
 import { runHorizonOperational } from "../src/operational.js";
+import { issueWorkAgent } from "../src/tasks/issue-work.js";
+import type { HzRunResult } from "../src/contracts.js";
 
 describe("Horizon behavior routing", () => {
   it("advertises issue work separately from lightweight operation", () => {
@@ -35,5 +37,31 @@ describe("Horizon behavior routing", () => {
       context: { repository: "constal-ai/horizon", approval: { permissions: ["write", "admin"] } } })!, ctx))
       .resolves.toMatchObject({ status: "complete" });
     expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it("spawns the durable issue-work Agent when the frontend chooses a handoff", async () => {
+    const issueResult = { object: "constal.horizon.result", version: 1, status: "blocked",
+      summary: "Planning needs input." } as unknown as HzRunResult;
+    const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+      object: "constal.horizon.operational-result", version: 1, status: "handoff",
+      message: "Implementation requires issue work.", handoff: "issue-work", evidence: [],
+    }) }, artifact: null }));
+    const spawn = vi.fn(async () => issueResult);
+    const commit = vi.fn(async () => ({ hash: "a".repeat(64) }));
+    const ctx = { turn, spawn, commit, resources: { model: "model", github: "github" } } as unknown as Ctx;
+    const event = horizonRoutedEvent({ object: "constal.horizon.event", version: 1, behavior: "operate",
+      eventClass: "github.issue.comment", objective: "Implement the fix.",
+      context: { repository: "constal-ai/horizon", issue: 10 },
+      constraints: ["Work only in constal-ai/horizon."],
+      source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" } })!;
+
+    await expect(runHorizonOperational(event, ctx)).resolves.toBe(issueResult);
+    expect(spawn).toHaveBeenCalledWith(issueWorkAgent, {
+      objective: "Implement the fix.",
+      context: { eventClass: "github.issue.comment", event: { repository: "constal-ai/horizon", issue: 10 } },
+      constraints: ["Work only in constal-ai/horizon."],
+      source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
+    }, { retries: 1, dedupe: "specHash",
+      budget: { turns: 2_048, microUsd: 500_000_000, wallMs: 7 * 24 * 60 * 60_000 } });
   });
 });
