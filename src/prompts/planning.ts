@@ -88,7 +88,7 @@ Do not revise the rubric, design decisions, or milestone graph. If a finding act
 
 Each design milestone must retain work that realizes its accepted outcome. Every step must belong to an existing milestone, every dependency must name an existing step, and the graph must remain acyclic.
 
-Give each semantic responsibility exactly one owner. Represent cross-milestone status, data, authority, and failure handoffs explicitly in the responsible step specification and dependencies. Remove duplicate fallback, integration, and proof owners rather than rephrasing both copies.
+Give each semantic responsibility exactly one owner. Represent cross-milestone status, data, authority, and failure handoffs explicitly in the responsible step specification and dependencies. Remove duplicate responsibility, integration, and proof owners rather than rephrasing both copies.
 
 Keep implementation and its direct proof together unless a real dependency, ownership, authority, rollback, migration, or proof boundary requires separation. Preserve stable ids for responsibilities that remain materially unchanged.
 

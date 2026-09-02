@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseHzMilestoneWork, parseHzPlanNarrative, parseHzStepAssertions } from "../src/contracts.js";
-import { milestoneWorkArtifact, planningArtifact } from "../src/planning-envelope.js";
+import { parseHzAssertionPlan, parseHzMilestoneWork, parseHzPlanNarrative, parseHzStepAssertions } from "../src/contracts.js";
+import { assertionPlanArtifact, milestoneWorkArtifact, planningArtifact } from "../src/planning-envelope.js";
 
 describe("runtime-owned planning envelopes", () => {
   it("replaces stale assertion identity without changing semantic content", () => {
@@ -25,6 +25,15 @@ describe("runtime-owned planning envelopes", () => {
     expect(parseHzMilestoneWork(artifact, 3, "delivery")).toEqual({
       object: "constal.horizon.milestone-work", version: 1, revision: 3, milestoneId: "delivery",
       steps: [{ ...semantic.steps[0], milestoneId: "delivery" }],
+    });
+  });
+
+  it("adds runtime identity to a complete repaired assertion plan", () => {
+    const semantic = { assertions: [{ stepId: "implement", assertions: [{ id: "proof",
+      claim: "The behavior is observed.", evidenceRequired: ["A focused test passes."], negativePath: false }] }] };
+    expect(parseHzAssertionPlan(assertionPlanArtifact(semantic, 4), 4, ["implement"])).toEqual({
+      object: "constal.horizon.assertion-plan", version: 1, revision: 4,
+      assertions: [{ object: "constal.horizon.step-assertions", version: 1, revision: 4, ...semantic.assertions[0] }],
     });
   });
 
