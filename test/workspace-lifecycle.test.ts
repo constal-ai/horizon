@@ -176,6 +176,28 @@ describe("Horizon prepared Session workspaces", () => {
     expect(captured.checkpoint).toMatchObject({ image: null, tree: "baseline-tree" });
   });
 
+  it("reuses a matching prepared workspace in the same live Session without an image", async () => {
+    const backend = new FakeBackend(); backend.snapshotsAvailable = false;
+    const first = await prepareWorkspace(request, backend.context("session-a"));
+    const second = await prepareWorkspace(request, backend.context("session-a"));
+    expect(first.receipt.cache).toMatchObject({ hit: false, image: null });
+    expect(second.receipt.cache).toMatchObject({ hit: true, image: null });
+    expect(backend.sandboxes.get("session-a")?.setupCommands).toEqual(["npm install --ignore-scripts"]);
+  });
+
+  it("resets and rebuilds an orphaned live Session workspace without a receipt", async () => {
+    const backend = new FakeBackend();
+    const orphan = await backend.pool.createSandbox("crn:constal:production:tenant:default:agent/horizon" as never, "session-a");
+    (orphan as FakeSandbox).rootExists = true;
+
+    const recovered = await prepareWorkspace(request, backend.context("session-a"));
+    expect(recovered.receipt.cache).toMatchObject({ hit: false, image: expect.stringMatching(/^image-/u) });
+    expect(backend.sandboxes.get("session-a")?.setupCommands).toEqual(["npm install --ignore-scripts"]);
+    expect(backend.operations).toContainEqual({ op: "createSandbox", args: expect.objectContaining({
+      agent: "crn:constal:production:tenant:default:agent/horizon", session: "session-a", resetImage: true,
+    }) });
+  });
+
   it("evicts an invalid provider snapshot and deterministically rebuilds from the base image", async () => {
     const backend = new FakeBackend();
     const first = await prepareWorkspace(request, backend.context("session-a"));

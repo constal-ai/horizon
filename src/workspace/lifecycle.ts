@@ -171,6 +171,10 @@ async function inspectWorkspace(selected: Sandbox): Promise<{ commit: string; tr
   return parseInspection(await rawCommand(selected, "node", [HORIZON_RUNNER_PATH, "inspect", HORIZON_WORKSPACE_ROOT]));
 }
 
+async function workspaceExists(selected: Sandbox): Promise<boolean> {
+  return succeeded(await workspaceCommand(selected, "test", ["-e", HORIZON_WORKSPACE_ROOT], "/workspace"));
+}
+
 function normalizedSetupCommand(command: HzEnvironmentCommand): HzEnvironmentCommand {
   const value = command.cwd.startsWith("/") ? command.cwd : `${HORIZON_WORKSPACE_ROOT}/${command.cwd}`;
   const segments: string[] = [];
@@ -187,7 +191,7 @@ function normalizedSetupCommand(command: HzEnvironmentCommand): HzEnvironmentCom
 
 async function initializeWorkspace(ctx: Ctx, selected: Sandbox, source: HzResolvedSource,
   request: HzRequest, runnerDigest: string, cacheKey: string): Promise<HzWorkspaceReceipt> {
-  if (succeeded(await workspaceCommand(selected, "test", ["-e", HORIZON_WORKSPACE_ROOT], "/workspace"))) {
+  if (await workspaceExists(selected)) {
     throw new WorkspacePreparationError("The Session workspace exists without a matching prepared-image receipt.");
   }
   await requireCommand(selected, "mkdir", ["-p", "/workspace/.constal", HORIZON_WORKSPACE_ROOT], "/workspace");
@@ -214,6 +218,13 @@ async function initializeWorkspace(ctx: Ctx, selected: Sandbox, source: HzResolv
   const stored = await ctx.invoke<{ ref: string }>(ctx.resources.cas!, "putText", { text: canonicalJson(receipt) });
   await Promise.resolve(selected.putFile(RECEIPT_PATH, stored.ref, { mode: 0o444, invoke: { timeoutMs: TIMEOUT_MS } }));
   return receipt;
+}
+
+async function resetSessionSandbox(ctx: Ctx, pool: SandboxPool, selected: Sandbox, cacheKey: string): Promise<Sandbox> {
+  try { await selected.delete(); } catch { /* The explicit reset below is authoritative. */ }
+  await ctx.invoke(pool.resource, "createSandbox", { agent: ctx.run.agent.crn, session: ctx.run.session, resetImage: true },
+    { dedupeKey: `horizon-reset:${ctx.run.session}:${cacheKey}` });
+  return pool.createSandbox(ctx.run.agent.crn, ctx.run.session);
 }
 
 async function readCachedReceipt(ctx: Ctx, selected: Sandbox, expectedCacheKey: string): Promise<HzWorkspaceReceipt> {
@@ -258,11 +269,8 @@ export async function prepareWorkspace(request: HzRequest, ctx: Ctx): Promise<Pr
     } catch (error) {
       await ctx.commit({ kind: "horizon.workspace-cache-invalid", cacheKey, image: cached.id,
         reason: error instanceof Error ? error.message : "Prepared image verification failed." }, { tier: "audit" });
-      try { await selected.delete(); } catch { /* The reset below is authoritative. */ }
       try { await cached.delete(); } catch { /* Driver deletion is idempotent and may already be reconciled. */ }
-      await ctx.invoke(pool.resource, "createSandbox", { agent: ctx.run.agent.crn, session: ctx.run.session, resetImage: true },
-        { dedupeKey: `horizon-reset:${cacheKey}` });
-      selected = await pool.createSandbox(ctx.run.agent.crn, ctx.run.session);
+      selected = await resetSessionSandbox(ctx, pool, selected, cacheKey);
       image = null;
       const verifiedRunnerDigest = await installRunner(ctx, selected);
       if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during recovery.");
@@ -273,9 +281,31 @@ export async function prepareWorkspace(request: HzRequest, ctx: Ctx): Promise<Pr
   } else {
     const verifiedRunnerDigest = await installRunner(ctx, selected);
     if (verifiedRunnerDigest !== runnerDigest) throw new WorkspacePreparationError("The installed workspace runner digest changed during preparation.");
-    receipt = await initializeWorkspace(ctx, selected, source, request, runnerDigest, cacheKey);
-    if (request.environment.cache) image = await publishImage(ctx, selected, cacheKey);
-    receipt = { ...receipt, cache: { key: cacheKey, hit: false, image: image?.id ?? null } };
+    if (await workspaceExists(selected)) {
+      try {
+        const persisted = await readCachedReceipt(ctx, selected, cacheKey);
+        const inspection = await inspectWorkspace(selected);
+        receipt = { ...persisted, session: ctx.run.session, sandbox: selected.id,
+          cache: { key: cacheKey, hit: true, image: persisted.cache.image } };
+        await ctx.commit({ kind: "horizon.workspace-session-reused", cacheKey, sandbox: selected.id,
+          receipt: receipt.cache, inspection }, { tier: "audit" });
+      } catch (error) {
+        await ctx.commit({ kind: "horizon.workspace-session-invalid", cacheKey, sandbox: selected.id,
+          reason: error instanceof Error ? error.message : "The live Session workspace receipt is invalid." }, { tier: "audit" });
+        selected = await resetSessionSandbox(ctx, pool, selected, cacheKey);
+        const recoveredRunnerDigest = await installRunner(ctx, selected);
+        if (recoveredRunnerDigest !== runnerDigest) {
+          throw new WorkspacePreparationError("The installed workspace runner digest changed during Session recovery.");
+        }
+        receipt = await initializeWorkspace(ctx, selected, source, request, runnerDigest, cacheKey);
+      }
+    } else {
+      receipt = await initializeWorkspace(ctx, selected, source, request, runnerDigest, cacheKey);
+    }
+    if (!receipt.cache.hit) {
+      if (request.environment.cache) image = await publishImage(ctx, selected, cacheKey);
+      receipt = { ...receipt, cache: { key: cacheKey, hit: false, image: image?.id ?? null } };
+    }
   }
   const stored = await storeArtifact(ctx, receipt);
   await ctx.commit({ kind: "horizon.workspace-ready", receipt, receiptRef: stored.ref }, { tier: "audit" });
