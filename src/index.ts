@@ -1,4 +1,4 @@
-import { agent } from "@constal/sdk";
+import { agent, type HistoryView } from "@constal/sdk";
 import { assertionAgent, critiqueAgent, decompositionAgent, designAgent, discoveryFramer, executor, investigator,
   planFinalizer, planner, reconciler, rubricAgent, verifier, approvalInterpreter } from "./tasks/index.js";
 import { sourceResolver } from "./tasks/source.js";
@@ -9,11 +9,34 @@ import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
 import { terminalMarkdown, waitPresentation } from "./github-conversation.js";
 import { runHorizonSetup } from "./setup/workflow.js";
-import { issueWorkAgent, startIssueWork } from "./tasks/issue-work.js";
+import { startIssueWork } from "./tasks/issue-work.js";
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function restartRequest(message: unknown): { text: string; checkpoint: string; source: unknown; requestedBy: unknown } | null {
+  const source = record(message); const data = record(source?.data);
+  return typeof source?.text === "string" && source.text.trim() && source.text.length <= 32_768
+    && data?.object === "constal.horizon.restart" && data.version === 1
+    && typeof data.checkpoint === "string" && /^[a-f0-9]{64}$/u.test(data.checkpoint)
+    ? { text: source.text.trim(), checkpoint: data.checkpoint, source: data.source ?? null,
+      requestedBy: data.foregroundRun ?? null } : null;
+}
 
 async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>[1]) {
   if (message && typeof message === "object" && !Array.isArray(message)
     && (message as { object?: unknown }).object === "constal.setup.start") return runHorizonSetup(message, ctx);
+  const restart = restartRequest(message);
+  if (restart) {
+    const history = await ctx.ledger.view<HistoryView>();
+    const checkpoint = history.facts.find(({ hash }) => hash === restart.checkpoint);
+    if (!checkpoint) throw new TypeError("Horizon restart Fact is not present in the branched ledger view");
+    return startIssueWork({ objective: restart.text,
+      context: { restart: { checkpoint, head: history.head, steers: history.steers, requestedBy: restart.requestedBy } },
+      constraints: ["Continue from the supplied durable Fact and reconcile the additional steering with its exact recorded state."],
+      ...(restart.source === null ? {} : { source: restart.source }) }, ctx);
+  }
   const event = horizonRoutedEvent(message);
   if (!event) return runHorizon(message, ctx);
   if (event.behavior === "operate") {
@@ -34,13 +57,13 @@ async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>
 
 export default agent({
   id: "horizon",
-  version: "0.5.12",
+  version: "0.5.13",
   model: "model",
   mode: "script",
   tools: TOOLS,
   views: [horizonProgress],
   subtasks: [sourceResolver, discoveryFramer, investigator, planner, rubricAgent, designAgent, decompositionAgent,
-    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler, approvalInterpreter, issueWorkAgent],
+    assertionAgent, critiqueAgent, planFinalizer, executor, verifier, reconciler, approvalInterpreter],
   onMessage: routeHorizon,
 });
 
