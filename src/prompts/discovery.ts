@@ -30,7 +30,7 @@ Do not edit source, run mutation commands, or design the final implementation pl
   "summary":"what is known and how investigation is divided",
   "workspaceRoot":"the exact supplied prepared workspace root or null",
   "focuses":[{"id":"stable id","title":"focus","mission":"self-contained investigation directive","questions":["decision-relevant question"],"evidenceNeeded":["specific source or proof"],"stopWhen":"questions resolved, narrowed, or honestly plateaued"}],
-  "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
+  "unknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "blockedReason":"specific reason or null"
 }
 
@@ -64,7 +64,7 @@ Do not edit files, execute commands, produce a final implementation plan, or inv
   "summary":"answer to this mission",
   "findings":["decision-relevant finding"],
   "evidence":["exact path, symbol, command observation, or source reference"],
-  "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
+  "unknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "planImplications":["specific constraint, responsibility, sequencing, risk, or proof implication"],
   "blockedReason":"specific reason or null"
 }

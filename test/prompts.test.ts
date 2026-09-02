@@ -8,11 +8,13 @@ import { SOURCE_RESOLVER_SYSTEM } from "../src/prompts/source.js";
 import { ASSERTION_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, DECOMPOSITION_SYSTEM, DESIGN_SYSTEM,
   RUBRIC_SYSTEM, WORK_PLAN_REPAIR_SYSTEM } from "../src/prompts/planning.js";
 import { LOOP_CHECKPOINT_SYSTEM } from "../src/react-loop.js";
+import { QUESTION_RECONCILIATION_SYSTEM } from "../src/prompts/question-reconciliation.js";
 
 describe("Horizon role prompts", () => {
   it.each([SOURCE_RESOLVER_SYSTEM, DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
     WORK_PLAN_REPAIR_SYSTEM, ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM,
-    VERIFIER_SYSTEM, RECONCILER_SYSTEM, LOOP_CHECKPOINT_SYSTEM])("uses one stable six-section role contract", (prompt) => {
+    VERIFIER_SYSTEM, RECONCILER_SYSTEM, QUESTION_RECONCILIATION_SYSTEM,
+    LOOP_CHECKPOINT_SYSTEM])("uses one stable six-section role contract", (prompt) => {
     const headings = ["# Role", "# Task", "# Context", "# Rules", "# Tools", "# Output"];
     expect(headings.map((heading) => prompt.indexOf(heading))).toEqual([...headings.map((heading) => prompt.indexOf(heading))].sort((a, b) => a - b));
     expect(prompt).toContain("natural-language");
@@ -75,5 +77,6 @@ describe("Horizon role prompts", () => {
     expect(CRITIQUE_SYSTEM).toContain("Preserve the same finding id");
     expect(RECONCILER_SYSTEM).toContain("Operation-level retry is not your decision");
     expect(EXECUTOR_SYSTEM).toContain("previous governed attempt");
+    expect(QUESTION_RECONCILIATION_SYSTEM).toContain("semantic choice and consequence");
   });
 });

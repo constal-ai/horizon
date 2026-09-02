@@ -47,7 +47,7 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
   investigations: [{ object: "constal.horizon.investigation", version: 1, focusId: "runtime", status: "complete",
     summary: "Runtime owns recovery.", findings: ["Runtime ownership."], evidence: ["src/runtime.ts"], unknowns: [],
     planImplications: ["Reuse runtime."], blockedReason: null }], revision: 1, previousPlan: null, previousState: null,
-  completed: [], restartAt: null, executionEvidence: null, replanBrief: null, answer: null, tools: [] };
+  completed: [], completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer: null, tools: [] };
 
 const priorState: HzPlanningState = { object: "constal.horizon.planning-state", version: 1, revision: 1,
   rubric, design, workPlan, assertions: [assertions],
@@ -208,7 +208,8 @@ describe("Horizon multi-loop planner", () => {
         repair: "Classify the result for reverification." }] };
     const revisedFinal: HzPlan = { ...finalPlan, revision: 2, assertions: [revisedAssertions] };
     const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
-      completed: [{ ...executionEvidence.execution, status: "complete" }], restartAt: "assertions", executionEvidence,
+      completed: [{ ...executionEvidence.execution, status: "complete" }], completedEvidence: [executionEvidence],
+      restartAt: "assertions", executionEvidence,
       replanBrief: "The proof contract changed after the completed implementation." };
     const retain = [{ priorStepId: step.id, nextStepId: step.id, disposition: "retain" as const,
       reason: "The implementation is unchanged.", evidence: ["step-fact"] }];

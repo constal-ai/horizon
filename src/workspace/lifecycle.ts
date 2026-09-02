@@ -3,6 +3,7 @@ import {
   type Ctx, type Sandbox, type SandboxCommandResult, type SandboxImage, type SandboxPool, type SpawnAttenuation,
 } from "@constal/sdk";
 import { storeArtifact } from "../artifacts.js";
+import { rethrowRuntimeControl } from "../runtime-control.js";
 import {
   type HzEnvironmentCommand, type HzRequest, type HzResolvedSource, type HzSourceInput,
   type HzWorkspaceAnchor, type HzWorkspaceCheckpoint, type HzWorkspaceReceipt, type HzWorkspaceState,
@@ -78,6 +79,7 @@ async function publishImage(ctx: Ctx, selected: Sandbox, cacheKey: string): Prom
       { sandbox: selected.id, cacheKey }, { dedupeKey: `horizon-image:${cacheKey}`, timeoutMs: TIMEOUT_MS });
     return imageHandle(ctx, selected.pool, result.image, cacheKey);
   } catch (error) {
+    rethrowRuntimeControl(error);
     await ctx.commit({ kind: "horizon.workspace-cache-unavailable", cacheKey,
       reason: error instanceof Error ? error.message : "The Sandbox provider does not support prepared images." }, { tier: "audit" });
     return null;
@@ -245,7 +247,9 @@ async function initializeWorkspace(ctx: Ctx, selected: Sandbox, source: HzResolv
 }
 
 async function resetSessionSandbox(ctx: Ctx, pool: SandboxPool, selected: Sandbox, cacheKey: string): Promise<Sandbox> {
-  try { await selected.delete(); } catch { /* The explicit reset below is authoritative. */ }
+  try { await selected.delete(); } catch (error) {
+    rethrowRuntimeControl(error); /* The explicit reset below is authoritative for application failures. */
+  }
   await ctx.invoke(pool.resource, "createSandbox", { agent: ctx.run.agent.crn, session: ctx.run.session, resetImage: true },
     { dedupeKey: `horizon-reset:${ctx.run.session}:${cacheKey}` });
   return pool.createSandbox(ctx.run.agent.crn, ctx.run.session);
@@ -291,9 +295,12 @@ export async function prepareWorkspace(request: HzRequest, ctx: Ctx): Promise<Pr
       receipt = { ...persisted, session: ctx.run.session, sandbox: selected.id,
         cache: { key: cacheKey, hit: true, image: cached.id } };
     } catch (error) {
+      rethrowRuntimeControl(error);
       await ctx.commit({ kind: "horizon.workspace-cache-invalid", cacheKey, image: cached.id,
         reason: error instanceof Error ? error.message : "Prepared image verification failed." }, { tier: "audit" });
-      try { await cached.delete(); } catch { /* Driver deletion is idempotent and may already be reconciled. */ }
+      try { await cached.delete(); } catch (deleteError) {
+        rethrowRuntimeControl(deleteError); /* Driver deletion is idempotent and may already be reconciled. */
+      }
       selected = await resetSessionSandbox(ctx, pool, selected, cacheKey);
       image = null;
       const verifiedRunnerDigest = await installRunner(ctx, selected);
@@ -314,6 +321,7 @@ export async function prepareWorkspace(request: HzRequest, ctx: Ctx): Promise<Pr
         await ctx.commit({ kind: "horizon.workspace-session-reused", cacheKey, sandbox: selected.id,
           receipt: receipt.cache, inspection }, { tier: "audit" });
       } catch (error) {
+        rethrowRuntimeControl(error);
         await ctx.commit({ kind: "horizon.workspace-session-invalid", cacheKey, sandbox: selected.id,
           reason: error instanceof Error ? error.message : "The live Session workspace receipt is invalid." }, { tier: "audit" });
         selected = await resetSessionSandbox(ctx, pool, selected, cacheKey);

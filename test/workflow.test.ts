@@ -110,6 +110,20 @@ function casRuntime(onStore?: (value: unknown) => void) {
 }
 
 describe("Horizon workflow", () => {
+  it("turns invalid input into a durable blocked result instead of an uncaught exception", async () => {
+    const committed: Array<{ kind?: string; stage?: string }> = []; let sequence = 0;
+    const ctx = { commit: async (artifact: { kind?: string; stage?: string }) => {
+      committed.push(artifact); return { hash: `fact-${++sequence}`, artifact,
+        artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
+    } } as unknown as Ctx;
+
+    await expect(runHorizon({ objective: "" }, ctx)).resolves.toMatchObject({
+      status: "blocked", plan: null, summary: expect.stringContaining("request validation"),
+    });
+    expect(committed).toContainEqual(expect.objectContaining({ kind: "horizon.application-failure",
+      stage: "request validation" }));
+  });
+
   it("fingerprints observed progress independently of self-report wording", async () => {
     const first = await attemptProgressDigest({ execution: stepResult, executionTools: [], verification,
       verificationTools: [], workspaceBefore: workspaceState, workspaceAfter: workspaceState });
@@ -187,6 +201,54 @@ describe("Horizon workflow", () => {
       "horizon.verification", "horizon.execution-attempt", "horizon.milestone", "horizon.progress",
       "horizon.reconciliation", "horizon.result",
     ]);
+  });
+
+  it("records an exhausted execution failure and returns the current durable plan", async () => {
+    const committed: Array<{ kind?: string; stage?: string }> = []; let sequence = 0;
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: { kind?: string; stage?: string }) => {
+        committed.push(artifact); return { hash: `fact-${++sequence}`, artifact,
+          artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
+      },
+      invoke: casRuntime(),
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") return handle({ plan, state: planningState(plan), toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-executor") throw new Error("execution provider remained unavailable after recovery");
+        throw new Error(`unexpected task ${task.id}`);
+      },
+    } as unknown as Ctx;
+
+    await expect(runHorizon(plan.objective, ctx)).resolves.toMatchObject({
+      status: "blocked", plan: { revision: 1 }, summary: expect.stringContaining("work-unit execution"),
+    });
+    expect(committed).toContainEqual(expect.objectContaining({ kind: "horizon.application-failure",
+      stage: "work-unit execution" }));
+  });
+
+  it("never translates durable runtime control flow into an application failure", async () => {
+    let sequence = 0; const control = Object.assign(new Error("commit"), { name: "CommitYield" });
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: unknown) => ({ hash: `fact-${++sequence}`, artifact,
+        artifactHash: `artifact-${sequence}` }) as unknown as Fact<unknown>,
+      invoke: casRuntime(),
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") return handle({ plan, state: planningState(plan), toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-executor") throw control;
+        throw new Error(`unexpected task ${task.id}`);
+      },
+    } as unknown as Ctx;
+
+    await expect(runHorizon(plan.objective, ctx)).rejects.toBe(control);
   });
 
   it("repairs the same step forward with the complete prior attempt and no plan revision", async () => {
@@ -423,7 +485,7 @@ describe("Horizon workflow", () => {
       assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 2 })),
       specification: "Preserve the first attempt as evidence and execute the corrected repository-native approach." };
     const failed: HzStepResult = { ...stepResult, status: "failed", summary: "The planned seam was stale.",
-      changedFiles: [], verification: ["focused test exposed the stale seam"], unknowns: [{ id: "stale-seam",
+      changedFiles: [], verification: ["focused test exposed the stale seam"], unknowns: [{
         question: "Which live boundary replaces the planned seam?", state: "open", resolution: null, evidence: ["test failure"] }] };
     const failedVerification = { ...verification, verdict: "failed" as const, summary: "The focused proof failed.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "focused test failed" }],
@@ -541,7 +603,7 @@ describe("Horizon workflow", () => {
         "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
         "Support both versions behind an explicit boundary.",
       ] },
-      unknowns: [{ id: "contract-version", question: "Which public contract is intended?", state: "needs-input",
+      unknowns: [{ question: "Which public contract is intended?", state: "needs-input",
         resolution: null, evidence: ["Both versions exist in source."] }] };
     const revised: HzPlan = { ...plan, revision: 2,
       assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 2 })),
@@ -595,7 +657,7 @@ describe("Horizon workflow", () => {
         "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
         "Support both versions behind an explicit boundary.",
       ] },
-      unknowns: [{ id: "contract-version", question: "Which contract is intended?", state: "needs-input",
+      unknowns: [{ question: "Which contract is intended?", state: "needs-input",
         resolution: null, evidence: ["Two contracts exist."] }] };
     const repeated: HzPlan = { ...first, revision: 2,
       question: { prompt: "Which contract version should I use?", options: [
@@ -617,6 +679,10 @@ describe("Horizon workflow", () => {
           plannerRuns++; const selected = plannerRuns === 1 ? first : repeated;
           return handle({ plan: selected, state: planningState(selected), toolEvidence: [], planningRuns: 7 });
         }
+        if (task.id === "horizon-question-reconciliation") return handle({
+          object: "constal.horizon.question-reconciliation", version: 1, decision: "answered",
+          rationale: "The user already selected the contract behavior.",
+        });
         throw new Error(`unexpected task ${task.id}`);
       },
     } as unknown as Ctx;
@@ -630,7 +696,7 @@ describe("Horizon workflow", () => {
   it("stops repeated replan cycles when execution and verification add no evidence", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0; let plannerRuns = 0;
     const failedExecution: HzStepResult = { ...stepResult, status: "failed", summary: "Attempt failed.", changedFiles: [],
-      verification: ["same failure"], observations: ["same evidence"], unknowns: [{ id: "blocked-path",
+      verification: ["same failure"], observations: ["same evidence"], unknowns: [{
         question: "How can this path be repaired?", state: "open", resolution: null, evidence: ["same failure"] }] };
     const failedProof = { ...verification, verdict: "failed" as const, summary: "Same proof failed.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "same failure" }],

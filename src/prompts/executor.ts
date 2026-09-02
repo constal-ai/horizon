@@ -38,7 +38,7 @@ Use GitHub or Web Tools only when the assigned specification requires external e
   "changedFiles":["repo-relative path"],
   "verification":["command and observed outcome"],
   "observations":["decision-relevant evidence"],
-  "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
+  "unknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "blockedReason":"specific reason or null"
 }
 

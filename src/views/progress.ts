@@ -24,7 +24,7 @@ function unique(values: string[]): string[] { return [...new Set(values)].slice(
 
 export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
   id: "horizon-progress",
-  version: "2",
+  version: "3",
   over: "facts",
   init: () => ({ status: "idle", workspaceReceipt: null, workspaceCacheHit: null, checkpoints: 0,
     planRevision: null, planningPhase: null, currentStep: null,
@@ -48,7 +48,9 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
       return { ...next, status: "planning" as const,
         planningPhase: typeof artifact?.phase === "string" ? artifact.phase : state.planningPhase };
     }
-    if (kind === "horizon.answer") return { ...next, status: "planning" as const };
+    if (kind === "horizon.answer" || kind === "horizon.execution-replan-entry") {
+      return { ...next, status: "planning" as const };
+    }
     if (kind === "horizon.plan") {
       const plan = record(artifact?.plan); const planStatus = plan?.status;
       return { ...next,
@@ -73,9 +75,11 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
     if (kind === "horizon.workspace-checkpoint") {
       return { ...next, status: "executing" as const, checkpoints: state.checkpoints + 1 };
     }
+    if (kind === "horizon.workspace-restored" || kind === "horizon.execution-reused"
+      || kind === "horizon.execution-attempt") return { ...next, status: "executing" as const };
     if (kind === "horizon.plan-invalidation") {
-      const invalidated = new Set(Array.isArray(artifact?.steps)
-        ? artifact.steps.filter((value): value is string => typeof value === "string") : []);
+      const invalidated = new Set(Array.isArray(artifact?.invalidated)
+        ? artifact.invalidated.filter((value): value is string => typeof value === "string") : []);
       return { ...next, status: "planning" as const,
         verifiedSteps: state.verifiedSteps.filter((step) => !invalidated.has(step)) };
     }
@@ -91,7 +95,8 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
         status: action === "replan" ? "planning" as const : action === "ask" ? "waiting" as const
           : action === "blocked" ? "blocked" as const : "executing" as const };
     }
-    if (kind === "horizon.plateau" || kind === "horizon.package-failed" || kind === "horizon.workspace-checkpoint-failed") {
+    if (kind === "horizon.plateau" || kind === "horizon.package-failed" || kind === "horizon.workspace-checkpoint-failed"
+      || kind === "horizon.application-failure") {
       return { ...next, status: "blocked" as const };
     }
     if (kind === "horizon.result") {

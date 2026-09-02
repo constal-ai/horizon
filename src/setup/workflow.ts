@@ -4,6 +4,7 @@ import {
 } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
 import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
+import { applicationError, rethrowRuntimeControl } from "../runtime-control.js";
 
 const WORKFLOW = { id: "horizon-github", version: "1", targetAgent: "horizon" } as const;
 const PROVIDER = "crn:constal:production:platform:default:credential-provider/github-platform-app";
@@ -110,7 +111,7 @@ async function terminal(kind: "complete" | "blocked", revision: number, title: s
   return screen;
 }
 
-export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<SetupScreen> {
+async function runHorizonSetupInternal(message: unknown, ctx: Ctx): Promise<SetupScreen> {
   const channelPackage = setupPackage(message);
   let revision = 1;
   let response = await present({ revision, status: "active", title: "Set up Horizon", description: "Install Horizon into GitHub and choose how repository events are handled.",
@@ -209,6 +210,7 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
       } }],
     }, { dedupeKey: `horizon-setup-plan:${ctx.run.session}:${revision}` });
   } catch (error) {
+    rethrowRuntimeControl(error);
     return terminal("blocked", revision + 1, "Setup plan unavailable",
       error instanceof Error ? error.message : "The platform could not create the Horizon setup plan.", [], ctx);
   }
@@ -238,6 +240,7 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
       plan: { id: plan.id, hash: plan.hash }, eventId: `horizon-setup-${plan.hash.slice(0, 32)}`,
     }, { dedupeKey: `horizon-setup-apply:${plan.hash}` });
   } catch (error) {
+    rethrowRuntimeControl(error);
     return terminal("blocked", revision + 1, "Installation needs attention",
       error instanceof Error ? error.message : "The Horizon ChangePlan could not be applied.", [{ label: "Plan", value: plan.hash }], ctx);
   }
@@ -249,4 +252,14 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
       { label: "Organization", value: connection.accountLogin }, { label: "Repositories", value: repositories.join(", ") },
       { label: "Mention", value: selectedRouting.mention }, { label: "Plan", value: plan.hash },
     ], ctx);
+}
+
+export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<SetupScreen> {
+  try { return await runHorizonSetupInternal(message, ctx); }
+  catch (error) {
+    rethrowRuntimeControl(error);
+    const detail = applicationError(error);
+    return terminal("blocked", 1, "Setup needs attention",
+      `${detail.message}. No setup change was reported as complete.`, [{ label: "Failure", value: detail.name }], ctx);
+  }
 }

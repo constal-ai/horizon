@@ -24,7 +24,7 @@ describe("Horizon durable progress view", () => {
     expect(state.verifiedSteps).toEqual(["implement"]);
     state = horizonProgress.apply(state, fact(6, { kind: "horizon.workspace-checkpoint" }));
     expect(state.checkpoints).toBe(1);
-    state = horizonProgress.apply(state, fact(7, { kind: "horizon.plan-invalidation", steps: ["implement"] }));
+    state = horizonProgress.apply(state, fact(7, { kind: "horizon.plan-invalidation", invalidated: ["implement"], reverify: [] }));
     expect(state).toMatchObject({ status: "planning", verifiedSteps: [] });
     state = horizonProgress.apply(state, fact(8, { kind: "horizon.plan", previousRevision: 1,
       plan: { revision: 2, status: "ready" } }));
@@ -34,7 +34,13 @@ describe("Horizon durable progress view", () => {
     expect(state).toMatchObject({ currentStep: "implement", plateauCycles: 2 });
     state = horizonProgress.apply(state, fact(10, { kind: "horizon.plateau" }));
     expect(state.status).toBe("blocked");
-    state = horizonProgress.apply(state, fact(11, { kind: "horizon.result",
+    state = horizonProgress.apply(state, fact(11, { kind: "horizon.execution-replan-entry" }));
+    expect(state.status).toBe("planning");
+    state = horizonProgress.apply(state, fact(12, { kind: "horizon.workspace-restored" }));
+    expect(state.status).toBe("executing");
+    state = horizonProgress.apply(state, fact(13, { kind: "horizon.application-failure" }));
+    expect(state.status).toBe("blocked");
+    state = horizonProgress.apply(state, fact(14, { kind: "horizon.result",
       result: { status: "complete", artifact: { ref: "artifact-ref" } } }));
     expect(state).toMatchObject({ status: "complete", artifactRef: "artifact-ref", currentStep: null });
   });

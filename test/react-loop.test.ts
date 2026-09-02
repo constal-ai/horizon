@@ -94,7 +94,7 @@ describe("EvidencePlateauDetector", () => {
       turn: async (spec: { tools?: string[]; system?: string }) => {
         if (spec.system === LOOP_CHECKPOINT_SYSTEM) return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
           object: "constal.horizon.loop-checkpoint", version: 1, role: "executor", ready: false,
-          summary: "Proof is complete; final transport remains.", unknowns: [{ id: "final", question: "Can the role return its result?",
+          summary: "Proof is complete; final transport remains.", unknowns: [{ question: "Can the role return its result?",
             state: "open", resolution: null, evidence: ["mutation and proof Tools completed"] }], nextEvidence: ["Final transport object"],
         } } as unknown as TurnRecord;
         offered.push(spec.tools ?? []); turns++;
@@ -185,7 +185,7 @@ describe("EvidencePlateauDetector", () => {
           checkpoints++;
           return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
             object: "constal.horizon.loop-checkpoint", version: 1, role: "test", ready: false,
-            summary: "The same ownership question remains open.", unknowns: [{ id: "owner", question: "Who owns it?",
+            summary: "The same ownership question remains open.", unknowns: [{ question: "Who owns it?",
               state: "open", resolution: null, evidence: [`round-${checkpoints}`] }], nextEvidence: ["Exact owner declaration"],
           } } as unknown as TurnRecord;
         }

@@ -2,7 +2,6 @@ export type HzPlanStatus = "ready" | "needs-input" | "blocked";
 export type HzUnknownState = "open" | "resolved" | "assumed" | "needs-input" | "blocked";
 
 export interface HzUnknown {
-  id: string;
   question: string;
   state: HzUnknownState;
   resolution: string | null;
@@ -152,6 +151,13 @@ export interface HzCritiqueFinding {
 export interface HzDecisionQuestion {
   prompt: string;
   options: [string, string, string];
+}
+
+export interface HzQuestionReconciliation {
+  object: "constal.horizon.question-reconciliation";
+  version: 1;
+  decision: "new" | "answered";
+  rationale: string;
 }
 
 export interface HzPlanCritique {
@@ -367,9 +373,9 @@ export interface HzExecutionAttempt {
   stepFact: string;
   verificationFact: string;
   execution: HzStepResult;
-  executionToolEvidence: HzToolEvidence[];
+  executionToolEvidence: HzToolEvidenceSummary[];
   verification: HzVerification;
-  verificationToolEvidence: HzToolEvidence[];
+  verificationToolEvidence: HzToolEvidenceSummary[];
 }
 
 export interface HzPlanningState {
@@ -392,6 +398,7 @@ export interface HzPlanInput {
   previousPlan: HzPlan | null;
   previousState: HzPlanningState | null;
   completed: HzStepResult[];
+  completedEvidence: HzExecutionAttempt[];
   restartAt: HzPlanningOwner | null;
   executionEvidence: HzExecutionAttempt | null;
   replanBrief: string | null;
@@ -452,7 +459,8 @@ export interface HzVerifierInput {
   planFact: string;
   step: HzPlanStep;
   execution: HzStepResult;
-  executionToolEvidence: HzToolEvidence[];
+  stepFact: string;
+  executionToolEvidence: HzToolEvidenceSummary[];
   tools: string[];
 }
 
@@ -483,6 +491,12 @@ export interface HzToolEvidence {
   args: unknown;
   ref: string | null;
   result: unknown;
+}
+
+export interface HzToolEvidenceSummary {
+  name: string;
+  status: string;
+  ref: string | null;
 }
 
 export interface HzPlateauState {
@@ -606,20 +620,19 @@ export function parseHzSourceResolution(value: unknown): HzSourceResolution | nu
 
 export function parseHzUnknown(value: unknown): HzUnknown | null {
   const source = item(value);
-  const id = string(source?.id, 256); const question = string(source?.question, 16_384);
+  const question = string(source?.question, 16_384);
   const state = source?.state;
   const resolution = nullableString(source?.resolution, 32_768);
   const evidence = strings(source?.evidence, 64, 8_192);
-  if (!source || !id || !question || !["open", "resolved", "assumed", "needs-input", "blocked"].includes(String(state))
+  if (!source || !question || !["open", "resolved", "assumed", "needs-input", "blocked"].includes(String(state))
     || resolution === undefined || !evidence) return null;
-  return { id, question, state: state as HzUnknownState, resolution, evidence };
+  return { question, state: state as HzUnknownState, resolution, evidence };
 }
 
 function unknowns(value: unknown): HzUnknown[] | null {
   if (!Array.isArray(value) || value.length > 256) return null;
   const parsed = value.map(parseHzUnknown);
   if (!parsed.every((entry): entry is HzUnknown => entry !== null)) return null;
-  if (new Set(parsed.map(({ id }) => id)).size !== parsed.length) return null;
   return parsed;
 }
 
@@ -815,6 +828,14 @@ export function parseHzPlanContinuity(value: unknown, expectedRevision?: number,
     if (decisions.some(({ nextStepId }) => nextStepId !== null && !next.has(nextStepId))) return null;
   }
   return { object: "constal.horizon.plan-continuity", version: 1, revision, decisions };
+}
+
+export function parseHzQuestionReconciliation(value: unknown): HzQuestionReconciliation | null {
+  const source = item(value); const decision = source?.decision; const rationale = string(source?.rationale, 32_768);
+  return source?.object === "constal.horizon.question-reconciliation" && source.version === 1
+    && ["new", "answered"].includes(String(decision)) && rationale
+    ? { object: "constal.horizon.question-reconciliation", version: 1,
+      decision: decision as HzQuestionReconciliation["decision"], rationale } : null;
 }
 
 function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {

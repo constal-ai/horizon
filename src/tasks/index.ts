@@ -7,4 +7,5 @@ export { executor } from "./executor.js";
 export { verifier } from "./verifier.js";
 export { approvalInterpreter } from "./approval.js";
 export { reconciler } from "./reconciler.js";
+export { questionReconciler } from "./question-reconciliation.js";
 export { sourceResolver } from "./source.js";

@@ -3,6 +3,7 @@ import type {
 } from "@constal/sdk";
 import { HORIZON_OPERATIONAL_SYSTEM } from "./prompts/operational.js";
 import { runReactLoop } from "./react-loop.js";
+import { applicationError, rethrowRuntimeControl } from "./runtime-control.js";
 import { availableTools, OPERATIONAL_TOOL_NAMES } from "./tools/index.js";
 import type { HorizonRoutedEvent } from "./behaviors.js";
 import type { HzToolEvidence } from "./contracts.js";
@@ -147,7 +148,7 @@ function rootRun(value: ApiQueryResult | { error: string }, leaf: Record<string,
 
 async function observed<T>(read: () => Promise<T>): Promise<T | { error: string }> {
   try { return await read(); }
-  catch (error) { return { error: boundedError(error) }; }
+  catch (error) { rethrowRuntimeControl(error); return { error: boundedError(error) }; }
 }
 
 async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise<SupervisionSnapshot | null> {
@@ -401,13 +402,14 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
       `Apply the authenticated GitHub conversation decision to Horizon work for issue #${snapshot.thread.issue}.`, eventId);
     return { ...result, control };
   } catch (error) {
+    rethrowRuntimeControl(error);
     return { ...result, status: "blocked", action: { kind: "respond" },
       message: `I understood the request, but could not apply it to the durable work session: ${boundedError(error)}`,
       evidence: [...result.evidence, "The governed work-session ChangePlan or application did not succeed."] };
   }
 }
 
-export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx): Promise<HorizonOperationalResult> {
+async function runHorizonOperationalInternal(event: HorizonRoutedEvent, ctx: Ctx): Promise<HorizonOperationalResult> {
   const snapshot = await supervisionSnapshot(event, ctx);
   const tools = availableTools(OPERATIONAL_TOOL_NAMES, ctx);
   const loop = await runReactLoop({
@@ -420,4 +422,15 @@ export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx)
   await ctx.commit({ kind: "horizon.operational-result", eventClass: event.eventClass,
     result, supervision: snapshot, toolEvidence: loop.evidence }, { tier: "audit" });
   return result;
+}
+
+export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx): Promise<HorizonOperationalResult> {
+  try { return await runHorizonOperationalInternal(event, ctx); }
+  catch (error) {
+    rethrowRuntimeControl(error);
+    const detail = applicationError(error);
+    return { object: "constal.horizon.operational-result", version: 1, status: "blocked", action: { kind: "respond" },
+      message: `I could not complete this operation: ${detail.message}`,
+      evidence: [`${detail.name} occurred after platform recovery was exhausted.`] };
+  }
 }

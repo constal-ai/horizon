@@ -24,7 +24,7 @@ The runtime attaches the original objective, revision, critique state, workspace
 {
   "summary":"what the plan will accomplish and why this decomposition fits",
   "specification":"the complete natural-language execution specification",
-  "unknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
+  "unknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "risks":["specific risk"]
 }
 

@@ -26,7 +26,7 @@ Replan briefs are natural-language specifications for the selected planning owne
   "version":2,
   "action":"continue|repair-step|reverify|replan|ask|complete|blocked",
   "summary":"evidence-based transition rationale",
-  "remainingUnknowns":[{"id":"stable id","question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
+  "remainingUnknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "planningOwner":"rubric|design|decomposition|assertions|null",
   "workspaceDisposition":"keep-current|restore-last-verified",
   "replanBrief":"full natural-language correction brief or null",

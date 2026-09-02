@@ -8,10 +8,10 @@ export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
   role: "You are Horizon's evidence progress controller. You inspect one specialist's bounded observations and report whether its assigned unknown frontier has materially changed.",
   task: "Produce a stable structured checkpoint of the questions this specialist still owns. Resolve an unknown only from supplied evidence. Identify the smallest exact evidence still needed; do not ask for generic additional inspection.",
   context: "Dynamic context supplies the specialist role, objective, original role context, recent observations, compacted evidence, and the prior checkpoint when one exists.",
-  rules: `${COMMON_RULES}\n\nReuse stable unknown ids across checkpoints. Evidence accumulation without a changed unknown state or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not invent proof obligations beyond the supplied role objective, context, and stop condition. For a verifier role, the executor report remains a claim, while supplied executionToolEvidence contains governed receipts that may prove an observed command or effect. The verifier must still independently inspect semantic and final-workspace claims. Do not decide implementation or call Tools.`,
+  rules: `${COMMON_RULES}\n\nDescribe the current unknown frontier directly; do not invent identifiers for semantic questions. Evidence accumulation without a changed question, state, or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not invent proof obligations beyond the supplied role objective, context, and stop condition. For a verifier role, the executor report remains a claim, while the execution Fact and supplied Tool receipts provide governed provenance. The verifier must still independently inspect semantic and final-workspace claims. Do not decide implementation or call Tools.`,
   tools: "No Tools are available. Judge progress only from supplied observations.",
   output: `Return exactly one JSON object:
-{"object":"constal.horizon.loop-checkpoint","version":1,"role":"exact supplied role","ready":false,"summary":"what changed in the unknown frontier","unknowns":[{"id":"stable id","question":"precise question","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],"nextEvidence":["smallest exact missing evidence"]}`,
+{"object":"constal.horizon.loop-checkpoint","version":1,"role":"exact supplied role","ready":false,"summary":"what changed in the unknown frontier","unknowns":[{"question":"precise question","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],"nextEvidence":["smallest exact missing evidence"]}`,
 });
 
 export interface ReactLoopSpec<T> {
@@ -40,7 +40,7 @@ interface LoopCheckpoint {
   role: string;
   ready: boolean;
   summary: string;
-  unknowns: Array<{ id: string; question: string; state: "open" | "resolved" | "assumed" | "needs-input" | "blocked";
+  unknowns: Array<{ question: string; state: "open" | "resolved" | "assumed" | "needs-input" | "blocked";
     resolution: string | null; evidence: string[] }>;
   nextEvidence: string[];
 }
@@ -59,27 +59,25 @@ function checkpoint(value: unknown, role: string): LoopCheckpoint | null {
   const unknowns: LoopCheckpoint["unknowns"] = [];
   for (const value of source.unknowns) {
     const item = record(value); const state = item?.state;
-    if (!item || typeof item.id !== "string" || !item.id.trim() || item.id.length > 256
-      || typeof item.question !== "string" || !item.question.trim() || item.question.length > 16_384
+    if (!item || typeof item.question !== "string" || !item.question.trim() || item.question.length > 16_384
       || !["open", "resolved", "assumed", "needs-input", "blocked"].includes(String(state))
       || item.resolution !== null && (typeof item.resolution !== "string" || !item.resolution.trim() || item.resolution.length > 32_768)
       || !Array.isArray(item.evidence) || item.evidence.length > 64
       || item.evidence.some((entry) => typeof entry !== "string" || !entry.trim() || entry.length > 8_192)) return null;
-    unknowns.push({ id: item.id.trim(), question: item.question.trim(),
+    unknowns.push({ question: item.question.trim(),
       state: state as LoopCheckpoint["unknowns"][number]["state"],
       resolution: item.resolution === null ? null : item.resolution.trim(),
       evidence: item.evidence.map((entry) => String(entry).trim()) });
   }
-  if (new Set(unknowns.map(({ id }) => id)).size !== unknowns.length
-    || source.ready && unknowns.some(({ state }) => !["resolved", "assumed"].includes(state))) return null;
+  if (source.ready && unknowns.some(({ state }) => !["resolved", "assumed"].includes(state))) return null;
   return { object: "constal.horizon.loop-checkpoint", version: 1, role, ready: source.ready,
     summary: source.summary.trim(), unknowns, nextEvidence: source.nextEvidence.map((item) => String(item).trim()) };
 }
 
 function checkpointFingerprint(value: LoopCheckpoint): string {
   return canonicalJson([...value.unknowns]
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map(({ id, state, resolution }) => ({ id, state, resolution })));
+    .sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)))
+    .map(({ question, state, resolution }) => ({ question, state, resolution })));
 }
 
 function bounded(value: unknown, depth = 0): unknown {
@@ -265,7 +263,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         gate: {
           id: `horizon-${spec.role}-progress`, version: "1", retries: 3,
           before: (draft) => checkpoint(candidate(draft), spec.role) !== null,
-          feedback: () => "Return only the required loop-checkpoint JSON object with stable unknown ids.",
+          feedback: () => "Return only the required loop-checkpoint JSON object with the current semantic questions and no invented ids.",
         },
       });
       const current = checkpoint(candidate(progress), spec.role);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanContinuity, parseHzPlanCritique, parseHzPlanNarrative,
+import { parseHzAssertionPlan, parseHzDesign, parseHzDiscoveryPlan, parseHzInvestigationResult, parseHzMilestoneWork, parseHzPlan, parseHzPlanContinuity, parseHzPlanCritique, parseHzPlanNarrative, parseHzQuestionReconciliation,
   parseHzReconciliation, parseHzRequest, parseHzRubric, parseHzStepAssertions, parseHzStepResult,
   parseHzSourceResolution, parseHzVerification, parseHzWorkPlan } from "../src/contracts.js";
 
-const unknown = { id: "architecture-seam", question: "Which existing abstraction owns publication?", state: "resolved",
+const unknown = { question: "Which existing abstraction owns publication?", state: "resolved",
   resolution: "The deployment boundary owns it.", evidence: ["src/deploy.ts"] };
 
 const plan = {
@@ -132,5 +132,7 @@ describe("Horizon transport contracts", () => {
       summary: "The architecture assumption failed.", remainingUnknowns: [], planningOwner: null,
       workspaceDisposition: "keep-current", replanBrief: "Repair the design.", question: null,
       blockedReason: null })).toBeNull();
+    expect(parseHzQuestionReconciliation({ object: "constal.horizon.question-reconciliation", version: 1,
+      decision: "answered", rationale: "The prior answer already selects the same material choice." })).not.toBeNull();
   });
 });

@@ -36,6 +36,7 @@ function context(planning: HzPlanInput): Record<string, unknown> {
   return {
     request: planning.request, revision: planning.revision, discoveryPlan: planning.discoveryPlan,
     investigations: planning.investigations, previousPlan: planning.previousPlan, completed: planning.completed,
+    completedEvidence: planning.completedEvidence,
     replanBrief: planning.replanBrief, restartAt: planning.restartAt, executionEvidence: planning.executionEvidence,
     answer: planning.answer,
   };
@@ -154,7 +155,8 @@ export const continuityAgent = subtask<PlanningPhaseResult<HzPlanContinuity>>({
       objective: "Reconcile previously verified work with the new immutable planning revision.",
       context: { ...context(input.planning), previousPlanningState: input.planning.previousState,
         rubric: input.rubric, design: input.design, workPlan: input.workPlan, assertions: input.assertions,
-        completed: input.planning.completed, critique: input.critique },
+        completed: input.planning.completed, completedEvidence: input.planning.completedEvidence,
+        critique: input.critique },
       tools: [], model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzPlanContinuity(planningArtifact(value,
         { object: "constal.horizon.plan-continuity", revision: input.planning.revision }), input.planning.revision,

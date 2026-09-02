@@ -17,7 +17,7 @@ Verification principles must demand the smallest evidence that proves the user-v
 Resolve repository-answerable questions from the supplied investigations or focused reads. Preserve a question only when its answer materially changes product behavior, public contract, authority, risk tolerance, or execution scope.`,
   tools: "Use read-only repository or primary-source Tools only to close one concrete rubric gap. Do not design or edit the solution.",
   output: `Return exactly:
-{"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"id":"id","question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}`,
+{"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}`,
 });
 
 export const DESIGN_SYSTEM = composePrompt({

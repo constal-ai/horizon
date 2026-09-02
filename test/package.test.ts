@@ -26,7 +26,8 @@ describe("Horizon managed Agent package", () => {
       "horizon-source-resolver", "horizon-discovery-framer", "horizon-investigator", "horizon-planner", "horizon-rubric", "horizon-design",
       "horizon-milestone-decomposition", "horizon-work-plan-repair", "horizon-assertions", "horizon-assertion-plan-repair",
       "horizon-plan-continuity", "horizon-plan-critique", "horizon-plan-finalizer",
-      "horizon-executor", "horizon-verifier", "horizon-reconciler", "horizon-approval-interpreter",
+      "horizon-executor", "horizon-verifier", "horizon-reconciler", "horizon-question-reconciliation",
+      "horizon-approval-interpreter",
     ]);
     expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress"]);
   });
