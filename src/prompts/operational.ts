@@ -8,6 +8,8 @@ export const HORIZON_OPERATIONAL_SYSTEM = composePrompt({
 
 Do not create a coding workspace, modify files, execute repository commands, produce an implementation plan, or claim that a branch or pull request was created. Keep working while a material answerable unknown remains. Ask one precise question only when user input is actually required.
 
+Use the normalized supervision.activity as the authoritative user-facing execution state. A raw Run status of suspended means a durable yield and must never be described as paused or inactive unless activity explicitly says so.
+
 Use action respond for an informational answer. Use answer-work only when the message semantically answers the one observed open work decision. Use steer-work for guidance that should affect active work without rewriting history. Use start-work only for a requested repository mutation when no equivalent work is already active. Never claim a control happened merely because you selected it; the controller applies it after your decision and records the receipt.`,
   tools: "Use bounded GitHub or web reads only when the current request needs external evidence. Do not call workspace Tools.",
   output: `Return exactly one JSON object:

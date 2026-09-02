@@ -30,7 +30,8 @@ function readFixture(options: { waits?: unknown[]; runStatus?: string } = {}) {
     if (resource === "github" && operation === "issue.comments.list") return { comments: [{ id: 1, body: "Progress?" }] };
     if (resource === "api" && operation === "query" && args.kind === "run") return query([runItem(options.runStatus)]);
     if (resource === "api" && operation === "get") return { object: "constal.api.object", ref: runItem(),
-      value: { run: { runId: "run-1", status: options.runStatus ?? "suspended" }, workflow: { currentNodeId: "node:planner" } },
+      value: { runId: "run-1", status: options.runStatus ?? "suspended", task: { id: "horizon-planner", version: "11" },
+        awaiting: [{ id: "spawn-1", label: "spawn:horizon-design", kind: "spawn", childRunId: "child-1" }] },
       evidence: { source: "coordinator" } };
     if (resource === "api" && operation === "query" && args.kind === "wait") return query(options.waits ?? []);
     throw new Error(`unexpected invocation ${resource}#${operation}`);
@@ -79,7 +80,8 @@ describe("Horizon behavior routing", () => {
     const turn = vi.fn(async (input: { context: { supervision: Record<string, unknown> } }) => {
       expect(input.context.supervision).toMatchObject({ thread: { workSession: sessions.work },
         issue: { issue: { number: 10 } }, comments: { comments: [{ body: "Progress?" }] },
-        currentRun: { value: { run: { runId: "run-1", status: "suspended" }, workflow: { currentNodeId: "node:planner" } } } });
+        currentRun: { value: { runId: "run-1", status: "suspended", task: { id: "horizon-planner" } } },
+        activity: { state: "running", phase: "horizon-planner", detail: expect.stringContaining("child agents") } });
       return { toolCalls: [], message: { role: "assistant", content: JSON.stringify({
         object: "constal.horizon.operational-result", version: 1, status: "complete",
         message: "I am currently planning the change.", action: { kind: "respond" },

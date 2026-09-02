@@ -46,6 +46,8 @@ interface SupervisionSnapshot {
   runs: ApiQueryResult | { error: string };
   currentRun: ApiGetResult | null | { error: string };
   waits: ApiQueryResult | { error: string };
+  activity: { state: "idle" | "running" | "waiting-user" | "failed" | "complete" | "transitioning";
+    runId: string | null; phase: string | null; detail: string };
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -106,15 +108,47 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
     fields: ["id", "status", "scheduler", "agent_id", "session_id", "parent_run", "created_at", "updated_at",
       "duration_ms", "elapsed_ms", "total_micro_usd", "turns_used", "max_turns"],
   }));
-  const latest = "items" in runs && Array.isArray(runs.items) ? objectRef(runs.items[0]) : null;
+  const runItems = "items" in runs && Array.isArray(runs.items) ? runs.items : [];
+  const latestItem = runItems.find((item) => {
+    const source = record(item); const fields = record(source?.fields);
+    return ["queued", "leased", "suspended"].includes(String(source?.state ?? fields?.status));
+  }) ?? runItems[0];
+  const latest = objectRef(latestItem);
   const currentRun = latest ? await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: latest, page: { limit: 200 } })) : null;
+    { ref: latest, fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
+      "budget", "limits", "task", "parent", "awaiting"] })) : null;
   const waits = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "wait", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
       { op: "eq", field: "session", value: thread.workSession }] }, limit: 200,
   }));
-  return { object: "constal.horizon.supervision", version: 1, thread, issue, comments, runs, currentRun, waits };
+  return { object: "constal.horizon.supervision", version: 1, thread, issue, comments, runs, currentRun, waits,
+    activity: workActivity(currentRun, waits) };
+}
+
+function workActivity(current: ApiGetResult | null | { error: string }, waits: ApiQueryResult | { error: string }): SupervisionSnapshot["activity"] {
+  const value = current && "value" in current ? record(current.value) : null;
+  const runId = typeof value?.runId === "string" ? value.runId : null;
+  const status = typeof value?.status === "string" ? value.status : null;
+  const task = record(value?.task); const phase = typeof task?.id === "string" ? task.id : runId ? "horizon" : null;
+  const open = queryItems(waits); const userWait = open.find((item) => {
+    const fields = record(item.fields); return fields?.waitKind === "await" || fields?.kind === "await";
+  });
+  if (userWait) return { state: "waiting-user", runId, phase,
+    detail: "The work Run is waiting for an authenticated answer to one presented decision." };
+  if (!current) return { state: "idle", runId: null, phase: null, detail: "No work Run has been observed for this issue." };
+  if ("error" in current) return { state: "transitioning", runId: null, phase: null,
+    detail: `Exact work state is temporarily unavailable: ${current.error}` };
+  if (status === "failed") return { state: "failed", runId, phase, detail: String(value?.error ?? "The work Run failed.") };
+  if (status === "complete" || status === "stopped") return { state: "complete", runId, phase,
+    detail: status === "complete" ? "The work Run completed." : "The work Run stopped." };
+  if (status === "queued" || status === "leased") return { state: "running", runId, phase,
+    detail: status === "leased" ? "The current work component is executing." : "The current work component is queued to execute." };
+  const awaiting = Array.isArray(value?.awaiting) ? value.awaiting.flatMap((item) => record(item) ? [record(item)!] : []) : [];
+  if (status === "suspended" && awaiting.some((item) => item.kind === "spawn")) return { state: "running", runId, phase,
+    detail: "The current work component yielded durably while one of its child agents executes." };
+  return { state: "transitioning", runId, phase,
+    detail: "The work Run yielded at a durable boundary and is not paused; no user decision is currently open." };
 }
 
 function action(value: unknown): HorizonOperationalAction | null {
