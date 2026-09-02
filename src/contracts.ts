@@ -286,7 +286,7 @@ export interface HzWorkspaceReceipt {
   sandbox: string;
   root: "/workspace/repo";
   cache: { key: string; hit: boolean; image: string | null };
-  runner: { protocol: "constal.workspace-runner"; version: 1; digest: string };
+  runner: { protocol: "constal.workspace-runner"; version: 2; digest: string };
   source: HzResolvedSource;
   baseline: { commit: string; tree: string };
   setup: HzEnvironmentSpec;

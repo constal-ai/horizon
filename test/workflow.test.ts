@@ -9,7 +9,7 @@ vi.mock("../src/workspace/lifecycle.js", async (importOriginal) => {
     prepareWorkspace: async () => ({ receiptRef: "workspace-receipt", receipt: {
       object: "constal.horizon.workspace-ready" as const, version: 1 as const, session: "session", sandbox: "sandbox-id",
       root: "/workspace/repo" as const, cache: { key: "c".repeat(64), hit: true, image: "image-id" },
-      runner: { protocol: "constal.workspace-runner" as const, version: 1 as const, digest: "d".repeat(64) },
+      runner: { protocol: "constal.workspace-runner" as const, version: 2 as const, digest: "d".repeat(64) },
       source: { kind: "artifact" as const, archive: { ref: "source-ref", bytes: 1, format: "tar.gz" as const }, github: null },
       baseline: { commit: "commit", tree: "tree" }, setup: { name: "default", cache: true, setup: [] },
     } }),

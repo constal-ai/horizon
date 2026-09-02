@@ -105,9 +105,9 @@ class FakeSandbox implements Sandbox {
   exec(input: { args?: string[] }): Handle<SandboxCommandResult> {
     const args = input.args ?? [];
     if (args[1] === "probe") return handle(command("completed",
-      JSON.stringify({ protocol: "constal.workspace-runner", version: 1, root: "/workspace" })));
+      JSON.stringify({ protocol: "constal.workspace-runner", version: 2, root: "/workspace" })));
     if (args[1] === "inspect") return handle(command("completed", JSON.stringify({
-      protocol: "constal.workspace-runner", version: 1, root: "/workspace/repo",
+      protocol: "constal.workspace-runner", version: 2, root: "/workspace/repo",
       commit: this.commit, tree: this.tree, status: this.status,
     })));
     const separator = args.indexOf("--"); const argv = separator < 0 ? [] : args.slice(separator + 1);

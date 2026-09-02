@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
-import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
+import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
+  workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
   it("defines executor mutation Tools independently of Resource recovery effects", () => {
@@ -47,9 +48,43 @@ describe("Horizon Tool capability projection", () => {
     expect(() => editWorkspaceText("current", "missing", "new")).toThrow("was not found");
   });
 
-  it("rejects undersized workspace reads before invoking CAS", () => {
-    expect(workspaceReadMaximum(9_420, 10_000)).toBe(9_420);
-    expect(() => workspaceReadMaximum(12_000, 10_000)).toThrow("requested read limit");
-    expect(() => workspaceReadMaximum(1_048_577)).toThrow("supported read ceiling");
+  it("keeps workspace read limits internal instead of asking the model to guess bytes", () => {
+    const schema = WORKSPACE_TOOLS.workspace_read!.schema as { properties: Record<string, unknown> };
+    expect(schema.properties).toEqual({ path: expect.any(Object) });
+    expect(workspaceReadMaximum(9_420)).toBe(9_420);
+    expect(workspaceReadMaximum(0)).toBe(1);
+    expect(workspaceReadMaximum(1_048_577)).toBeNull();
+    expect(() => workspaceReadMaximum(-1)).toThrow("file size is invalid");
+  });
+
+  it("discovers the exact file size before reading through CAS", async () => {
+    const ref = "a".repeat(64); const getFile = vi.fn(async () => ({ path: "/workspace/repo/src/contracts.ts", ref, bytes: 36_408 }));
+    const invoke = vi.fn(async () => ({ ref, bytes: 36_408, text: "contract" }));
+    const ctx = { resources: { sandbox: "sandbox", cas: "cas" }, run: { agent: { crn: "agent" }, session: "session" },
+      sandboxPool: () => ({ createSandbox: async () => ({ getFile }) }), invoke } as never;
+    await expect(WORKSPACE_TOOLS.workspace_read!.run({ path: "/workspace/repo/src/contracts.ts" }, ctx))
+      .resolves.toMatchObject({ bytes: 36_408, text: "contract" });
+    expect(invoke).toHaveBeenCalledWith("cas", "getText", { ref, maximumBytes: 36_408 });
+  });
+
+  it("returns actionable metadata instead of failing when a file exceeds the internal ceiling", async () => {
+    const ref = "b".repeat(64); const getFile = vi.fn(async () => ({ path: "/workspace/repo/large.txt", ref, bytes: 1_048_577 }));
+    const invoke = vi.fn();
+    const ctx = { resources: { sandbox: "sandbox", cas: "cas" }, run: { agent: { crn: "agent" }, session: "session" },
+      sandboxPool: () => ({ createSandbox: async () => ({ getFile }) }), invoke } as never;
+    await expect(WORKSPACE_TOOLS.workspace_read!.run({ path: "/workspace/repo/large.txt" }, ctx)).resolves.toEqual({
+      path: "/workspace/repo/large.txt", ref, bytes: 1_048_577, text: null, truncated: true,
+      reason: "The file exceeds the internal 1 MiB text-read ceiling; use workspace_search to locate relevant sections.",
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("accepts structured bounded workspace listings with exact file metadata", () => {
+    expect(parseWorkspaceListing({ protocol: "constal.workspace-runner", version: 2, root: "/workspace/repo",
+      entries: [{ path: "src/index.ts", kind: "file", bytes: 1200, permissions: "0644", gitMode: "100644",
+        executable: false, tracked: true, status: "modified", modifiedAt: 123 }], truncated: false, next: null }))
+      .toMatchObject({ entries: [{ path: "src/index.ts", bytes: 1200, permissions: "0644", status: "modified" }] });
+    expect(parseWorkspaceListing({ protocol: "constal.workspace-runner", version: 2, root: "/workspace/repo",
+      entries: [], truncated: true, next: null })).toBeNull();
   });
 });

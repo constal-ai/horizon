@@ -1,5 +1,5 @@
 import { execFile as callbackExecFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -18,6 +18,9 @@ describe("Constal workspace runner", () => {
     await execFile("mkdir", ["-p", repository]);
     await writeFile(join(repository, "file.txt"), "baseline\n");
     await writeFile(join(repository, ".gitignore"), "node_modules/\n");
+    await writeFile(join(repository, "script.sh"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(repository, "script.sh"), 0o755);
+    await symlink("file.txt", join(repository, "link.txt"));
     await execFile("git", ["init", "--initial-branch=main"], { cwd: repository });
     await execFile("git", ["add", "-A"], { cwd: repository });
     await execFile("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline"], { cwd: repository });
@@ -42,6 +45,25 @@ describe("Constal workspace runner", () => {
     const entries = (await execFile("tar", ["-tzf", archive])).stdout.split("\n");
     expect(entries).toEqual(expect.arrayContaining(["file.txt", "new.txt"]));
     expect(entries.some((entry) => entry.startsWith("node_modules/"))).toBe(false);
+
+    const listed = JSON.parse((await execFile("node", [localRunner, "list", "--cwd", repository,
+      "--maximum-entries", "200", "--"])).stdout) as { entries: Array<Record<string, unknown>>; truncated: boolean; next: string | null };
+    expect(listed.truncated).toBe(false); expect(listed.next).toBeNull();
+    expect(listed.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "file.txt", kind: "file", bytes: 8, permissions: "0644", gitMode: "100644",
+        executable: false, tracked: true, status: "modified", modifiedAt: expect.any(Number) }),
+      expect.objectContaining({ path: "script.sh", kind: "file", permissions: "0755", gitMode: "100755",
+        executable: true, tracked: true, status: "clean" }),
+      expect.objectContaining({ path: "link.txt", kind: "symlink", symlinkTarget: "file.txt", gitMode: "120000",
+        tracked: true, status: "clean" }),
+      expect.objectContaining({ path: "new.txt", kind: "file", tracked: false, status: "untracked" }),
+    ]));
+    const firstPage = JSON.parse((await execFile("node", [localRunner, "list", "--cwd", repository,
+      "--maximum-entries", "2", "--"])).stdout) as { entries: Array<{ path: string }>; truncated: boolean; next: string };
+    expect(firstPage).toMatchObject({ truncated: true, next: firstPage.entries[1]!.path });
+    const secondPage = JSON.parse((await execFile("node", [localRunner, "list", "--cwd", repository,
+      "--maximum-entries", "200", "--after", firstPage.next, "--"])).stdout) as { entries: Array<{ path: string }> };
+    expect(secondPage.entries.every(({ path }) => path > firstPage.next)).toBe(true);
   });
 
   it("rejects command working directories outside its workspace root", async () => {

@@ -2,6 +2,8 @@ import { type Ctx, type Sandbox, type SandboxCommandResult, type Tool } from "@c
 import { HORIZON_RUNNER_PATH, HORIZON_WORKSPACE_ROOT } from "../workspace/runner-source.js";
 
 const TIMEOUT_MS = 600_000;
+const WORKSPACE_READ_CEILING_BYTES = 1_048_576;
+const WORKSPACE_LIST_OUTPUT_BYTES = 1_000_000;
 
 export function normalizeWorkspacePath(path: string, cwd = "/workspace"): string {
   if (typeof path !== "string" || path.length === 0 || path.length > 4_096) throw new TypeError("workspace path is invalid");
@@ -58,15 +60,71 @@ function succeeded(result: SandboxCommandResult): boolean {
   return result.status === "completed" && result.exitCode === 0;
 }
 
-export function workspaceReadMaximum(fileBytes: number, requested?: number): number {
-  const maximum = requested ?? 262_144;
-  if (!Number.isSafeInteger(fileBytes) || fileBytes < 0 || fileBytes > 1_048_576) {
-    throw new TypeError("workspace file exceeds the supported read ceiling");
+export function workspaceReadMaximum(fileBytes: number): number | null {
+  if (!Number.isSafeInteger(fileBytes) || fileBytes < 0) throw new TypeError("workspace file size is invalid");
+  return fileBytes > WORKSPACE_READ_CEILING_BYTES ? null : Math.max(1, fileBytes);
+}
+
+export interface WorkspaceListEntry {
+  path: string;
+  kind: "file" | "directory" | "symlink" | "submodule" | "missing" | "other";
+  bytes: number | null;
+  permissions: string | null;
+  gitMode: string | null;
+  executable: boolean;
+  tracked: boolean;
+  status: "clean" | "modified" | "added" | "deleted" | "renamed" | "copied" | "untracked" | "conflicted";
+  modifiedAt: number | null;
+  symlinkTarget?: string;
+}
+
+export interface WorkspaceListing {
+  protocol: "constal.workspace-runner";
+  version: 2;
+  root: string;
+  entries: WorkspaceListEntry[];
+  truncated: boolean;
+  next: string | null;
+}
+
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+export function parseWorkspaceListing(value: unknown): WorkspaceListing | null {
+  const source = object(value);
+  if (!source || source.protocol !== "constal.workspace-runner" || source.version !== 2
+    || typeof source.root !== "string" || !Array.isArray(source.entries) || source.entries.length > 200
+    || typeof source.truncated !== "boolean" || !(source.next === null || typeof source.next === "string")
+    || source.truncated !== (typeof source.next === "string")) return null;
+  const kinds = new Set(["file", "directory", "symlink", "submodule", "missing", "other"]);
+  const statuses = new Set(["clean", "modified", "added", "deleted", "renamed", "copied", "untracked", "conflicted"]);
+  const entries: WorkspaceListEntry[] = [];
+  for (const candidate of source.entries) {
+    const entry = object(candidate);
+    if (!entry || typeof entry.path !== "string" || !entry.path || entry.path.length > 4_096
+      || typeof entry.kind !== "string" || !kinds.has(entry.kind)
+      || !(entry.bytes === null || Number.isSafeInteger(entry.bytes) && Number(entry.bytes) >= 0)
+      || !(entry.permissions === null || typeof entry.permissions === "string" && /^[0-7]{4}$/u.test(entry.permissions))
+      || !(entry.gitMode === null || typeof entry.gitMode === "string" && /^[0-7]{6}$/u.test(entry.gitMode))
+      || typeof entry.executable !== "boolean" || typeof entry.tracked !== "boolean"
+      || typeof entry.status !== "string" || !statuses.has(entry.status)
+      || !(entry.modifiedAt === null || Number.isSafeInteger(entry.modifiedAt) && Number(entry.modifiedAt) >= 0)
+      || !(entry.symlinkTarget === undefined || typeof entry.symlinkTarget === "string")
+      || (entry.kind === "symlink") !== (typeof entry.symlinkTarget === "string")) return null;
+    entries.push(entry as unknown as WorkspaceListEntry);
   }
-  if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 1_048_576 || fileBytes > maximum) {
-    throw new TypeError("workspace file exceeds the requested read limit");
-  }
-  return Math.max(1, fileBytes);
+  return { protocol: "constal.workspace-runner", version: 2, root: source.root,
+    entries, truncated: source.truncated, next: source.next as string | null };
+}
+
+async function commandText(result: SandboxCommandResult, ctx: Ctx): Promise<string> {
+  if (!succeeded(result)) throw new Error(`workspace command failed (${result.status}, exit ${result.exitCode ?? "unknown"})`);
+  if (!result.stdoutRef) return result.stdoutPreview;
+  const loaded = await ctx.invoke<{ ref: string; text: string }>(ctx.resources.cas!, "getText",
+    { ref: result.stdoutRef, maximumBytes: WORKSPACE_LIST_OUTPUT_BYTES });
+  if (loaded.ref !== result.stdoutRef) throw new Error("workspace command output reference changed");
+  return loaded.text;
 }
 
 function lineEnding(value: string): "\r\n" | "\n" {
@@ -102,14 +160,20 @@ const pathProperty = { type: "string", minLength: 1, maxLength: 4_096 } as const
 const pathsProperty = { type: "array", maxItems: 256, items: pathProperty } as const;
 
 const list: Tool = {
-  name: "workspace_list", version: "1",
-  description: "List a bounded set of tracked and untracked repository paths without reading file contents. Use this to discover real paths before workspace_read or workspace_search.",
-  schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false }, maxEffect: "reconcilable",
-  needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
-  async run(args: { cwd?: string; paths?: string[] }, ctx) {
+  name: "workspace_list", version: "2",
+  description: "List tracked and untracked repository files with exact size, kind, permissions, Git mode, executable bit, worktree status, and modification time. Follow next only when the returned page is truncated.",
+  schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty, after: pathProperty,
+    maximumEntries: { type: "integer", minimum: 1, maximum: 200 } }, additionalProperties: false }, maxEffect: "reconcilable",
+  needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] },
+    { binding: "cas", kind: "cas", ops: ["getText"] }],
+  async run(args: { cwd?: string; paths?: string[]; after?: string; maximumEntries?: number }, ctx) {
     const selected = await workspace(ctx); const cwd = repositoryCwd(args.cwd);
     const paths = (args.paths ?? []).map((path) => normalizeRepositoryPath(path, cwd));
-    return command(selected, "git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", ...paths], cwd);
+    const result = await command(selected, "node", [HORIZON_RUNNER_PATH, "list", "--cwd", cwd,
+      "--maximum-entries", String(args.maximumEntries ?? 100), ...(args.after ? ["--after", args.after] : []), "--", ...paths], cwd);
+    const listing = parseWorkspaceListing(JSON.parse(await commandText(result, ctx)));
+    if (!listing || listing.root !== cwd) throw new Error("workspace runner returned an invalid file listing");
+    return listing;
   },
 };
 
@@ -127,25 +191,30 @@ const search: Tool = {
 };
 
 const read: Tool = {
-  name: "workspace_read", version: "1",
-  description: "Read one bounded UTF-8 workspace file through CAS. Use an exact path discovered from the repository and request only the bytes needed for the current decision.",
-  schema: { type: "object", properties: { path: pathProperty,
-    maximumBytes: { type: "integer", minimum: 1, maximum: 1_048_576 } }, required: ["path"], additionalProperties: false },
+  name: "workspace_read", version: "2",
+  description: "Read one UTF-8 repository file through CAS. Supply only an exact path discovered from workspace_list or workspace_search; file size and the internal read ceiling are handled automatically.",
+  schema: { type: "object", properties: { path: pathProperty }, required: ["path"], additionalProperties: false },
   maxEffect: "idempotent", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile"] },
     { binding: "cas", kind: "cas", ops: ["getText"] }],
   preview(result) {
-    const value = result as { path?: unknown; ref?: unknown; bytes?: unknown; text?: unknown };
-    const text = typeof value.text === "string" ? value.text : ""; const maximum = 16_384;
-    return { path: value.path, ref: value.ref, bytes: value.bytes, text: text.slice(0, maximum), truncated: text.length > maximum };
+    const value = result as { path?: unknown; ref?: unknown; bytes?: unknown; text?: unknown; truncated?: unknown; reason?: unknown };
+    const text = typeof value.text === "string" ? value.text : ""; const maximum = 65_536;
+    const truncated = value.truncated === true || text.length > maximum;
+    return { path: value.path, ref: value.ref, bytes: value.bytes, text: text.slice(0, maximum), truncated,
+      ...(typeof value.reason === "string" ? { reason: value.reason } : truncated
+        ? { reason: "The model preview is truncated; use workspace_search to locate additional relevant sections." } : {}) };
   },
-  async run(args: { path: string; maximumBytes?: number }, ctx) {
+  async run(args: { path: string }, ctx) {
     const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
     if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
       throw new TypeError("workspace read path is outside /workspace/repo");
     }
     const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
+    const maximumBytes = workspaceReadMaximum(file.bytes);
+    if (maximumBytes === null) return { path: file.path, ref: file.ref, bytes: file.bytes, text: null, truncated: true,
+      reason: "The file exceeds the internal 1 MiB text-read ceiling; use workspace_search to locate relevant sections." };
     const value = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-      { ref: file.ref, maximumBytes: workspaceReadMaximum(file.bytes, args.maximumBytes) });
+      { ref: file.ref, maximumBytes });
     return { path: file.path, ref: value.ref, bytes: value.bytes, text: value.text };
   },
 };
@@ -205,8 +274,10 @@ const edit: Tool = {
     if (args.expectedRef !== undefined && args.expectedRef !== file.ref) {
       throw new TypeError("workspace edit expectedRef is stale; read the current file before retrying");
     }
+    const maximumBytes = workspaceReadMaximum(file.bytes);
+    if (maximumBytes === null) throw new TypeError("workspace file exceeds the supported edit ceiling");
     const current = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-      { ref: file.ref, maximumBytes: workspaceReadMaximum(file.bytes, 1_048_576) });
+      { ref: file.ref, maximumBytes });
     const edited = editWorkspaceText(current.text, args.oldText, args.newText);
     const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: edited.text });
     await Promise.resolve(selected.putFile(path, stored.ref, { invoke: { timeoutMs: TIMEOUT_MS } }));
