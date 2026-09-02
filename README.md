@@ -27,39 +27,58 @@ Discovery framer ReAct
       └── other objective-specific investigations
       │
       ▼
-Rubric Agent ──► Design + Milestone Agent
-                       │
-                       ├── Milestone Decomposer Agent · milestone 1
-                       ├── Milestone Decomposer Agent · milestone 2
-                       └── accepted prerequisite work flows forward
+Planning pipeline (detailed below)
+      │
+      ▼
+Immutable Plan Fact r1
+      │
+      ▼
+Dependency-ready work unit ──► Execution Agent ReAct
                                       │
-                                      ├── Assertion Agent · step A
-                                      ├── Assertion Agent · step B
-                                      └── Assertion Agent · step C
-                                                   │
-                                                   ▼
-                                         Cross-plan Critique Agent
-                                                   │
-                         blocking finding ──────────┤
-                         ▼                         │ accepted
-             rerun owning planning loop             ▼
-             + every dependent loop        Finalization Agent
-                         └───────────────►  Immutable Plan Fact r1
-                                                   │
-                                      dependency-ready work unit
-                                                   ▼
-                                          Execution Agent ReAct
-                                                   │
-                                          Independent Verifier
-                                                   │
-                                          Reconciliation Agent
-                         ┌────────────┬─────────────┼────────────┐
-                         │ continue   │ replan      │ ask        │ complete / blocked
-                         │            ▼             ▼            ▼
-                         │       Plan Fact r2    durable      immutable
-                         │       (r1 remains)     await       CAS artifact
-                         └────────────┴─────────────┘
+                               Independent Verifier
+                                      │
+                               Reconciliation Agent
+                ┌────────────┬────────┼────────────┐
+                │ continue   │ replan │ ask        │ complete / blocked
+                │            ▼        ▼            ▼
+                │       Plan Fact r2  durable      immutable
+                │       (r1 remains)  await        CAS artifact
+                └────────────┴────────┴─────────────┘
 ```
+
+### Planning and repair
+
+```text
+Initial planning
+  Rubric
+    ↓
+  Design
+    ↓
+  Per-milestone decomposition
+    ↓
+  Structural critique
+       │
+       ├─ accepted ──────────────► Assertions
+       │
+       ├─ rubric problem ────────► Rubric → Design → fresh decomposition
+       │
+       ├─ design problem ────────► Design → fresh decomposition
+       │
+       ├─ decomposition problem ─► Whole-work-plan repair
+       │                              ↓
+       │                           Structural critique
+       │
+       └─ user decision ─────────► Durable question
+
+Assertions
+  ↓
+Complete critique
+       │
+       ├─ assertion problem ─────► Whole-assertion-plan repair
+       └─ upstream problem ──────► corresponding upstream route
+```
+
+Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique routes to the earliest invalid artifact, records exact affected milestone and step identities, and then critiques the repaired state again. Repeated repair scopes and repeated artifact states terminate as an honest planning plateau instead of spawning another decomposition wave.
 
 One Horizon mission is one Constal Session and one logical Sandbox. Every child Run inherits that Session and therefore sees the same workspace. Provider standby snapshots preserve the live Session between active periods. Verified steps additionally publish immutable provider images with durable checkpoint receipts, while the original source archive, workspace identity, and final outputs remain content-addressed artifacts.
 
@@ -91,7 +110,9 @@ Standard ReAct roles have a 500-model-turn emergency ceiling; execution speciali
 | Rubric | Define observable success, constraints, non-goals, and material open questions |
 | Designer | Close architecture decisions and define dependency-ordered outcome milestones |
 | Milestone decomposer | Turn one milestone into specialist loops, consuming accepted prerequisite work |
+| Whole-work-plan repair | Reconcile ownership and handoffs across the complete work graph after critique |
 | Assertion writer | Define independent positive, negative-path, and invariant proof for one step |
+| Whole-assertion-plan repair | Reconcile proof ownership across every current work unit after critique |
 | Plan critic | Find cross-artifact contradictions and route repair to the earliest owning planning loop |
 | Finalizer | Render converged planning artifacts into the immutable natural-language specification |
 | Execution specialist | One coherent semantic responsibility, executed as its own ReAct loop |
