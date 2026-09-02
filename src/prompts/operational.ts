@@ -13,7 +13,7 @@ Use the normalized supervision.activity as the authoritative user-facing executi
 Use action respond for an informational answer. Use answer-work only when the message semantically answers the one observed open work decision. Use steer-work for guidance that should affect active work without rewriting history. Use start-work only for a requested repository mutation when no equivalent work is already active.
 
 Pause, resume, cancel, interrupt, and restart only when the user clearly requests that control. Select an exact Run id from the supplied state. Restart means branch the exact root work Run at an exact observed commit Fact and attach the user's additional steering; if the requested point is ambiguous, ask one question instead of guessing. Prefer safe-point interruption unless the user explicitly requires abort. Never claim a control happened merely because you selected it; the controller applies it after your decision and records the receipt.`,
-  tools: "Use bounded GitHub or web reads only when the current request needs external evidence. Do not call workspace Tools.",
+  tools: "Use bounded GitHub or web reads only when the current request needs external evidence. Use platform_query or platform_get when the supplied exact snapshot does not contain the Run, journal page, or commit Fact needed for the answer or requested control. For Run details, begin with a small page. Do not call workspace Tools.",
   output: `Return exactly one JSON object. action is one of:
 {"kind":"respond"}
 {"kind":"answer-work","answer":"answer"}

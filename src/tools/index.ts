@@ -1,9 +1,10 @@
 import type { Ctx, Tool } from "@constal/sdk";
 import { GITHUB_TOOLS } from "./github.js";
+import { PLATFORM_TOOLS } from "./platform.js";
 import { WEB_TOOLS } from "./web.js";
 import { WORKSPACE_TOOLS } from "./workspace.js";
 
-export const TOOLS: Record<string, Tool> = { ...GITHUB_TOOLS, ...WORKSPACE_TOOLS, ...WEB_TOOLS };
+export const TOOLS: Record<string, Tool> = { ...GITHUB_TOOLS, ...PLATFORM_TOOLS, ...WORKSPACE_TOOLS, ...WEB_TOOLS };
 
 export const SOURCE_RESOLVER_TOOL_NAMES = [
   "github_repositories", "github_repository", "github_tree", "github_file",
@@ -12,7 +13,7 @@ export const SOURCE_RESOLVER_TOOL_NAMES = [
 /** Lightweight foreground operation never prepares or mutates a coding workspace. */
 export const OPERATIONAL_TOOL_NAMES = [
   "github_repositories", "github_repository", "github_tree", "github_file", "github_issue", "github_issue_comments",
-  "web_search", "web_fetch",
+  "platform_query", "platform_get", "web_search", "web_fetch",
 ] as const;
 
 export const DISCOVERY_TOOL_NAMES = [

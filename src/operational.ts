@@ -5,6 +5,7 @@ import { HORIZON_OPERATIONAL_SYSTEM } from "./prompts/operational.js";
 import { runReactLoop } from "./react-loop.js";
 import { availableTools, OPERATIONAL_TOOL_NAMES } from "./tools/index.js";
 import type { HorizonRoutedEvent } from "./behaviors.js";
+import type { HzToolEvidence } from "./contracts.js";
 
 export type HorizonOperationalAction =
   | { kind: "respond" }
@@ -169,9 +170,11 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
   const latest = objectRef(latestItem);
   const root = objectRef(rootItem);
   const currentRun = latest ? await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: latest, page: { limit: 100 } })) : null;
+    { ref: latest, fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
+      "budget", "limits", "task", "parent", "awaiting"] })) : null;
   const rootDetail = root ? latest?.id === root.id ? currentRun : await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: root, page: { limit: 100 } })) : null;
+    { ref: root, fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
+      "budget", "limits", "task", "parent", "awaiting"] })) : null;
   const waits = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "wait", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
@@ -298,8 +301,22 @@ function detailHasCheckpoint(value: ApiGetResult | null | { error: string }, che
   });
 }
 
+function evidenceHasCheckpoint(evidence: readonly HzToolEvidence[], run: string, checkpoint: string): boolean {
+  return evidence.some((item) => {
+    if (item.name !== "platform_get" || item.status !== "ok") return false;
+    let value = item.result;
+    if (typeof value === "string") try { value = JSON.parse(value); } catch { return false; }
+    const result = record(value); const detail = record(result?.value); const selected = record(detail?.run) ?? detail;
+    const journal = record(detail?.journal);
+    return selected?.runId === run && Array.isArray(journal?.entries) && journal.entries.some((entry) => {
+      const source = record(entry); const committed = record(source?.value);
+      return source?.kind === "commit" && committed?.hash === checkpoint;
+    });
+  });
+}
+
 async function executeAction(result: HorizonOperationalResult, event: HorizonRoutedEvent,
-  snapshot: SupervisionSnapshot | null, ctx: Ctx): Promise<HorizonOperationalResult> {
+  snapshot: SupervisionSnapshot | null, toolEvidence: readonly HzToolEvidence[], ctx: Ctx): Promise<HorizonOperationalResult> {
   if (result.action.kind === "respond") return result;
   if (!snapshot) return { ...result, status: "blocked", action: { kind: "respond" },
     message: "I cannot locate the durable work session for this conversation.",
@@ -348,7 +365,9 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
           data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id } } },
       } }];
       else {
-        if (detailRunId(snapshot.rootRun) !== result.action.run || !detailHasCheckpoint(snapshot.rootRun, result.action.checkpoint)) {
+        if (detailRunId(snapshot.rootRun) !== result.action.run
+          || !detailHasCheckpoint(snapshot.rootRun, result.action.checkpoint)
+            && !evidenceHasCheckpoint(toolEvidence, result.action.run, result.action.checkpoint)) {
           return { ...result, status: "needs-input", action: { kind: "respond" },
             message: "I could not match that description to an exact durable Fact on the root work Run.",
             evidence: [...result.evidence, `Checkpoint ${result.action.checkpoint} was not observed on Run ${result.action.run}.`] };
@@ -380,7 +399,7 @@ export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx)
       supervision: snapshot },
     tools, model: "model", maxRounds: 64, parse: parseHorizonOperationalResult,
   }, ctx);
-  const result = await executeAction(loop.artifact, event, snapshot, ctx);
+  const result = await executeAction(loop.artifact, event, snapshot, loop.evidence, ctx);
   await ctx.commit({ kind: "horizon.operational-result", eventClass: event.eventClass,
     result, supervision: snapshot, toolEvidence: loop.evidence }, { tier: "audit" });
   return result;
