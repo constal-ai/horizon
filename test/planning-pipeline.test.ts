@@ -110,11 +110,12 @@ describe("Horizon multi-loop planner", () => {
     const fixture = planningContext([accepted]);
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan).toEqual(finalPlan);
-    expect(result.planningRuns).toBe(7);
+    expect(result.planningRuns).toBe(8);
     expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition",
-      "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer"]);
+      "horizon-plan-critique", "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer"]);
     expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-phase").map(({ phase }) => phase))
-      .toEqual(["rubric", "design", "decomposition:behavior", "assertions:implement", "critique", "finalization"]);
+      .toEqual(["rubric", "design", "decomposition:behavior", "critique:structure", "assertions:implement",
+        "critique:complete", "finalization"]);
   });
 
   it("reruns the owning phase and every dependent planning loop before re-critique", async () => {
@@ -126,9 +127,9 @@ describe("Horizon multi-loop planner", () => {
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("ready");
     expect(result.planningRuns).toBe(11);
-    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition", "horizon-assertions",
-      "horizon-plan-critique", "horizon-design", "horizon-milestone-decomposition", "horizon-assertions",
-      "horizon-plan-critique", "horizon-plan-finalizer"]);
+    expect(fixture.spawned).toEqual(["horizon-rubric", "horizon-design", "horizon-milestone-decomposition",
+      "horizon-plan-critique", "horizon-design", "horizon-milestone-decomposition", "horizon-plan-critique",
+      "horizon-assertions", "horizon-plan-critique", "horizon-plan-finalizer"]);
   });
 
   it("runs one decomposition loop per milestone and feeds accepted prerequisite steps forward", async () => {
@@ -146,7 +147,7 @@ describe("Horizon multi-loop planner", () => {
       assertionsByStep: { [step.id]: assertions, [proofStep.id]: proofAssertions }, finalPlan: twoStepPlan,
     });
     const result = await planner.run(fixture.envelope, fixture.ctx);
-    expect(result.planningRuns).toBe(9);
+    expect(result.planningRuns).toBe(10);
     expect(fixture.spawned.filter((id) => id === "horizon-milestone-decomposition")).toHaveLength(2);
     expect(fixture.decompositionInputs).toEqual([
       { milestoneId: "behavior", acceptedSteps: [] },
@@ -180,10 +181,10 @@ describe("Horizon multi-loop planner", () => {
         repair: "Add executable negative-path proof." }] };
     const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
       blockedReason: "Planning repair plateaued without changing the affected artifacts." };
-    const fixture = planningContext([repair], [design], { finalPlan: blocked });
+    const fixture = planningContext([accepted, repair], [design], { finalPlan: blocked });
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("blocked");
-    expect(result.planningRuns).toBe(8);
+    expect(result.planningRuns).toBe(9);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
   });
 
@@ -197,7 +198,7 @@ describe("Horizon multi-loop planner", () => {
     const fixture = planningContext([repair, repair], [design, alternate, design], { finalPlan: blocked });
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("blocked");
-    expect(result.planningRuns).toBe(14);
+    expect(result.planningRuns).toBe(11);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
   });
 });

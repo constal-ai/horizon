@@ -163,25 +163,67 @@ export const planner = subtask<HzPlannerResult>({
       return next;
     };
     const runCritique = async (rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,
-      assertions: HzStepAssertions[]): Promise<HzPlanCritique> => {
+      assertions: HzStepAssertions[], stage: "structure" | "complete"): Promise<HzPlanCritique> => {
       const phaseInput = await storeArtifact(ctx, { planning: input, rubric, design, workPlan,
-        assertions, prior: critique, tools });
+        assertions, critiqueStage: stage, prior: critique, tools });
       const result = await ctx.spawn(critiqueAgent, phaseInput, { retries: 1, dedupe: "specHash",
         budget: { turns: HORIZON_STANDARD_LOOP_TURNS, microUsd: HORIZON_LOOP_MICRO_USD,
           wallMs: HORIZON_LOOP_WALL_MS }, attenuation: childAttenuation });
-      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, "critique", input.revision, result, repairCycle);
+      planningRuns++; evidence.push(...result.toolEvidence); await commitPhase(ctx, `critique:${stage}`, input.revision, result, repairCycle);
       return result.artifact;
     };
 
     let rubric = await runRubric(null);
     let design = await runDesign(rubric, null);
     let workPlan = await runDecomposition(rubric, design, null);
-    let assertions = await runAssertions(rubric, design, workPlan, []);
-    let fingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+
+    let fingerprint = await planningFingerprint(rubric, design, workPlan, []);
     const seenFingerprints = new Set<string>([fingerprint]);
 
+    // Reconcile architecture, scope, proportionality, and work boundaries
+    // before multiplying the plan into one assertion Agent per work unit.
     for (;;) {
-      critique = await runCritique(rubric, design, workPlan, assertions);
+      critique = await runCritique(rubric, design, workPlan, [], "structure");
+      if (critique.verdict !== "repair") break;
+      const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
+      const userFinding = blocking.find(({ owner }) => owner === "user");
+      if (userFinding) {
+        if (!critique.question) throw new TypeError("A user-owned planning finding requires one structured decision question");
+        critique = { ...critique, verdict: "needs-input" };
+        await ctx.commit({ kind: "horizon.planning-route", revision: input.revision,
+          from: "repair", to: "needs-input", finding: userFinding.id }, { tier: "audit" });
+        break;
+      }
+      if (repairCycle >= MAX_REPAIR_CYCLES) {
+        critique = blockedCritique(input, "Structural planning repair exceeded its convergence safety ceiling."); break;
+      }
+      if (blocking.some(({ owner }) => owner === "assertions")) {
+        critique = blockedCritique(input, "Structural critique incorrectly required assertion repair before assertions existed."); break;
+      }
+      repairCycle++;
+      const owners = new Set(blocking.map(({ owner }) => owner));
+      if (owners.has("rubric")) rubric = await runRubric(rubric);
+      if (owners.has("rubric") || owners.has("design")) design = await runDesign(rubric, design);
+      if (owners.has("rubric") || owners.has("design") || owners.has("decomposition")) {
+        workPlan = await runDecomposition(rubric, design, workPlan);
+      }
+      const nextFingerprint = await planningFingerprint(rubric, design, workPlan, []);
+      if (seenFingerprints.has(nextFingerprint)) {
+        critique = blockedCritique(input, "Structural planning repair returned to an already-observed artifact state.");
+        await ctx.commit({ kind: "horizon.planning-plateau", revision: input.revision,
+          repairCycle, fingerprint: nextFingerprint, critique }, { tier: "audit" });
+        break;
+      }
+      seenFingerprints.add(nextFingerprint); fingerprint = nextFingerprint;
+    }
+
+    let assertions: HzStepAssertions[] = [];
+    if (critique.verdict === "accepted") assertions = await runAssertions(rubric, design, workPlan, []);
+    fingerprint = await planningFingerprint(rubric, design, workPlan, assertions);
+    seenFingerprints.add(fingerprint);
+
+    if (critique.verdict === "accepted") for (;;) {
+      critique = await runCritique(rubric, design, workPlan, assertions, "complete");
       if (critique.verdict !== "repair") break;
       const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
       const userFinding = blocking.find(({ owner }) => owner === "user");

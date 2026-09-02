@@ -24,6 +24,8 @@
     "github_repository",
     "github_tree",
     "github_file",
+    "github_issue",
+    "github_issue_comments",
     "workspace_list",
     "workspace_search",
     "workspace_read",

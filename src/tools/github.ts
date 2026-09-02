@@ -9,6 +9,10 @@ const tools = [
     description: "Read a bounded Git tree at an exact branch, tag, or commit. Use it to discover repository structure before requesting individual files." }),
   opTool("github", "repository.file", { name: "github_file",
     description: "Read one bounded repository file at an exact or default revision. Use it for instructions, manifests, configuration, and focused source evidence; do not invent paths." }),
+  opTool("github", "issue.get", { name: "github_issue",
+    description: "Read the exact private or public GitHub issue or pull request selected by the authenticated installation." }),
+  opTool("github", "issue.comments.list", { name: "github_issue_comments",
+    description: "Read one bounded page of comments from the exact GitHub issue or pull request selected by the authenticated installation." }),
 ];
 
 export const GITHUB_TOOLS: Record<string, Tool> = Object.fromEntries(tools.map((tool) => [tool.name, tool]));

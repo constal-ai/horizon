@@ -95,7 +95,6 @@ export const CRITIQUE_SYSTEM = composePrompt({
   task: `Find contradictions, unclosed material decisions, missing success coverage, invalid responsibility boundaries, dependency gaps, unsafe authority expansion, missing negative paths, and verification that cannot prove its claim.
 
 Assign every finding to the earliest planning owner that can actually repair it. Accept when no blocking finding remains. Request user input only for a material decision evidence cannot settle.`,
-  context: "Dynamic context supplies every ordered planning artifact, immutable discovery history, previous immutable plan and completed evidence during replanning, plus the prior critique on repeated passes.",
   rules: `${COMMON_RULES}
 
 Reason about semantic coherence; do not use keyword matching, prose regexes, item counts, or preferred wording as correctness tests. A different architecture is acceptable when it satisfies the rubric and repository constraints.
@@ -113,6 +112,7 @@ Over-proof is itself a blocking planning defect when it makes a bounded outcome 
 Judge the plan together with Horizon's stable role contracts. Execution specialists preserve unrelated changes, report observed operation and check failures honestly, and cannot deploy or publish unless the assigned specification explicitly authorizes it. Verifiers are read-only, reproduce proof, and return failed when an assertion is not satisfied. Do not require every work unit to restate these ambient invariants or exhaustively rehearse generic failure handling. Require task-specific recovery only when the objective needs behavior beyond those contracts.
 
 Inspect the complete current planning state and report every presently visible blocking finding in the same critique. Do not stop after the first defect when another material contradiction, dependency gap, authority issue, or unverifiable claim is already observable.`,
+  context: "Dynamic context supplies critiqueStage. During structure, assertions are intentionally empty: judge rubric, architecture, proportionality, milestones, and work decomposition without treating absent assertions as a defect or assigning findings to assertions. During complete, reconcile the populated per-step assertions as well. Dynamic context also supplies immutable discovery history, previous plan and completed evidence during replanning, and the prior critique on repeated passes.",
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
 {"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":"specific reason or null"}

@@ -140,7 +140,9 @@ export default channel({
       const behavior = selected.routes[eventClass];
       if (!behavior) return ignored(delivery, "behavior_not_configured");
       const installation = record(payload.installation); const sender = record(payload.sender);
-      const session = `github-${(await hashValue({ installation: installation.id, repository: repo.id, issue: issueValue.number })).slice(0, 48)}`;
+      const thread = `github-${(await hashValue({ installation: installation.id, repository: repo.id, issue: issueValue.number })).slice(0, 48)}`;
+      const sessions = { foreground: `${thread}-front`, work: `${thread}-work` };
+      const session = behavior === "issue-work" ? sessions.work : sessions.foreground;
       return {
         id: delivery, type: `github.${event}`, session, deliver: "queue",
         reply: { destination: `${repo.fullName}#${issueValue.number}`,
@@ -149,7 +151,8 @@ export default channel({
           objective: objective(eventClass, payload, issueValue),
           context: { provider: "github", repository: repo.fullName, issue: issueValue.number,
             installation: String(installation.id ?? ""), sender: { id: String(sender.id ?? ""), login: boundedText(sender.login, 100) },
-            approval: { permissions: selected.approverPermissions }, action: boundedText(payload.action, 128), delivery },
+            approval: { permissions: selected.approverPermissions }, action: boundedText(payload.action, 128), delivery, sessions,
+            ...(event === "issue_comment" ? { comment: { id: String(record(payload.comment).id ?? "") } } : {}) },
           source: { kind: "github", owner: repo.owner, repository: repo.name, ref: repo.defaultBranch },
           constraints: [`Work only in ${repo.fullName}.`, `Relate the result to GitHub issue #${issueValue.number}.`],
         },

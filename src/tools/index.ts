@@ -11,7 +11,8 @@ export const SOURCE_RESOLVER_TOOL_NAMES = [
 
 /** Lightweight foreground operation never prepares or mutates a coding workspace. */
 export const OPERATIONAL_TOOL_NAMES = [
-  "github_repositories", "github_repository", "github_tree", "github_file", "web_search", "web_fetch",
+  "github_repositories", "github_repository", "github_tree", "github_file", "github_issue", "github_issue_comments",
+  "web_search", "web_fetch",
 ] as const;
 
 export const DISCOVERY_TOOL_NAMES = [
