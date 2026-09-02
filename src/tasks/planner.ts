@@ -186,7 +186,8 @@ export const planner = subtask<HzPlannerResult>({
       const blocking = critique.findings.filter(({ severity }) => severity === "blocking");
       const userFinding = blocking.find(({ owner }) => owner === "user");
       if (userFinding) {
-        critique = { ...critique, verdict: "needs-input", question: userFinding.issue };
+        if (!critique.question) throw new TypeError("A user-owned planning finding requires one structured decision question");
+        critique = { ...critique, verdict: "needs-input" };
         await ctx.commit({ kind: "horizon.planning-route", revision: input.revision,
           from: "repair", to: "needs-input", finding: userFinding.id }, { tier: "audit" });
         break;
@@ -233,7 +234,7 @@ export const planner = subtask<HzPlannerResult>({
     if (plan.status !== expectedStatus || canonicalJson(plan.steps) !== canonicalJson(workPlan.steps)
       || canonicalJson(plan.assertions) !== canonicalJson(assertions)
       || plan.workspaceRoot !== input.discoveryPlan.workspaceRoot
-      || expectedStatus === "needs-input" && plan.question !== critique.question) {
+      || expectedStatus === "needs-input" && canonicalJson(plan.question) !== canonicalJson(critique.question)) {
       throw new TypeError("Horizon finalization changed or misrepresented the converged planning artifacts");
     }
     return { plan, toolEvidence: evidence, planningRuns };

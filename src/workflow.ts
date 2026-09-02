@@ -1,6 +1,6 @@
 import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
 import { storeArtifact } from "./artifacts.js";
-import { parseHzRequest, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
+import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzInvestigationResult, type HzPlan, type HzPlanInput, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult } from "./contracts.js";
 import { discoveryFramer, executor, investigator, planner, reconciler, verifier } from "./tasks/index.js";
 import { approvalInterpreter, parseApprovalDecision } from "./tasks/approval.js";
@@ -170,7 +170,7 @@ async function progressState(previous: HzPlateauState, completed: readonly HzSte
   return { fingerprint, stableCycles: previous.fingerprint === fingerprint ? previous.stableCycles + 1 : 0 };
 }
 
-async function answerQuestion(question: string, revision: number, ctx: Ctx): Promise<string> {
+async function answerQuestion(question: HzDecisionQuestion, revision: number, ctx: Ctx): Promise<string> {
   const body = questionMarkdown(question);
   const response = await ctx.await<unknown>(`horizon-plan-${revision}`, {
     schema: { anyOf: [
@@ -180,19 +180,21 @@ async function answerQuestion(question: string, revision: number, ctx: Ctx): Pro
         object: { const: "constal.horizon.event" }, version: { const: 1 }, objective: { type: "string", minLength: 1, maxLength: 65_536 },
       } },
     ] }, maxBytes: 65_536, afterRun: "message",
-    presentation: waitPresentation("question", "Horizon needs input", body, { revision }),
+    presentation: waitPresentation("question", "I need one decision", body, { revision }),
   });
   const direct = response && typeof response === "object" && !Array.isArray(response) && typeof (response as { answer?: unknown }).answer === "string"
     ? (response as { answer: string }).answer : horizonRoutedEvent(response)?.objective;
-  const answer = direct?.trim() ?? "";
+  const supplied = direct?.trim() ?? "";
+  const selected = supplied.match(/^(?:option\s*)?([1-3])\.?$/iu);
+  const answer = selected ? question.options[Number(selected[1]) - 1]! : supplied;
   if (!answer) throw new TypeError("Horizon question was resolved without an answer");
   await ctx.commit({ kind: "horizon.answer", revision, question, answer }, { tier: "audit" });
   return answer;
 }
 
-function questionKey(question: string, unknowns: readonly HzPlan["unknowns"][number][]): string {
+function questionKey(question: HzDecisionQuestion, unknowns: readonly HzPlan["unknowns"][number][]): string {
   const ids = unknowns.filter(({ state }) => state === "needs-input").map(({ id }) => id).sort();
-  return ids.length > 0 ? `unknowns:${ids.join("|")}` : `question:${question.trim()}`;
+  return ids.length > 0 ? `unknowns:${ids.join("|")}` : `question:${canonicalJson(question)}`;
 }
 
 async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzRunResult["artifact"]; error: string | null }> {

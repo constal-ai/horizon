@@ -1,5 +1,5 @@
 import type { AwaitPresentation } from "@constal/sdk";
-import type { HzPlan, HzRunResult, HzStepResult } from "./contracts.js";
+import type { HzDecisionQuestion, HzPlan, HzRunResult, HzStepResult } from "./contracts.js";
 import type { HorizonOperationalResult } from "./operational.js";
 
 function boundedMarkdown(value: string): string {
@@ -14,8 +14,9 @@ export function waitPresentation(kind: string, title: string, body: string,
     ...(metadata ? { metadata } : {}) };
 }
 
-export function questionMarkdown(question: string): string {
-  return `## Horizon needs input\n\n${question}\n\nReply on this issue and Horizon will continue the same durable Run.`;
+export function questionMarkdown(question: HzDecisionQuestion): string {
+  const options = question.options.map((option, index) => `${index + 1}. ${option}`).join("\n");
+  return `## I need one decision\n\n**${question.prompt}**\n\n${options}\n4. **Write your own answer** — reply with the direction you want me to follow.\n\nReply with **1**, **2**, or **3**, or write your own answer. I’ll continue this same Run from your decision.`;
 }
 
 export function planMarkdown(plan: HzPlan, planFact: string): string {

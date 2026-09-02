@@ -286,7 +286,10 @@ describe("Horizon workflow", () => {
     const committed: Array<{ kind?: string; plan?: HzPlan }> = []; let sequence = 0; let plannerRuns = 0;
     const planningAnswers: Array<string | null> = [];
     const needsInput: HzPlan = { ...plan, status: "needs-input", revision: 1, steps: [], assertions: [],
-      question: "Should the public contract preserve v1 behavior or adopt v2?",
+      question: { prompt: "Which public contract should I implement?", options: [
+        "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
+        "Support both versions behind an explicit boundary.",
+      ] },
       unknowns: [{ id: "contract-version", question: "Which public contract is intended?", state: "needs-input",
         resolution: null, evidence: ["Both versions exist in source."] }] };
     const revised: HzPlan = { ...plan, revision: 2,
@@ -304,7 +307,7 @@ describe("Horizon workflow", () => {
         const stored = value && typeof value === "object" && !Array.isArray(value) ? value as { answer?: unknown } : null;
         if (stored && Object.hasOwn(stored, "answer")) planningAnswers.push(typeof stored.answer === "string" ? stored.answer : null);
       }),
-      await: () => handle({ answer: "Adopt v2." }),
+      await: () => handle({ answer: "2" }),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
@@ -328,18 +331,24 @@ describe("Horizon workflow", () => {
     expect(result.status).toBe("complete");
     expect(result.plan?.revision).toBe(2);
     expect(result.longHorizon).toMatchObject({ specialistRuns: 19, replans: 1 });
-    expect(planningAnswers).toEqual([null, "Adopt v2."]);
+    expect(planningAnswers).toEqual([null, "Adopt v2 behavior as the new contract."]);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.answer");
   });
 
   it("does not ask the same stable unknown twice after the user answered it", async () => {
     let plannerRuns = 0; let awaits = 0; let sequence = 0;
     const first: HzPlan = { ...plan, status: "needs-input", steps: [], assertions: [],
-      question: "Should the public contract preserve v1 or adopt v2?",
+      question: { prompt: "Which public contract should I implement?", options: [
+        "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
+        "Support both versions behind an explicit boundary.",
+      ] },
       unknowns: [{ id: "contract-version", question: "Which contract is intended?", state: "needs-input",
         resolution: null, evidence: ["Two contracts exist."] }] };
     const repeated: HzPlan = { ...first, revision: 2,
-      question: "Which of the two public contract versions should be used?" };
+      question: { prompt: "Which contract version should I use?", options: [
+        "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
+        "Support both versions behind an explicit boundary.",
+      ] } };
     const ctx = {
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},

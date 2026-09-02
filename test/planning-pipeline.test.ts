@@ -155,16 +155,21 @@ describe("Horizon multi-loop planner", () => {
   });
 
   it("routes an evidence-insoluble semantic decision to a durable user question", async () => {
+    const question = { prompt: "Which public contract should the implementation use?", options: [
+      "Preserve v1 behavior to maintain compatibility.",
+      "Adopt v2 behavior and accept the compatibility change.",
+      "Support both versions behind an explicit compatibility boundary.",
+    ] as [string, string, string] };
     const userFinding: HzPlanCritique = { ...accepted, verdict: "repair", summary: "A product decision remains.",
       findings: [{ id: "public-contract", owner: "user", severity: "blocking",
         issue: "Should the public contract preserve v1 or adopt v2?", evidence: ["Both contracts exist."],
-        repair: "Obtain the user's intended compatibility boundary." }] };
+        repair: "Obtain the user's intended compatibility boundary." }], question };
     const needsInput: HzPlan = { ...finalPlan, status: "needs-input",
-      question: userFinding.findings[0]!.issue, blockedReason: null };
+      question, blockedReason: null };
     const fixture = planningContext([userFinding], [design], { finalPlan: needsInput });
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("needs-input");
-    expect(result.plan.question).toBe(userFinding.findings[0]!.issue);
+    expect(result.plan.question).toEqual(question);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-route");
   });
 

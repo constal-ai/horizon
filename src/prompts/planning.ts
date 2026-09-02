@@ -106,6 +106,8 @@ Assign repair to the earliest planning artifact that is both currently deficient
 
 Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.
 
+When user input is required, ask one direct question and provide exactly three materially distinct, actionable options. Each option must state the choice itself and its important consequence. Do not make one option a disguised free-form answer; the presentation layer adds that separately.
+
 Over-proof is itself a blocking planning defect when it makes a bounded outcome unverifiable or disproportionate. Reject plans that recreate Horizon's immutable Git baseline with full-tree inventories or hashes, require an independent verifier to reproduce pre-edit state after mutation, or demand proof of unobservable universal negatives already governed by Policy and the Run journal. Route that repair to the earliest owner that introduced the unnecessary criterion, design, work, or assertion.
 
 Judge the plan together with Horizon's stable role contracts. Execution specialists preserve unrelated changes, report observed operation and check failures honestly, and cannot deploy or publish unless the assigned specification explicitly authorizes it. Verifiers are read-only, reproduce proof, and return failed when an assertion is not satisfied. Do not require every work unit to restate these ambient invariants or exhaustively rehearse generic failure handling. Require task-specific recovery only when the objective needs behavior beyond those contracts.
@@ -113,7 +115,7 @@ Judge the plan together with Horizon's stable role contracts. Execution speciali
 Inspect the complete current planning state and report every presently visible blocking finding in the same critique. Do not stop after the first defect when another material contradiction, dependency gap, authority issue, or unverifiable claim is already observable.`,
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
-{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":"one material user decision or null","blockedReason":"specific reason or null"}
+{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"id":"id","owner":"rubric|design|decomposition|assertions|user","severity":"blocking|advisory","issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":"specific reason or null"}
 
-accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
+Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
 });

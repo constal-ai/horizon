@@ -121,6 +121,11 @@ export interface HzCritiqueFinding {
   repair: string;
 }
 
+export interface HzDecisionQuestion {
+  prompt: string;
+  options: [string, string, string];
+}
+
 export interface HzPlanCritique {
   object: "constal.horizon.plan-critique";
   version: 1;
@@ -128,7 +133,7 @@ export interface HzPlanCritique {
   verdict: "accepted" | "repair" | "needs-input" | "blocked";
   summary: string;
   findings: HzCritiqueFinding[];
-  question: string | null;
+  question: HzDecisionQuestion | null;
   blockedReason: string | null;
 }
 
@@ -156,7 +161,7 @@ export interface HzPlan {
   steps: HzPlanStep[];
   assertions: HzStepAssertions[];
   risks: string[];
-  question: string | null;
+  question: HzDecisionQuestion | null;
   blockedReason: string | null;
 }
 
@@ -211,7 +216,7 @@ export interface HzReconciliation {
   summary: string;
   remainingUnknowns: HzUnknown[];
   replanBrief: string | null;
-  question: string | null;
+  question: HzDecisionQuestion | null;
   blockedReason: string | null;
 }
 
@@ -434,6 +439,15 @@ function string(value: unknown, maximum = 65_536): string | null {
 function nullableString(value: unknown, maximum = 65_536): string | null | undefined {
   if (value === null) return null;
   return string(value, maximum) ?? undefined;
+}
+
+function decisionQuestion(value: unknown): HzDecisionQuestion | null | undefined {
+  if (value === null) return null;
+  const source = item(value); const prompt = string(source?.prompt, 16_384);
+  const options = strings(source?.options, 3, 8_192);
+  if (!source || !prompt || !options || options.length !== 3 || new Set(options).size !== 3
+    || Object.keys(source).some((key) => !["prompt", "options"].includes(key))) return undefined;
+  return { prompt, options: options as [string, string, string] };
 }
 
 function strings(value: unknown, maximumItems = 128, maximumLength = 16_384): string[] | null {
@@ -682,7 +696,7 @@ function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
 
 export function parseHzPlanCritique(value: unknown, expectedRevision?: number): HzPlanCritique | null {
   const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision); const verdict = source?.verdict;
-  const summary = string(source?.summary, 32_768); const question = nullableString(source?.question, 16_384);
+  const summary = string(source?.summary, 32_768); const question = decisionQuestion(source?.question);
   const blockedReason = nullableString(source?.blockedReason, 16_384);
   if (!source || source.object !== "constal.horizon.plan-critique" || source.version !== 1 || revision === null
     || !["accepted", "repair", "needs-input", "blocked"].includes(String(verdict)) || !summary || question === undefined
@@ -691,8 +705,9 @@ export function parseHzPlanCritique(value: unknown, expectedRevision?: number): 
   if (!findings.every((entry): entry is HzCritiqueFinding => entry !== null)
     || new Set(findings.map(({ id }) => id)).size !== findings.length) return null;
   const blocking = findings.some(({ severity }) => severity === "blocking");
+  const userDecision = findings.some(({ owner, severity }) => owner === "user" && severity === "blocking");
   if (verdict === "accepted" && blocking || verdict === "repair" && !blocking
-    || verdict === "needs-input" && !question || verdict === "blocked" && !blockedReason) return null;
+    || verdict === "needs-input" && !question || userDecision && !question || verdict === "blocked" && !blockedReason) return null;
   return { object: "constal.horizon.plan-critique", version: 1, revision,
     verdict: verdict as HzPlanCritique["verdict"], summary, findings, question, blockedReason };
 }
@@ -713,7 +728,7 @@ export function parseHzPlan(value: unknown): HzPlan | null {
   const objective = string(source?.objective); const summary = string(source?.summary, 32_768);
   const specification = string(source?.specification, 262_144); const workspaceRoot = nullableString(source?.workspaceRoot, 4_096);
   const parsedUnknowns = unknowns(source?.unknowns); const risks = strings(source?.risks, 128, 8_192);
-  const question = nullableString(source?.question, 16_384); const blockedReason = nullableString(source?.blockedReason, 16_384);
+  const question = decisionQuestion(source?.question); const blockedReason = nullableString(source?.blockedReason, 16_384);
   if (!source || source.object !== "constal.horizon.plan" || source.version !== 1
     || !Number.isInteger(revision) || Number(revision) < 1
     || !["ready", "needs-input", "blocked"].includes(String(status))
@@ -783,7 +798,7 @@ export function parseHzVerification(value: unknown, expectedStepId?: string): Hz
 export function parseHzReconciliation(value: unknown): HzReconciliation | null {
   const source = item(value); const action = source?.action; const summary = string(source?.summary, 32_768);
   const remainingUnknowns = unknowns(source?.remainingUnknowns); const replanBrief = nullableString(source?.replanBrief, 65_536);
-  const question = nullableString(source?.question, 16_384); const blockedReason = nullableString(source?.blockedReason, 16_384);
+  const question = decisionQuestion(source?.question); const blockedReason = nullableString(source?.blockedReason, 16_384);
   if (!source || source.object !== "constal.horizon.reconciliation" || source.version !== 1
     || !["continue", "replan", "ask", "complete", "blocked"].includes(String(action)) || !summary || !remainingUnknowns
     || replanBrief === undefined || question === undefined || blockedReason === undefined) return null;
