@@ -9,16 +9,23 @@ import { ASSERTION_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM, CONTINUITY_SYSTEM, CRIT
   RUBRIC_SYSTEM, WORK_PLAN_REPAIR_SYSTEM } from "../src/prompts/planning.js";
 import { LOOP_CHECKPOINT_SYSTEM } from "../src/react-loop.js";
 import { QUESTION_RECONCILIATION_SYSTEM } from "../src/prompts/question-reconciliation.js";
+import { HORIZON_OPERATIONAL_SYSTEM } from "../src/prompts/operational.js";
 
 describe("Horizon role prompts", () => {
   it.each([SOURCE_RESOLVER_SYSTEM, DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
     WORK_PLAN_REPAIR_SYSTEM, ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM,
-    VERIFIER_SYSTEM, RECONCILER_SYSTEM, QUESTION_RECONCILIATION_SYSTEM,
+    VERIFIER_SYSTEM, RECONCILER_SYSTEM, QUESTION_RECONCILIATION_SYSTEM, HORIZON_OPERATIONAL_SYSTEM,
     LOOP_CHECKPOINT_SYSTEM])("uses one stable six-section role contract", (prompt) => {
     const headings = ["# Role", "# Task", "# Context", "# Rules", "# Tools", "# Output"];
     expect(headings.map((heading) => prompt.indexOf(heading))).toEqual([...headings.map((heading) => prompt.indexOf(heading))].sort((a, b) => a - b));
     expect(prompt).toContain("natural-language");
     expect(prompt).toContain("evidence");
+  });
+
+  it("teaches the conversational supervisor the exact Run detail shape without imposing a call sequence", () => {
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("top-level fields run, workflow, journal, lineage, and resourceInvocations");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("status, result, and error are inside run");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("do not repeat a completed page");
   });
 
   it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,
