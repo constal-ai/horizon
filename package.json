@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
+    "deploy": "node scripts/deploy.mjs",
     "sandbox:check": "node scripts/release-sandbox-image.mjs",
     "sandbox:build": "node scripts/release-sandbox-image.mjs --build constal-horizon-sandbox:dev"
   },
