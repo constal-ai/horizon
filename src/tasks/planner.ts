@@ -402,8 +402,9 @@ export const planner = subtask<HzPlannerResult>({
       const findingKeys = repairScope(owner, blocking);
       const beforeHash = structureFingerprint;
       repairCycle++;
+      let investigationProgress: { ran: boolean; observedProgress: boolean } | null = null;
       if (owner === "investigation") {
-        await runInvestigation(blocking.filter((finding) => finding.owner === owner));
+        investigationProgress = await runInvestigation(blocking.filter((finding) => finding.owner === owner));
         rubric = await resolveRubricEvidence(await runRubric(rubric)); design = await runDesign(rubric, design);
         workPlan = await runDecomposition(rubric, design, null);
       } else if (owner === "rubric") {
@@ -418,7 +419,7 @@ export const planner = subtask<HzPlannerResult>({
       }
       const nextFingerprint = await planningFingerprint(rubric, design, workPlan, [], investigations);
       await commitRepair("structure", owner, findingKeys, beforeHash, nextFingerprint);
-      if (observedFingerprints.has(nextFingerprint)) {
+      if (observedFingerprints.has(nextFingerprint) || investigationProgress && !investigationProgress.observedProgress) {
         await recordPlateau("structure", owner, findingKeys, nextFingerprint);
       }
       observedFingerprints.add(nextFingerprint); structureFingerprint = nextFingerprint;
@@ -451,8 +452,9 @@ export const planner = subtask<HzPlannerResult>({
       const findingKeys = repairScope(owner, blocking);
       const beforeHash = completeFingerprint;
       repairCycle++;
+      let investigationProgress: { ran: boolean; observedProgress: boolean } | null = null;
       if (owner === "investigation") {
-        await runInvestigation(blocking.filter((finding) => finding.owner === owner));
+        investigationProgress = await runInvestigation(blocking.filter((finding) => finding.owner === owner));
         rubric = await resolveRubricEvidence(await runRubric(rubric)); design = await runDesign(rubric, design);
         workPlan = await runDecomposition(rubric, design, null);
         assertions = await runAssertions(rubric, design, workPlan, []);
@@ -479,7 +481,7 @@ export const planner = subtask<HzPlannerResult>({
       }
       const nextFingerprint = await planningFingerprint(rubric, design, workPlan, assertions, investigations, continuity);
       await commitRepair("complete", owner, findingKeys, beforeHash, nextFingerprint);
-      if (observedFingerprints.has(nextFingerprint)) {
+      if (observedFingerprints.has(nextFingerprint) || investigationProgress && !investigationProgress.observedProgress) {
         await recordPlateau("complete", owner, findingKeys, nextFingerprint);
       }
       observedFingerprints.add(nextFingerprint); completeFingerprint = nextFingerprint;
