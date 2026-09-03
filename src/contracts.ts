@@ -855,7 +855,7 @@ export function parseHzPlanCritique(value: unknown, expectedRevision?: number): 
   const blocking = findings.some(({ severity }) => severity === "blocking");
   const userDecision = findings.some(({ owner, severity }) => owner === "user" && severity === "blocking");
   if (verdict === "accepted" && blocking || verdict === "repair" && !blocking
-    || verdict === "needs-input" && !question || userDecision && !question) return null;
+    || verdict === "needs-input" && (!question || !userDecision) || userDecision && !question) return null;
   return { object: "constal.horizon.plan-critique", version: 1, revision,
     verdict: verdict as HzPlanCritique["verdict"], summary, findings, question };
 }

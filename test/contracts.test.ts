@@ -135,6 +135,20 @@ describe("Horizon transport contracts", () => {
       question: null }, 1)).not.toBeNull();
   });
 
+  it("requires a material user-owned finding before critique can pause planning", () => {
+    const question = { prompt: "Which compatibility boundary should apply?", options: [
+      "Preserve v1 behavior.", "Adopt v2 behavior.", "Support both behind a boundary.",
+    ] };
+    expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
+      verdict: "needs-input", summary: "A decision is needed.", findings: [], question }, 1)).toBeNull();
+    expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
+      verdict: "needs-input", summary: "A material user decision is needed.", findings: [{
+        owner: "user", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [],
+        issue: "Both public contracts are evidenced and intent does not choose one.", evidence: ["v1 and v2 contracts"],
+        repair: "Obtain the intended compatibility boundary from the user.",
+      }], question }, 1)).not.toBeNull();
+  });
+
   it("requires complete structurally valid continuity and explicit execution routes", () => {
     expect(parseHzPlanContinuity({ object: "constal.horizon.plan-continuity", version: 1, revision: 2,
       decisions: [{ priorStepId: "implement", nextStepId: "implement", disposition: "reverify",

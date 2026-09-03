@@ -479,7 +479,11 @@ describe("Horizon multi-loop planner", () => {
       "Revise the objective to remove the unsupported obligation.",
     ] as [string, string, string] };
     const needsDecision: HzPlanCritique = { ...accepted, verdict: "needs-input",
-      summary: "The assertion repair route made no progress and needs a user decision.", findings: [], question };
+      summary: "The assertion repair route made no progress and needs a user decision.", findings: [{
+        owner: "user", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "The missing proof cannot be selected from available evidence.", evidence: ["No-progress repair receipt."],
+        repair: "Choose whether to supply proof, accept an explicit assumption, or narrow the objective.",
+      }], question };
     const waiting: HzPlan = { ...finalPlan, status: "needs-input", question };
     const fixture = planningContext([accepted, repair, needsDecision], [design], { finalPlan: waiting });
     const result = await planner.run(fixture.envelope, fixture.ctx);
@@ -501,7 +505,11 @@ describe("Horizon multi-loop planner", () => {
       "Exclude the disputed behavior from this objective.",
     ] as [string, string, string] };
     const needsDecision: HzPlanCritique = { ...accepted, verdict: "needs-input",
-      summary: "Both design routes returned to an observed state.", findings: [], question };
+      summary: "Both design routes returned to an observed state.", findings: [{
+        owner: "user", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [],
+        issue: "Available evidence does not choose the ownership boundary.", evidence: ["A-to-B-to-A plateau receipt."],
+        repair: "Choose the intended ownership boundary or remove the disputed behavior.",
+      }], question };
     const waiting: HzPlan = { ...finalPlan, status: "needs-input", question };
     const fixture = planningContext([repair, repair, needsDecision], [design, alternate, design], { finalPlan: waiting });
     const result = await planner.run(fixture.envelope, fixture.ctx);

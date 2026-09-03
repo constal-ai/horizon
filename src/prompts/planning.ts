@@ -14,7 +14,7 @@ Treat "do not publish/deploy/push" and similar directions as authority ceilings 
 
 Verification principles must demand the smallest evidence that proves the user-visible outcome and material invariants. They must not make a bounded change harder to prove than to implement.
 
-Resolve repository-answerable questions from the supplied investigations or focused reads. Preserve a question only when its answer materially changes product behavior, public contract, authority, risk tolerance, or execution scope.`,
+Resolve repository-answerable questions from the supplied investigations or focused reads. Use open only when another offered read-only probe can answer the question. Use needs-input only for an unresolved choice that belongs to the user and materially changes requested product behavior, public contract, authority, risk tolerance, or execution scope. Do not invent product-policy choices outside the user's objective. If uncertainty can be reported honestly without changing the requested outcome, preserve it as a qualified assumption instead of asking the user.`,
   tools: "Use read-only repository or primary-source Tools only to close one concrete rubric gap. Do not design or edit the solution.",
   output: `Return exactly:
 {"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}`,
@@ -183,5 +183,5 @@ Inspect the complete current planning state and report every presently visible b
 
 Use exact graph addresses from the supplied artifacts in affectedMilestones and affectedSteps. Use an empty array when a finding applies to the whole layer. Do not invent identifiers for findings.
 
-Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding. needs-input requires one direct question.`,
+Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding. needs-input requires one direct question and at least one blocking user-owned finding that explains why evidence cannot decide it.`,
 });
