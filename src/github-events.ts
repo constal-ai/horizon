@@ -1,3 +1,5 @@
+export const HORIZON_GITHUB_MENTIONS = ["@constalai", "@constal-ai"] as const;
+
 export const HORIZON_GITHUB_EVENT_CATALOG = {
   object: "constal.horizon.github-event-catalog",
   version: 1,

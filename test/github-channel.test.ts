@@ -7,7 +7,7 @@ const config = {
   events: ["github.issue.activated", "github.issue.comment", "github.pull-request.comment", "github.status"],
   routes: { "github.issue.activated": "issue-work", "github.issue.comment": "operate",
     "github.pull-request.comment": "operate", "github.status": "operate" },
-  mention: "@constalai", label: "horizon", approverPermissions: ["write", "maintain", "admin"], semanticApproval: true,
+  mentions: ["@constalai", "@constal-ai"], label: "horizon", approverPermissions: ["write", "maintain", "admin"], semanticApproval: true,
 };
 
 function request(event: string, payload: unknown, delivery = "delivery-1"): ChannelRequest {
@@ -39,6 +39,13 @@ describe("Horizon GitHub Channel", () => {
       source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
     }, session: expect.stringMatching(/^github-[a-f0-9]{48}-work$/u) });
     expect("ignored" in event).toBe(false);
+  });
+
+  it("activates issue work for either configured Horizon mention", async () => {
+    for (const [index, mention] of ["@constalai", "@constal-ai"].entries()) {
+      const event = await horizonGitHub.protocol.receive(request("issues", payload(`${mention} work on this`), `delivery-${index}`), context());
+      expect(event).toMatchObject({ data: { behavior: "issue-work", eventClass: "github.issue.activated" } });
+    }
   });
 
   it("acknowledges unconfigured or inactive events without creating an Agent Run", async () => {

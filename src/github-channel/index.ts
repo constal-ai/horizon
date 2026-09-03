@@ -9,7 +9,7 @@ interface HorizonGitHubConfig {
   repositories: string[];
   events: string[];
   routes: Record<string, "issue-work" | "operate">;
-  mention: string;
+  mentions: string[];
   label: string;
   approverPermissions: Array<"write" | "maintain" | "admin">;
   semanticApproval: true;
@@ -40,7 +40,8 @@ function config(value: unknown): HorizonGitHubConfig {
   if (!Array.isArray(source.repositories) || source.repositories.length < 1 || source.repositories.length > 500
     || source.repositories.some((item) => typeof item !== "string" || !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u.test(item))
     || !Array.isArray(source.events) || source.events.length < 1 || source.events.some((item) => !eventIds.includes(item as never))
-    || typeof source.mention !== "string" || !/^@[A-Za-z0-9-]{1,100}$/u.test(source.mention)
+    || !Array.isArray(source.mentions) || source.mentions.length < 1 || source.mentions.length > 8
+    || source.mentions.some((item) => typeof item !== "string" || !/^@[A-Za-z0-9-]{1,100}$/u.test(item))
     || typeof source.label !== "string" || source.label.length > 64
     || !Array.isArray(source.approverPermissions) || source.approverPermissions.length < 1
     || source.approverPermissions.some((item) => !["write", "maintain", "admin"].includes(String(item)))
@@ -54,7 +55,7 @@ function config(value: unknown): HorizonGitHubConfig {
     normalizedRoutes[event] = behavior as "issue-work" | "operate";
   }
   return { repositories: [...new Set(source.repositories as string[])], events: [...new Set(source.events as string[])],
-    routes: normalizedRoutes, mention: source.mention, label: source.label,
+    routes: normalizedRoutes, mentions: [...new Set(source.mentions as string[])], label: source.label,
     approverPermissions: [...new Set(source.approverPermissions as HorizonGitHubConfig["approverPermissions"])], semanticApproval: true };
 }
 
@@ -99,7 +100,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
   const action = boundedText(payload.action, 128);
   const issueValue = issue(payload);
   if (event === "issues") {
-    const activated = issueValue.body.includes(selected.mention)
+    const activated = selected.mentions.some((mention) => issueValue.body.includes(mention))
       || action === "labeled" && selected.label !== "" && issueValue.labels.includes(selected.label);
     return activated && selected.events.includes("github.issue.activated") ? "github.issue.activated" : null;
   }
@@ -113,7 +114,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.7",
+  version: "0.3.8",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],

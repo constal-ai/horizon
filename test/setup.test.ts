@@ -27,7 +27,7 @@ describe("Horizon durable setup workflow", () => {
       routing: { events: ["github.issue.activated", "github.issue.comment"], routes: {
         "github.issue.activated": "issue-work", "github.issue.comment": "operate",
         "github.pull-request.comment": "operate", "github.status": "operate",
-      }, mention: "@constalai", label: "horizon" },
+      }, mentions: ["@constalai", "@constal-ai"], label: "horizon" },
       approval: { approverPermissions: ["write", "maintain", "admin"], semanticApproval: true, requireApproval: true },
       review: {},
     };
@@ -52,6 +52,7 @@ describe("Horizon durable setup workflow", () => {
         if (operation === "plan") {
           expect(args).toMatchObject({ operations: [{ operation: "channel.install", input: { configuration: {
             routes: { "github.issue.activated": "issue-work", "github.issue.comment": "operate" },
+            mentions: ["@constalai", "@constal-ai"],
           } } }] });
           expect((args as { operations: Array<{ input: { configuration: Record<string, unknown> } }> })
             .operations[0]!.input.configuration).not.toHaveProperty("connection");

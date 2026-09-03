@@ -3,7 +3,7 @@ import {
   type ConstalApiChangePlan, type ConstalApiChangeReceipt, type Ctx, type SetupScreen, type SetupSubmission,
 } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
-import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
+import { HORIZON_GITHUB_EVENT_CATALOG, HORIZON_GITHUB_MENTIONS } from "../github-events.js";
 import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "../runtime-control.js";
 
 const WORKFLOW = { id: "horizon-github", version: "1", targetAgent: "horizon" } as const;
@@ -23,7 +23,7 @@ interface SetupConfiguration {
   repositories: string[];
   events: string[];
   routes: Record<string, string>;
-  mention: string;
+  mentions: string[];
   label: string;
   approverPermissions: string[];
   semanticApproval: true;
@@ -83,11 +83,14 @@ function strings(value: unknown, allowed: readonly string[], maximum: number): s
   return [...new Set(value as string[])];
 }
 
-function routing(value: unknown): Pick<SetupConfiguration, "events" | "routes" | "mention" | "label"> {
+function routing(value: unknown): Pick<SetupConfiguration, "events" | "routes" | "mentions" | "label"> {
   const source = record(value); const routes = record(source?.routes);
+  const mentions = source?.mentions;
   const eventIds = HORIZON_GITHUB_EVENT_CATALOG.events.map(({ id }) => id);
   const events = strings(source?.events, eventIds, eventIds.length);
-  if (!source || !routes || typeof source.mention !== "string" || source.mention !== "@constalai"
+  if (!source || !routes || !Array.isArray(mentions)
+    || mentions.length !== HORIZON_GITHUB_MENTIONS.length
+    || HORIZON_GITHUB_MENTIONS.some((mention) => !mentions.includes(mention))
     || typeof source.label !== "string" || source.label.length > 64) throw new TypeError("Horizon event routing is invalid");
   const normalized: Record<string, string> = {};
   for (const event of events) {
@@ -97,7 +100,7 @@ function routing(value: unknown): Pick<SetupConfiguration, "events" | "routes" |
     }
     normalized[event] = routes[event] as string;
   }
-  return { events, routes: normalized, mention: source.mention, label: source.label };
+  return { events, routes: normalized, mentions: [...HORIZON_GITHUB_MENTIONS], label: source.label };
 }
 
 async function terminal(kind: "complete" | "blocked", revision: number, title: string, summary: string,
@@ -163,15 +166,15 @@ async function runHorizonSetupInternal(message: unknown, ctx: Ctx): Promise<Setu
     steps: steps(3), waitLabel: `horizon-setup-routing-${revision}`,
     current: { kind: "form", id: "routing", title: "Events and behavior",
       description: "Issue activation uses the durable planning and approved execution pipeline. Routine interactions default to the lightweight operational agent.",
-      schema: { type: "object", additionalProperties: false, required: ["events", "routes", "mention", "label"], properties: {
+      schema: { type: "object", additionalProperties: false, required: ["events", "routes", "mentions", "label"], properties: {
         events: { type: "array", minItems: 1, uniqueItems: true,
           items: { enum: HORIZON_GITHUB_EVENT_CATALOG.events.map(({ id }) => id) } },
         routes: { type: "object", additionalProperties: false,
           required: HORIZON_GITHUB_EVENT_CATALOG.events.map(({ id }) => id), properties: routeProperties },
-        mention: { type: "string", const: "@constalai" },
+        mentions: { type: "array", const: [...HORIZON_GITHUB_MENTIONS] },
         label: { type: "string", maxLength: 64, description: "Optional issue label that activates Horizon." },
       } }, initialValues: { events: HORIZON_GITHUB_EVENT_CATALOG.events.map(({ id }) => id),
-        routes: defaultRoutes, mention: "@constalai", label: "horizon" },
+        routes: defaultRoutes, mentions: [...HORIZON_GITHUB_MENTIONS], label: "horizon" },
       actions: [{ id: "continue", label: "Continue", intent: "primary" },
         { id: "cancel", label: "Cancel", intent: "secondary" }] },
   }, ctx);
@@ -250,7 +253,7 @@ async function runHorizonSetupInternal(message: unknown, ctx: Ctx): Promise<Setu
   return terminal("complete", revision + 1, "Horizon is installed",
     "GitHub events now route through the reviewed Horizon configuration.", [
       { label: "Organization", value: connection.accountLogin }, { label: "Repositories", value: repositories.join(", ") },
-      { label: "Mention", value: selectedRouting.mention }, { label: "Plan", value: plan.hash },
+      { label: "Mentions", value: selectedRouting.mentions.join(", ") }, { label: "Plan", value: plan.hash },
     ], ctx);
 }
 

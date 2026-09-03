@@ -3,7 +3,7 @@
   "kind": "channel",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "entry": "src/github-channel/index.ts",
   "config": {
     "repositories": ["constal-ai/horizon"],
@@ -14,7 +14,7 @@
       "github.pull-request.comment": "operate",
       "github.status": "operate"
     },
-    "mention": "@constalai",
+    "mentions": ["@constalai", "@constal-ai"],
     "label": "horizon",
     "approverPermissions": ["write", "maintain", "admin"],
     "semanticApproval": true
@@ -32,5 +32,5 @@
   },
   "bindings": { "github": "crn:constal:production:platform:default:service/github" },
   "policies": [],
-  "expectedCurrentDeploymentRevision": "e35c2e20-0609-46cf-9e65-ab51d0c8e0a4"
+  "expectedCurrentDeploymentRevision": "e1c56c7e-cf1d-4cae-974f-ec05ac16fb16"
 }
