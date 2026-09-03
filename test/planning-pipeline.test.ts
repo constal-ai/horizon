@@ -361,26 +361,30 @@ describe("Horizon multi-loop planner", () => {
       owner: "assertions" }));
   });
 
-  it("stops after two repairs of the same stable work-plan scope even when wording changes", async () => {
-    const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Ownership remains duplicated.",
-      findings: [{ owner: "decomposition", severity: "blocking",
-        affectedMilestones: ["behavior"], affectedSteps: [step.id], issue: "The same responsibility still has two owners.",
-        evidence: ["Current plan."], repair: "Leave one owner." }] };
-    const changedOnce: HzWorkPlan = { ...workPlan,
-      steps: [{ ...step, specification: "First attempted ownership repair." }] };
-    const changedTwice: HzWorkPlan = { ...workPlan,
-      steps: [{ ...step, specification: "Second attempted ownership repair." }] };
-    const fixture = planningContext([repair, repair, repair], [design], {
-      workPlanRepairs: [changedOnce, changedTwice], finalPlan: { ...finalPlan, status: "blocked", steps: changedTwice.steps,
-        blockedReason: "Planning did not converge." },
+  it("repairs distinct defects at the same graph location without treating the location as semantic identity", async () => {
+    const missingFailureProof: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Failure proof is missing.",
+      findings: [{ owner: "assertions", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "The denial path has no independent proof.", evidence: ["Current assertion plan."],
+        repair: "Add the executable denial-path observation." }] };
+    const disproportionalProof: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Proof is disproportionate.",
+      findings: [{ owner: "assertions", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "The same step now requires an unrelated full-tree inventory.", evidence: ["Repaired assertion plan."],
+        repair: "Use the authoritative Git baseline and focused final diff." }] };
+    const firstRepair: HzStepAssertions = { ...assertions, assertions: [{ ...assertions.assertions[0]!,
+      evidenceRequired: ["Replay and denial-path checks pass."] }] };
+    const secondRepair: HzStepAssertions = { ...assertions, assertions: [{ ...assertions.assertions[0]!,
+      evidenceRequired: ["Focused final diff and denial-path checks pass."] }] };
+    const repairedFinal: HzPlan = { ...finalPlan, assertions: [secondRepair] };
+    const fixture = planningContext([accepted, missingFailureProof, disproportionalProof, accepted], [design], {
+      assertionPlanRepairs: [[firstRepair], [secondRepair]], finalPlan: repairedFinal,
     });
 
     const result = await planner.run(fixture.envelope, fixture.ctx);
 
-    expect(result.plan.status).toBe("blocked");
-    expect(result.plan.blockedReason).toContain("2 repairs of the same decomposition scope");
-    expect(fixture.spawned.filter((id) => id === "horizon-work-plan-repair")).toHaveLength(2);
-    expect(fixture.spawned.filter((id) => id === "horizon-milestone-decomposition")).toHaveLength(1);
+    expect(result.plan).toEqual(repairedFinal);
+    expect(result.planningRuns).toBe(12);
+    expect(fixture.spawned.filter((id) => id === "horizon-assertion-plan-repair")).toHaveLength(2);
+    expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-repair")).toHaveLength(2);
   });
 
   it("routes an evidence-insoluble semantic decision to a durable user question", async () => {

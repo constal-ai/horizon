@@ -78,7 +78,7 @@ Complete critique
        └─ upstream problem ──────► corresponding upstream route
 ```
 
-Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique routes to the earliest invalid artifact, records exact affected milestone and step identities, and then critiques the repaired state again. Repeated repair scopes and repeated artifact states terminate as an honest planning plateau instead of spawning another decomposition wave.
+Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique routes to the earliest invalid artifact, records exact affected milestone and step identities, and then critiques the repaired state again. An unchanged or recurring artifact state terminates deterministically. The critic also stops a semantically unchanged defect after its owner has attempted repair, while allowing a newly exposed defect at the same graph location to take the correct route.
 
 ### Execution repair and replanning
 

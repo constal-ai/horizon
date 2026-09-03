@@ -176,7 +176,7 @@ function critiqueArtifact(value: unknown, input: CritiqueInput): HzPlanCritique 
 }
 
 export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
-  id: "horizon-plan-critique", version: "8",
+  id: "horizon-plan-critique", version: "9",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<CritiqueInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,

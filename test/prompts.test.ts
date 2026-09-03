@@ -67,6 +67,9 @@ describe("Horizon role prompts", () => {
     expect(DECOMPOSITION_SYSTEM).toContain("Do not add pre-edit full-tree inventories");
     expect(ASSERTION_SYSTEM).toContain("do not require the verifier to recreate a pre-edit filesystem inventory");
     expect(CRITIQUE_SYSTEM).toContain("Over-proof is itself a blocking planning defect");
+    expect(CRITIQUE_SYSTEM).toContain("authoritative clean Git baseline");
+    expect(CRITIQUE_SYSTEM).toContain("do not require separate read-operation receipts");
+    expect(CRITIQUE_SYSTEM).toContain("never call it repeated merely because its graph address is the same");
   });
 
   it("gives cross-boundary repair one complete graph and stable structural targets", () => {
