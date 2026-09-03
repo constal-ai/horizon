@@ -32,5 +32,5 @@
   },
   "bindings": { "github": "crn:constal:production:platform:default:service/github" },
   "policies": [],
-  "expectedCurrentDeploymentRevision": "ae2a983f-ab2c-4970-b743-1b469f433bb6"
+  "expectedCurrentDeploymentRevision": "e9664abc-78da-40cb-98fd-a2c50d1bd703"
 }
