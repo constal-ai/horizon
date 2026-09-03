@@ -28,11 +28,11 @@ const design: HzDesign = { object: "constal.horizon.design", version: 1, revisio
     responsibilities: [step.responsibility], risks: ["Duplicate effect."] }] };
 const workPlan: HzWorkPlan = { object: "constal.horizon.work-plan", version: 1, revision: 1, steps: [step] };
 const accepted: HzPlanCritique = { object: "constal.horizon.plan-critique", version: 1, revision: 1,
-  verdict: "accepted", summary: "The plan converges.", findings: [], question: null, blockedReason: null };
+  verdict: "accepted", summary: "The plan converges.", findings: [], question: null };
 const finalPlan: HzPlan = { object: "constal.horizon.plan", version: 1, revision: 1, status: "ready",
   objective: rubric.objective, summary: "Implement and prove durable behavior.", specification: "Reuse runtime recovery and prove replay.",
   workspaceRoot: "/workspace/repositories/source", unknowns: [], steps: [step], assertions: [assertions],
-  risks: design.milestones[0]!.risks, question: null, blockedReason: null };
+  risks: design.milestones[0]!.risks, question: null };
 
 function narrative(plan: HzPlan): HzPlanNarrative {
   return { object: "constal.horizon.plan-narrative", version: 1,
@@ -43,10 +43,10 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
   discoveryPlan: { object: "constal.horizon.discovery-plan", version: 1, status: "ready",
     summary: "Source ready.", workspaceRoot: finalPlan.workspaceRoot,
     focuses: [{ id: "runtime", title: "Runtime", mission: "Trace recovery.", questions: ["Who owns recovery?"],
-      evidenceNeeded: ["Source"], stopWhen: "Ownership is proven." }], unknowns: [], blockedReason: null },
+      evidenceNeeded: ["Source"], stopWhen: "Ownership is proven." }], unknowns: [] },
   investigations: [{ object: "constal.horizon.investigation", version: 1, focusId: "runtime", status: "complete",
     summary: "Runtime owns recovery.", findings: ["Runtime ownership."], evidence: ["src/runtime.ts"], unknowns: [],
-    planImplications: ["Reuse runtime."], blockedReason: null }], workspaceReceipt: "workspace-receipt",
+    planImplications: ["Reuse runtime."] }], workspaceReceipt: "workspace-receipt",
   revision: 1, previousPlan: null, previousState: null,
   completed: [], completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer: null, tools: [] };
 
@@ -176,7 +176,7 @@ describe("Horizon multi-loop planner", () => {
     const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
       focusId: "placeholder", status: "complete", summary: "The runtime Resource owns recovery.",
       findings: ["The existing Resource is the owner."], evidence: ["platform_get Resource catalog"], unknowns: [],
-      planImplications: ["Reuse the existing Resource."], blockedReason: null };
+      planImplications: ["Reuse the existing Resource."] };
     const fixture = planningContext([accepted], [design], {
       rubrics: [openRubric, rubric], investigationResults: [additional],
     });
@@ -432,7 +432,7 @@ describe("Horizon multi-loop planner", () => {
     const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
       focusId: "planning-gap-placeholder", status: "complete", summary: "The existing Resource owns the operation.",
       findings: ["The operation belongs to the existing Resource adapter."], evidence: ["platform_get Resource catalog"],
-      unknowns: [], planImplications: ["Extend the existing Resource; do not create a parallel integration."], blockedReason: null };
+      unknowns: [], planImplications: ["Extend the existing Resource; do not create a parallel integration."] };
     const fixture = planningContext([missingEvidence, accepted, accepted], [design], {
       investigationResults: [additional],
     });
@@ -459,8 +459,7 @@ describe("Horizon multi-loop planner", () => {
         affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "Should the public contract preserve v1 or adopt v2?", evidence: ["Both contracts exist."],
         repair: "Obtain the user's intended compatibility boundary." }], question };
-    const needsInput: HzPlan = { ...finalPlan, status: "needs-input",
-      question, blockedReason: null };
+    const needsInput: HzPlan = { ...finalPlan, status: "needs-input", question };
     const fixture = planningContext([userFinding], [design], { finalPlan: needsInput });
     const result = await planner.run(fixture.envelope, fixture.ctx);
     expect(result.plan.status).toBe("needs-input");

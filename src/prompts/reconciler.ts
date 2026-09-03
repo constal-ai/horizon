@@ -30,9 +30,8 @@ Replan briefs are natural-language specifications for the selected planning owne
   "planningOwner":"investigation|rubric|design|decomposition|assertions|null",
   "workspaceDisposition":"keep-current|restore-last-verified",
   "replanBrief":"full natural-language correction brief or null",
-  "question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},
-  "blockedReason":null
+  "question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]}
 }
 
-Use planningOwner only for replan or ask, and use null otherwise. Use null for question unless action is ask. ask requires exactly three materially distinct, actionable options. replan and ask require replanBrief. blockedReason is always null because the controller owns terminal outcomes.`,
+Use planningOwner only for replan or ask, and use null otherwise. Use null for question unless action is ask. ask requires exactly three materially distinct, actionable options. replan and ask require replanBrief.`,
 });

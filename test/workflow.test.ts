@@ -29,7 +29,7 @@ vi.mock("../src/workspace/lifecycle.js", async (importOriginal) => {
 const plan: HzPlan = {
   object: "constal.horizon.plan", version: 1, revision: 1, status: "ready", objective: "Implement durable behavior",
   summary: "Implement and verify one durable behavior.", specification: "Use the existing seam and prove durable execution.",
-  workspaceRoot: "/workspace/repo", unknowns: [], risks: [], question: null, blockedReason: null,
+  workspaceRoot: "/workspace/repo", unknowns: [], risks: [], question: null,
   steps: [{ id: "implement", milestoneId: "behavior", title: "Implement", responsibility: "Implement the durable behavior.",
     specification: "Inspect, edit, and verify the existing implementation.", dependsOn: [], verification: ["focused test passes"],
     stopWhen: "The focused test passes." }],
@@ -49,13 +49,13 @@ const discoveryPlan = {
   summary: "The repository is ready for focused investigation.", workspaceRoot: plan.workspaceRoot,
   focuses: [{ id: "implementation", title: "Implementation seam", mission: "Find the existing implementation seam.",
     questions: ["Which abstraction owns the behavior?"], evidenceNeeded: ["Source and focused tests"],
-    stopWhen: "The owner and proof surface are known." }], unknowns: [], blockedReason: null,
+    stopWhen: "The owner and proof surface are known." }], unknowns: [],
 };
 
 const investigation = {
   object: "constal.horizon.investigation" as const, version: 1 as const, focusId: "implementation",
   status: "complete" as const, summary: "The existing seam is identified.", findings: ["The runtime owns the behavior."],
-  evidence: ["src/index.ts"], unknowns: [], planImplications: ["Reuse the runtime seam."], blockedReason: null,
+  evidence: ["src/index.ts"], unknowns: [], planImplications: ["Reuse the runtime seam."],
 };
 
 const verification = {
@@ -82,7 +82,7 @@ function planningState(value: HzPlan, decisions: HzPlanContinuity["decisions"] =
     assertions: value.assertions, continuity: continuity(value.revision, decisions),
     critique: { object: "constal.horizon.plan-critique", version: 1, revision: value.revision,
       verdict: value.status === "ready" ? "accepted" : "needs-input",
-      summary: value.summary, findings: [], question: value.question, blockedReason: value.blockedReason },
+      summary: value.summary, findings: [], question: value.question },
   };
 }
 
@@ -185,7 +185,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "All work is proven.",
           remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-          replanBrief: null, question: null, blockedReason: null,
+          replanBrief: null, question: null,
         }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -287,10 +287,10 @@ describe("Horizon workflow", () => {
           return handle({ reconciliation: reconcilerRuns === 1 ? {
             object: "constal.horizon.reconciliation", version: 2, action: "repair-step",
             summary: "Continue the useful partial implementation.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null,
+            workspaceDisposition: "keep-current", replanBrief: null, question: null,
           } : { object: "constal.horizon.reconciliation", version: 2, action: "complete",
             summary: "The repaired work is proven.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null }, toolEvidence: [] });
+            workspaceDisposition: "keep-current", replanBrief: null, question: null }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -335,10 +335,10 @@ describe("Horizon workflow", () => {
           return handle({ reconciliation: reconcilerRuns === 1 ? {
             object: "constal.horizon.reconciliation", version: 2, action: "reverify",
             summary: "Repeat proof against the unchanged workspace.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null,
+            workspaceDisposition: "keep-current", replanBrief: null, question: null,
           } : { object: "constal.horizon.reconciliation", version: 2, action: "complete",
             summary: "Independent proof passed.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null }, toolEvidence: [] });
+            workspaceDisposition: "keep-current", replanBrief: null, question: null }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -379,10 +379,10 @@ describe("Horizon workflow", () => {
           return handle({ reconciliation: reconcilerRuns === 1 ? {
             object: "constal.horizon.reconciliation", version: 2, action: "repair-step",
             summary: "Abandon the mis-scoped workspace changes.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "restore-last-verified", replanBrief: null, question: null, blockedReason: null,
+            workspaceDisposition: "restore-last-verified", replanBrief: null, question: null,
           } : { object: "constal.horizon.reconciliation", version: 2, action: "complete",
             summary: "The clean repair is proven.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null }, toolEvidence: [] });
+            workspaceDisposition: "keep-current", replanBrief: null, question: null }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -453,7 +453,7 @@ describe("Horizon workflow", () => {
               : { action: "complete", summary: "The repaired dependent is proven.", planningOwner: null,
                 workspaceDisposition: "keep-current", replanBrief: null };
           return handle({ reconciliation: { object: "constal.horizon.reconciliation", version: 2,
-            ...decision, remainingUnknowns: [], question: null, blockedReason: null }, toolEvidence: [] });
+            ...decision, remainingUnknowns: [], question: null }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}: ${String(envelope)}`);
       },
@@ -504,7 +504,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "All work is proven.",
           remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-          replanBrief: null, question: null, blockedReason: null,
+          replanBrief: null, question: null,
         }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -541,7 +541,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "All work is proven.",
           remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-          replanBrief: null, question: null, blockedReason: null,
+          replanBrief: null, question: null,
         }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -600,11 +600,11 @@ describe("Horizon workflow", () => {
             summary: "The live seam invalidates the remaining implementation approach.", remainingUnknowns: failed.unknowns,
             planningOwner: "decomposition", workspaceDisposition: "keep-current",
             replanBrief: "Preserve the failed attempt as evidence and rewrite the work unit around the observed live boundary.",
-            question: null, blockedReason: null,
+            question: null,
           } : {
             object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "The revised work is proven.",
             remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-            replanBrief: null, question: null, blockedReason: null,
+            replanBrief: null, question: null,
           }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);
@@ -653,10 +653,10 @@ describe("Horizon workflow", () => {
             object: "constal.horizon.reconciliation", version: 2, action: "replan",
             summary: "The proof contract is wrong, while implementation is complete.", remainingUnknowns: [],
             planningOwner: "assertions", workspaceDisposition: "keep-current",
-            replanBrief: "Repair the assertion to use the repository's real proof command.", question: null, blockedReason: null,
+            replanBrief: "Repair the assertion to use the repository's real proof command.", question: null,
           } : { object: "constal.horizon.reconciliation", version: 2, action: "complete",
             summary: "The corrected independent proof passed.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null }, toolEvidence: [] });
+            workspaceDisposition: "keep-current", replanBrief: null, question: null }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -713,7 +713,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "The v2 work is proven.",
           remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-          replanBrief: null, question: null, blockedReason: null,
+          replanBrief: null, question: null,
         }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -769,7 +769,7 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-reconciler") return handle({ reconciliation: {
           object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "The work is proven.",
           remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
-          replanBrief: null, question: null, blockedReason: null,
+          replanBrief: null, question: null,
         }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
@@ -825,18 +825,18 @@ describe("Horizon workflow", () => {
             question: { prompt: "How should I proceed after the repeated failure?", options: [
               "Use the alternative implementation seam.", "Narrow the requested behavior.",
               "Provide additional environment context.",
-            ] }, blockedReason: null,
+            ] },
           }, toolEvidence: [] });
           if (reconciliationRuns >= 4) return handle({ reconciliation: {
             object: "constal.horizon.reconciliation", version: 2, action: "complete",
             summary: "The alternative is proven.", remainingUnknowns: [], planningOwner: null,
-            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null,
+            workspaceDisposition: "keep-current", replanBrief: null, question: null,
           }, toolEvidence: [] });
           return handle({ reconciliation: {
             object: "constal.horizon.reconciliation", version: 2, action: "replan",
             summary: "Change the implementation approach.", remainingUnknowns: failedExecution.unknowns,
             planningOwner: "decomposition", workspaceDisposition: "keep-current",
-            replanBrief: "Use a materially different implementation approach.", question: null, blockedReason: null,
+            replanBrief: "Use a materially different implementation approach.", question: null,
           }, toolEvidence: [] });
         }
         throw new Error(`unexpected task ${task.id}`);

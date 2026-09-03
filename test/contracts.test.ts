@@ -11,7 +11,6 @@ const plan = {
   objective: "Add a durable feature", summary: "Investigate, implement, and prove the feature.",
   specification: "Preserve the existing deployment boundary. Implement the feature as one coherent behavior and prove replay.",
   workspaceRoot: "/workspace/repositories/source", unknowns: [unknown], risks: ["Replay drift"], question: null,
-  blockedReason: null,
   steps: [
     { id: "implement", milestoneId: "behavior", title: "Implement behavior", responsibility: "Own the semantic behavior.",
       specification: "Inspect the current seam, make the smallest coherent change, and retain existing authority boundaries.",
@@ -44,7 +43,7 @@ describe("Horizon transport contracts", () => {
         environment: { name: "node", cache: true } });
     expect(parseHzSourceResolution({ object: "constal.horizon.source-resolution", version: 1, status: "ready",
       source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
-      evidence: ["authenticated repository metadata"], question: null, blockedReason: null })?.status).toBe("ready");
+      evidence: ["authenticated repository metadata"], question: null })?.status).toBe("ready");
   });
 
   it("rejects structural dependency cycles without scoring plan prose", () => {
@@ -61,7 +60,7 @@ describe("Horizon transport contracts", () => {
       summary: "The live API differs from planning evidence.", remainingUnknowns: [unknown],
       planningOwner: "design", workspaceDisposition: "keep-current",
       replanBrief: "Preserve completed work and replace the remaining API assumption with the observed contract.",
-      question: null, blockedReason: null })?.action).toBe("replan");
+      question: null })?.action).toBe("replan");
   });
 
   it("validates decomposed discovery and focused investigation envelopes", () => {
@@ -69,12 +68,12 @@ describe("Horizon transport contracts", () => {
       summary: "The source is materialized and two decisions need focused evidence.", workspaceRoot: "/workspace/repositories/source",
       focuses: [{ id: "runtime", title: "Runtime ownership", mission: "Trace the runtime boundary.",
         questions: ["Which component owns recovery?"], evidenceNeeded: ["Runtime source and tests"],
-        stopWhen: "Ownership and recovery invariants are proven." }], unknowns: [unknown], blockedReason: null };
+        stopWhen: "Ownership and recovery invariants are proven." }], unknowns: [unknown] };
     expect(parseHzDiscoveryPlan(discovery)).toEqual(discovery);
     expect(parseHzInvestigationResult({ object: "constal.horizon.investigation", version: 1, focusId: "runtime",
       status: "complete", summary: "The coordinator owns recovery.", findings: ["Recovery is ledger-driven."],
       evidence: ["src/runtime.ts"], unknowns: [unknown], planImplications: ["Keep recovery in the coordinator."],
-      blockedReason: null }, "runtime")?.status).toBe("complete");
+    }, "runtime")?.status).toBe("complete");
   });
 
   it("rejects model-authored terminal control from semantic specialists", () => {
@@ -123,7 +122,7 @@ describe("Horizon transport contracts", () => {
     expect(parseHzAssertionPlan({ object: "constal.horizon.assertion-plan", version: 1, revision: 1,
       assertions: plan.assertions }, 1, ["implement", "verify"])).not.toBeNull();
     expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
-      verdict: "accepted", summary: "The artifacts converge.", findings: [], question: null, blockedReason: null }, 1)).not.toBeNull();
+      verdict: "accepted", summary: "The artifacts converge.", findings: [], question: null }, 1)).not.toBeNull();
   });
 
   it("rejects repair scopes and assertion coverage that do not match durable identities", () => {
@@ -133,7 +132,7 @@ describe("Horizon transport contracts", () => {
       verdict: "repair", summary: "One work boundary is invalid.", findings: [{ owner: "decomposition",
         severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "Ownership is duplicated.", evidence: ["Current plan."], repair: "Choose one owner." }],
-      question: null, blockedReason: null }, 1)).not.toBeNull();
+      question: null }, 1)).not.toBeNull();
   });
 
   it("requires complete structurally valid continuity and explicit execution routes", () => {
@@ -146,11 +145,11 @@ describe("Horizon transport contracts", () => {
         reason: "Incorrect successor.", evidence: [] }] }, 2, ["implement"], ["implement"])).toBeNull();
     expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "repair-step",
       summary: "Continue the useful partial implementation.", remainingUnknowns: [], planningOwner: null,
-      workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null })).not.toBeNull();
+      workspaceDisposition: "keep-current", replanBrief: null, question: null })).not.toBeNull();
     expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "replan",
       summary: "The architecture assumption failed.", remainingUnknowns: [], planningOwner: null,
       workspaceDisposition: "keep-current", replanBrief: "Repair the design.", question: null,
-      blockedReason: null })).toBeNull();
+    })).toBeNull();
     expect(parseHzQuestionReconciliation({ object: "constal.horizon.question-reconciliation", version: 1,
       decision: "answered", rationale: "The prior answer already selects the same material choice." })).not.toBeNull();
   });

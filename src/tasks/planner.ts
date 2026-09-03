@@ -38,7 +38,7 @@ function executionCritique(input: HzPlanInput, owner: HzPlanningOwner): HzPlanCr
     summary: input.replanBrief, findings: [{ owner, severity: "blocking",
       affectedMilestones: step ? [step.milestoneId] : [], affectedSteps: step ? [step.id] : [],
       issue: input.replanBrief, evidence: attempt ? [attempt.stepFact, attempt.verificationFact] : [], repair: input.replanBrief }],
-    question: null, blockedReason: null };
+    question: null };
 }
 
 function rebasePlanningArtifacts(state: HzPlanningState, revision: number): {
@@ -501,8 +501,7 @@ export const planner = subtask<HzPlannerResult>({
     const plan = parseHzPlan({ ...finalized.artifact, object: "constal.horizon.plan", version: 1,
       revision: input.revision, status: expectedStatus, objective: input.request.objective,
       workspaceRoot: input.discoveryPlan.workspaceRoot, steps: workPlan.steps, assertions,
-      question: expectedStatus === "needs-input" ? critique.question : null,
-      blockedReason: null });
+      question: expectedStatus === "needs-input" ? critique.question : null });
     if (!plan) throw new TypeError("Horizon finalization did not produce one valid immutable plan");
     if (plan.status !== expectedStatus || canonicalJson(plan.steps) !== canonicalJson(workPlan.steps)
       || canonicalJson(plan.assertions) !== canonicalJson(assertions)

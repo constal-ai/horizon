@@ -15,9 +15,8 @@ Return ready only when one repository is supported by authenticated GitHub evide
   "status":"ready|needs-input",
   "source":{"kind":"github","owner":"owner","repository":"name","ref":"exact requested ref"}|null,
   "evidence":["authenticated repository observation"],
-  "question":"one source-disambiguation question or null",
-  "blockedReason":null
+  "question":"one source-disambiguation question or null"
 }
 
-ready requires source. needs-input requires question. blockedReason is always null because this specialist cannot terminate the workflow.`,
+ready requires source. needs-input requires question.`,
 });
