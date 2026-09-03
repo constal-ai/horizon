@@ -1,6 +1,6 @@
 {
   "name": "@constal/horizon",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "description": "Constal's long-horizon software agent.",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
     "sandbox:build": "node scripts/release-sandbox-image.mjs --build constal-horizon-sandbox:dev"
   },
   "dependencies": {
+    "@constal-ai/github": "2.0.0",
     "@constal/sdk": "2.5.0"
   },
   "devDependencies": {

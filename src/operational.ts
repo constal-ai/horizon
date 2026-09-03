@@ -1,6 +1,7 @@
 import type {
   ConstalApiChangePlan, ConstalApiChangeReceipt, Ctx,
 } from "@constal/sdk";
+import { invokeGitHub } from "@constal-ai/github";
 import { HORIZON_OPERATIONAL_SYSTEM } from "./prompts/operational.js";
 import { runReactLoop } from "./react-loop.js";
 import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "./runtime-control.js";
@@ -179,10 +180,10 @@ async function observed<T>(read: () => Promise<T>): Promise<T | { error: string 
 async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise<SupervisionSnapshot | null> {
   const thread = threadContext(event.context);
   if (!thread || !ctx.resources.github || !ctx.resources.api) return null;
-  const issue = await observed(() => ctx.invoke(ctx.resources.github!, "issue.get",
-    { owner: thread.owner, repository: thread.repository, issue: thread.issue }));
-  const comments = await observed(() => ctx.invoke(ctx.resources.github!, "issue.comments.list",
-    { owner: thread.owner, repository: thread.repository, issue: thread.issue, page: 1, perPage: 100 }));
+  const issue = await observed(() => invokeGitHub("issue.get",
+    { owner: thread.owner, repository: thread.repository, issue: thread.issue }, ctx));
+  const comments = await observed(() => invokeGitHub("issue.comments.list",
+    { owner: thread.owner, repository: thread.repository, issue: thread.issue, page: 1, perPage: 100 }, ctx));
   const runs = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "run", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "eq", field: "session_id", value: thread.workSession },

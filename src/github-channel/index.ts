@@ -70,6 +70,23 @@ function boundedText(value: unknown, maximum = 65_536): string {
   return typeof value === "string" ? value.slice(0, maximum) : "";
 }
 
+async function findDeliveredComment(context: ChannelContext, owner: string, repositoryName: string, issueNumber: number,
+  marker: string): Promise<Record<string, unknown> | null> {
+  const expected = `<!-- constal:${marker} -->`;
+  for (let page = 1; page <= 10; page++) {
+    const comments = await context.invoke<unknown[]>(context.resources.github!, "issue.comments.list",
+      { owner, repository: repositoryName, issue: issueNumber, page, perPage: 100 });
+    if (!Array.isArray(comments)) throw new TypeError("GitHub returned an invalid comment page");
+    const found = comments.flatMap((value) => {
+      try { const comment = record(value); return typeof comment.body === "string" && comment.body.includes(expected) ? [comment] : []; }
+      catch { return []; }
+    })[0];
+    if (found) return found;
+    if (comments.length < 100) return null;
+  }
+  throw new TypeError("GitHub comment reconciliation exceeded its bounded search");
+}
+
 function repository(payload: Record<string, unknown>) {
   const value = record(payload.repository); const fullName = boundedText(value.full_name, 256);
   const parts = fullName.split("/");
@@ -117,7 +134,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.10",
+  version: "0.3.11",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],
@@ -179,13 +196,22 @@ export default channel({
         return { id: message.id, status: "failed", error: "GitHub issue-comment destination or body is invalid" };
       }
       const marker = await hashValue({ channel: context.channel, id: message.id, destination: message.destination });
-      const result = await context.invoke<{ comment?: { id?: unknown; html_url?: unknown }; duplicate?: boolean }>(
-        context.resources.github!, "issue.comment.create", {
-          owner: match[1], repository: match[2], issue: Number(match[3]), body, marker,
-        }, { dedupeKey: message.id });
-      return { id: message.id, status: "delivered", externalId: String(result.comment?.id ?? marker),
-        metadata: { provider: "github", duplicate: result.duplicate === true,
-          ...(typeof result.comment?.html_url === "string" ? { url: result.comment.html_url } : {}) } };
+      const owner = match[1]!; const repositoryName = match[2]!; const issueNumber = Number(match[3]);
+      let comment = await findDeliveredComment(context, owner, repositoryName, issueNumber, marker); let duplicate = comment !== null;
+      if (!comment) {
+        try {
+          comment = record(await context.invoke(context.resources.github!, "issue.comment.create", {
+            owner, repository: repositoryName, issue: issueNumber, body: `${body}\n\n<!-- constal:${marker} -->`,
+          }, { dedupeKey: message.id }));
+        } catch (error) {
+          comment = await findDeliveredComment(context, owner, repositoryName, issueNumber, marker);
+          if (!comment) throw error;
+          duplicate = true;
+        }
+      }
+      return { id: message.id, status: "delivered", externalId: String(comment.id ?? marker),
+        metadata: { provider: "github", duplicate,
+          ...(typeof comment.html_url === "string" ? { url: comment.html_url } : {}) } };
     },
   },
 });

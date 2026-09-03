@@ -3,7 +3,7 @@
   "kind": "channel",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "entry": "src/github-channel/index.ts",
   "config": {
     "repositories": ["constal-ai/horizon"],

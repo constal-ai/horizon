@@ -1,4 +1,5 @@
 import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "./artifacts.js";
 import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigationResult,
   type HzPlan, type HzPlanContinuity, type HzPlanInput, type HzPlanningState, type HzPlateauState, type HzRequest,
@@ -44,8 +45,8 @@ function eventContext(event: HorizonRoutedEvent): { owner: string; repository: s
 async function approvalAuthorized(event: HorizonRoutedEvent, ctx: Ctx): Promise<{ authorized: boolean; permission: string }> {
   const target = eventContext(event);
   if (!target || !ctx.resources.github) return { authorized: false, permission: "unknown" };
-  const result = await ctx.invoke<{ permission?: unknown }>(ctx.resources.github, "repository.permission.get",
-    { owner: target.owner, repository: target.repository, username: target.sender });
+  const result = await invokeGitHub("repository.permission.get",
+    { owner: target.owner, repository: target.repository, username: target.sender }, ctx) as { permission?: unknown };
   const permission = typeof result.permission === "string" ? result.permission : "unknown";
   return { authorized: target.permissions.includes(permission), permission };
 }

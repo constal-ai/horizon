@@ -3,6 +3,11 @@ import type { Ctx } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG, horizonRoutedEvent } from "../src/behaviors.js";
 import { HORIZON_PROCESS, runHorizonOperational } from "../src/operational.js";
 
+vi.mock("@constal-ai/github", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@constal-ai/github")>(),
+  invokeGitHub: (operation: string, args: unknown, ctx: Ctx) => ctx.invoke(ctx.resources.github!, operation, args),
+}));
+
 const sessions = { foreground: `github-${"a".repeat(48)}-front-${"b".repeat(16)}`,
   work: `github-${"a".repeat(48)}-work` };
 

@@ -107,14 +107,19 @@ describe("Horizon GitHub Channel", () => {
   });
 
   it("delivers durable Run presentations through the GitHub Connection", async () => {
-    const invoke = vi.fn(async () => ({ comment: { id: 99, html_url: "https://github.com/constal-ai/horizon/issues/42#issuecomment-99" }, duplicate: false }));
+    const invoke = vi.fn(async (_resource: string, operation: string) => operation === "issue.comments.list" ? []
+      : { id: 99, html_url: "https://github.com/constal-ai/horizon/issues/42#issuecomment-99" });
     const receipt = await horizonGitHub.protocol.send!({ id: "message-1", destination: "constal-ai/horizon#42",
       data: { object: "constal.run.presentation", version: 1,
         presentation: { object: "constal.await.presentation", version: 1, kind: "approval",
           title: "Plan ready", body: "The plan is ready." } } }, context(invoke));
     expect(receipt).toMatchObject({ status: "delivered", externalId: "99", metadata: { provider: "github", duplicate: false } });
-    expect(invoke).toHaveBeenCalledWith("github", "issue.comment.create", expect.objectContaining({
-      owner: "constal-ai", repository: "horizon", issue: 42, body: "The plan is ready.", marker: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    expect(invoke).toHaveBeenNthCalledWith(1, "github", "issue.comments.list", {
+      owner: "constal-ai", repository: "horizon", issue: 42, page: 1, perPage: 100,
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "github", "issue.comment.create", expect.objectContaining({
+      owner: "constal-ai", repository: "horizon", issue: 42,
+      body: expect.stringMatching(/^The plan is ready\.\n\n<!-- constal:[a-f0-9]{64} -->$/u),
     }), { dedupeKey: "message-1" });
   });
 });

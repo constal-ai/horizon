@@ -3,6 +3,9 @@ import type { Ctx } from "@constal/sdk";
 import type { HzPlan, HzRequest } from "../src/contracts.js";
 import { publishWorkspace } from "../src/github-publication.js";
 
+vi.mock("@constal-ai/github", () => ({ invokeGitHub: (operation: string, args: unknown, ctx: Ctx) =>
+  ctx.invoke(ctx.resources.github!, operation, args) }));
+
 describe("Horizon GitHub publication", () => {
   it("does not publish a direct GitHub-backed Run without issue-work context", async () => {
     const request: HzRequest = { objective: "Inspect the repository", context: null,
@@ -32,9 +35,9 @@ describe("Horizon GitHub publication", () => {
     expect(invoke).toHaveBeenNthCalledWith(1, "github", "repository.branch.publish", expect.objectContaining({
       owner: "constal-ai", repository: "horizon", base: "main", archive: "a".repeat(64),
       branch: "constal/horizon-42-plan-fact-12",
-    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":branch"), timeoutMs: 600_000 }));
+    }));
     expect(invoke).toHaveBeenNthCalledWith(2, "github", "pull-request.create", expect.objectContaining({
       head: "constal/horizon-42-plan-fact-12", base: "main",
-    }), expect.objectContaining({ dedupeKey: expect.stringContaining(":pull-request"), timeoutMs: 600_000 }));
+    }));
   });
 });

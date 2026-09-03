@@ -1,8 +1,12 @@
 import type { Ctx, Tool } from "@constal/sdk";
-import { GITHUB_TOOLS } from "./github.js";
+import { GITHUB_TOOLS as GITHUB_PACKAGE_TOOLS } from "@constal-ai/github";
 import { PLATFORM_TOOLS } from "./platform.js";
 import { WEB_TOOLS } from "./web.js";
 import { WORKSPACE_TOOLS } from "./workspace.js";
+
+const GITHUB_TOOL_NAMES = ["github_repositories", "github_repository", "github_tree", "github_file",
+  "github_issue", "github_issue_comments"] as const;
+const GITHUB_TOOLS = Object.fromEntries(GITHUB_TOOL_NAMES.map((name) => [name, GITHUB_PACKAGE_TOOLS[name]!])) as Record<string, Tool>;
 
 export const TOOLS: Record<string, Tool> = { ...GITHUB_TOOLS, ...PLATFORM_TOOLS, ...WORKSPACE_TOOLS, ...WEB_TOOLS };
 

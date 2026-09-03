@@ -2,6 +2,7 @@ import {
   canonicalJson, hashValue,
   type Ctx, type Sandbox, type SandboxCommandResult, type SandboxImage, type SandboxPool, type SpawnAttenuation,
 } from "@constal/sdk";
+import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "../artifacts.js";
 import { rethrowRuntimeControl } from "../runtime-control.js";
 import {
@@ -108,8 +109,7 @@ function githubSource(input: HzSourceInput): input is Extract<HzSourceInput, { k
 async function resolveRequestedSource(request: HzRequest, ctx: Ctx): Promise<HzSourceInput> {
   if (request.source) {
     if (githubSource(request.source)) {
-      await ctx.invoke(ctx.resources.github!, "repository.get",
-        { owner: request.source.owner, repository: request.source.repository });
+      await invokeGitHub("repository.get", { owner: request.source.owner, repository: request.source.repository }, ctx);
     }
     return request.source;
   }
@@ -141,9 +141,9 @@ async function materializeSource(request: HzRequest, ctx: Ctx): Promise<HzResolv
     const adopted = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "importArtifact", { ref: selected.ref });
     return { kind: "artifact", archive: { ref: adopted.ref, bytes: adopted.bytes, format: "tar.gz" }, github: null };
   }
-  const archive = await ctx.invoke<GitHubArchiveResult>(ctx.resources.github!, "repository.archive", {
+  const archive = await invokeGitHub("repository.archive", {
     owner: selected.owner, repository: selected.repository, ref: selected.ref,
-  }, { dedupeKey: `horizon-source:${await hashValue(selected)}` });
+  }, ctx) as GitHubArchiveResult;
   if (archive.format !== "tar.gz" || !archive.ref || !Number.isSafeInteger(archive.bytes) || archive.bytes < 1) {
     throw new WorkspacePreparationError("GitHub returned an invalid immutable repository archive.");
   }
