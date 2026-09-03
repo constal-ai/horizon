@@ -6,7 +6,7 @@ import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const investigator = subtask<HzInvestigatorOutput>({
   id: "horizon-investigator",
-  version: "2",
+  version: "3",
   async run(input: HzInvestigatorInput, ctx) {
     const conversation = await runReactLoop({
       role: `investigator-${input.focus.id}`, system: INVESTIGATOR_SYSTEM, objective: input.focus.mission,

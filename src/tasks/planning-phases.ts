@@ -43,7 +43,7 @@ function context(planning: HzPlanInput): Record<string, unknown> {
 }
 
 export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
-  id: "horizon-rubric", version: "3",
+  id: "horizon-rubric", version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<RubricInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "rubric", system: RUBRIC_SYSTEM,
@@ -57,7 +57,7 @@ export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
 });
 
 export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
-  id: "horizon-design", version: "6",
+  id: "horizon-design", version: "7",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DesignInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "design", system: DESIGN_SYSTEM,
@@ -71,7 +71,7 @@ export const designAgent = subtask<PlanningPhaseResult<HzDesign>>({
 });
 
 export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>({
-  id: "horizon-milestone-decomposition", version: "6",
+  id: "horizon-milestone-decomposition", version: "7",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<DecompositionInput>(ctx, envelope);
     const milestone = input.design.milestones.find(({ id }) => id === input.milestoneId);
@@ -90,7 +90,7 @@ export const decompositionAgent = subtask<PlanningPhaseResult<HzMilestoneWork>>(
 });
 
 export const assertionAgent = subtask<PlanningPhaseResult<HzStepAssertions>>({
-  id: "horizon-assertions", version: "3",
+  id: "horizon-assertions", version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<AssertionInput>(ctx, envelope);
     const step = input.workPlan.steps.find(({ id }) => id === input.stepId);
@@ -118,7 +118,7 @@ function repairedWorkPlan(value: unknown, input: WorkPlanRepairInput): HzWorkPla
 }
 
 export const workPlanRepairAgent = subtask<PlanningPhaseResult<HzWorkPlan>>({
-  id: "horizon-work-plan-repair", version: "1",
+  id: "horizon-work-plan-repair", version: "2",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<WorkPlanRepairInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "work-plan-repair", system: WORK_PLAN_REPAIR_SYSTEM,
@@ -132,7 +132,7 @@ export const workPlanRepairAgent = subtask<PlanningPhaseResult<HzWorkPlan>>({
 });
 
 export const assertionPlanRepairAgent = subtask<PlanningPhaseResult<HzAssertionPlan>>({
-  id: "horizon-assertion-plan-repair", version: "1",
+  id: "horizon-assertion-plan-repair", version: "2",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<AssertionPlanRepairInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "assertion-plan-repair", system: ASSERTION_PLAN_REPAIR_SYSTEM,
@@ -176,7 +176,7 @@ function critiqueArtifact(value: unknown, input: CritiqueInput): HzPlanCritique 
 }
 
 export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
-  id: "horizon-plan-critique", version: "7",
+  id: "horizon-plan-critique", version: "8",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<CritiqueInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-critique", system: CRITIQUE_SYSTEM,
@@ -192,7 +192,7 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
 });
 
 export const planFinalizer = subtask<PlanningPhaseResult<HzPlanNarrative>>({
-  id: "horizon-plan-finalizer", version: "3",
+  id: "horizon-plan-finalizer", version: "4",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<FinalizerInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "plan-finalizer", system: PLANNER_SYSTEM,

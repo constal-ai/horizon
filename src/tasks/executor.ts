@@ -8,7 +8,7 @@ import { EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../tool
 
 export const executor = subtask<HzExecutorResult>({
   id: "horizon-executor",
-  version: "9",
+  version: "10",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<HzExecutorInput>(ctx, envelope);
     const conversation = await runReactLoop({

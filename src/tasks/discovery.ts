@@ -6,7 +6,7 @@ import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const discoveryFramer = subtask<HzDiscoveryResult>({
   id: "horizon-discovery-framer",
-  version: "2",
+  version: "3",
   async run(input: HzDiscoveryInput, ctx) {
     const conversation = await runReactLoop({
       role: "discovery-framer", system: DISCOVERY_SYSTEM,

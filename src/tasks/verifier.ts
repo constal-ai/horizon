@@ -7,7 +7,7 @@ import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const verifier = subtask<HzVerifierResult>({
   id: "horizon-verifier",
-  version: "6",
+  version: "7",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<HzVerifierInput>(ctx, envelope);
     const conversation = await runReactLoop({
