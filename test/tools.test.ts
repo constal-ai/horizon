@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
+import { WEB_TOOLS } from "../src/tools/web.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
   workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
@@ -19,6 +20,18 @@ describe("Horizon Tool capability projection", () => {
     expect(availableTools(["workspace_read", "web_fetch", "web_search", "github_file"], { resources }))
       .toEqual(["workspace_read", "web_fetch"]);
     expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["cas", "model", "sandbox", "web"]);
+  });
+
+  it("advertises only arguments supported by the bound platform Search provider", () => {
+    const schema = WEB_TOOLS.web_search!.schema as { properties: Record<string, unknown> };
+    expect(Object.keys(schema.properties)).toEqual([
+      "query", "searchQueries", "maximumResults", "maximumCharacters", "includeDomains", "excludeDomains", "afterDate",
+    ]);
+    expect(schema.properties).not.toHaveProperty("includeAnswer");
+    expect(schema.properties).not.toHaveProperty("includeRawContent");
+    expect(schema.properties).not.toHaveProperty("includeImages");
+    expect(schema.properties).not.toHaveProperty("includeImageDescriptions");
+    expect(schema.properties).not.toHaveProperty("searchDepth");
   });
 
 
