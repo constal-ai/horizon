@@ -13,7 +13,7 @@ describe("Horizon managed Agent package", () => {
     expect({ id: manifest.id, version: manifest.version, mode: manifest.mode })
       .toEqual({ id: agent.id, version: agent.version, mode: agent.mode });
     expect(pkg.version).toBe(agent.version);
-    expect(pkg.dependencies).toEqual({ "@constal-ai/github": "2.0.0", "@constal/sdk": "2.5.0" });
+    expect(pkg.dependencies).toEqual({ "@constal-ai/github": "2.0.2", "@constal/sdk": "2.5.0" });
     expect(manifest.labels).toEqual({ "channels.constal.ai/horizon-github": "enabled" });
   });
 
