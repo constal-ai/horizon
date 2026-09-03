@@ -29,7 +29,8 @@ export interface HorizonOperationalResult {
   message: string;
   action: HorizonOperationalAction;
   evidence: string[];
-  control?: { operation: HorizonControlOperation; plan: string; receipt: string; state: string };
+  control?: { operation: HorizonControlOperation; plan: string; receipt: string; state: string }
+    | { operation: "session.deliver"; fact: string; state: "queued" };
 }
 
 interface ApiObjectRef {
@@ -361,12 +362,15 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
         data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id },
       } }];
     } else if (result.action.kind === "start-work") {
-      operations = activeWork(snapshot) ? [{ id: "steer", operation: "run.steer", input: {
+      if (!activeWork(snapshot)) {
+        const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective }, {
+          tier: "audit", to: `session:${snapshot.thread.workSession}`, deliver: "queue",
+        });
+        return { ...result, control: { operation: "session.deliver", fact: fact.hash, state: "queued" } };
+      }
+      operations = [{ id: "steer", operation: "run.steer", input: {
         namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, text: result.action.objective,
         data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id },
-      } }] : [{ id: "start", operation: "run.start", input: {
-        namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession,
-        data: { ...event, behavior: "issue-work", objective: result.action.objective },
       } }];
     } else {
       const selected = exactRun(snapshot, result.action.run);

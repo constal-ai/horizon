@@ -24,11 +24,11 @@ function query(items: unknown[]) {
     evidence: { source: "coordinator", observedAt: 1, authoritativeFor: [], lagMs: 0, complete: true, warnings: [], queryHash: "a".repeat(64) } };
 }
 
-function readFixture(options: { waits?: unknown[]; runStatus?: string; awaiting?: unknown[] } = {}) {
+function readFixture(options: { waits?: unknown[]; runs?: unknown[]; runStatus?: string; awaiting?: unknown[] } = {}) {
   const invoke = vi.fn(async (resource: string, operation: string, args: Record<string, unknown>, _options?: unknown) => {
     if (resource === "github" && operation === "issue.get") return { issue: { number: 10, title: "Implement reactions" } };
     if (resource === "github" && operation === "issue.comments.list") return { comments: [{ id: 1, body: "Progress?" }] };
-    if (resource === "api" && operation === "query" && args.kind === "run") return query([runItem(options.runStatus)]);
+    if (resource === "api" && operation === "query" && args.kind === "run") return query(options.runs ?? [runItem(options.runStatus)]);
     if (resource === "api" && operation === "get") return { object: "constal.api.object", ref: runItem(),
       value: { runId: "run-1", status: options.runStatus ?? "suspended", task: { id: "horizon-planner", version: "11" },
         awaiting: options.awaiting ?? [{ id: "spawn-1", label: "spawn:horizon-design", kind: "spawn", childRunId: "child-1" }] },
@@ -95,6 +95,25 @@ describe("Horizon behavior routing", () => {
       status: "complete", message: "I am currently planning the change.", action: { kind: "respond" },
     });
     expect(invoke).toHaveBeenCalledWith("github", "issue.get", { owner: "constal-ai", repository: "horizon", issue: 10 });
+  });
+
+  it("starts idle issue work through the existing durable cross-Session commit", async () => {
+    const invoke = readFixture({ runs: [] });
+    const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+      object: "constal.horizon.operational-result", version: 1, status: "complete",
+      message: "I am starting the requested issue work.", action: { kind: "start-work", objective: "Implement issue #10." },
+      evidence: ["No active work Run exists."],
+    }) }, artifact: null }));
+    const commit = vi.fn(async () => ({ hash: "f".repeat(64) }));
+    const ctx = { invoke, turn, commit, resources: { model: "model", github: "github", api: "api" },
+      run: { id: "front", namespace: "default" } } as unknown as Ctx;
+
+    await expect(runHorizonOperational(event("Start the work."), ctx)).resolves.toMatchObject({
+      control: { operation: "session.deliver", fact: "f".repeat(64), state: "queued" },
+    });
+    expect(commit).toHaveBeenCalledWith(expect.objectContaining({ object: "constal.horizon.event", behavior: "issue-work",
+      objective: "Implement issue #10." }), { tier: "audit", to: `session:${sessions.work}`, deliver: "queue" });
+    expect(invoke).not.toHaveBeenCalledWith("api", "plan", expect.anything(), expect.anything());
   });
 
   it("semantically answers the exact open work wait through a governed ChangePlan", async () => {
