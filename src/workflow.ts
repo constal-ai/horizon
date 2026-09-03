@@ -18,9 +18,6 @@ import { archiveWorkspace, captureWorkspaceCheckpoint, inspectWorkspaceState, pr
   WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
 
-const MAX_PLAN_REVISIONS = 64;
-const MAX_WORKFLOW_TRANSITIONS = 1_024;
-
 export interface HorizonPlanDecision {
   object: "constal.horizon.plan-decision";
   version: 1;
@@ -57,7 +54,7 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequ
   await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
     instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
   const body = planMarkdown(plan, planFact);
-  for (let attempt = 1; attempt <= 64; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}-${attempt}`, {
       maxBytes: 65_536, afterRun: "message",
       presentation: waitPresentation("approval", `Approve Horizon plan revision ${plan.revision}`, body,
@@ -94,7 +91,6 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequ
     await ctx.commit({ kind: "horizon.approval-decision", planFact, decision }, { tier: "audit" });
     return decision;
   }
-  throw new TypeError("Horizon plan approval remained unresolved after the bounded conversation limit");
 }
 
 function attenuation(names: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
@@ -251,9 +247,9 @@ async function answerQuestion(question: HzDecisionQuestion, revision: number, ct
   return answer;
 }
 
-async function questionWasAnswered(candidate: HzDecisionQuestion,
-  history: Array<{ question: HzDecisionQuestion; answer: string }>, ctx: Ctx): Promise<boolean> {
-  if (history.length === 0) return false;
+async function priorAnswer(candidate: HzDecisionQuestion,
+  history: Array<{ question: HzDecisionQuestion; answer: string }>, ctx: Ctx): Promise<string | null> {
+  if (history.length === 0) return null;
   const input = await storeArtifact(ctx, { candidate, history });
   const result = await ctx.spawn(questionReconciler, input, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
@@ -262,7 +258,7 @@ async function questionWasAnswered(candidate: HzDecisionQuestion,
   });
   await ctx.commit({ kind: "horizon.question-reconciliation", candidate,
     priorQuestions: history.length, result }, { tier: "audit" });
-  return result.decision === "answered";
+  return result.decision === "answered" ? history[history.length - 1]!.answer : null;
 }
 
 async function packageWorkspace(plan: HzPlan, ctx: Ctx): Promise<{ artifact: HzRunResult["artifact"]; error: string | null }> {
@@ -357,7 +353,8 @@ async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: C
     toolEvidence: framed.toolEvidence }, { tier: "audit" });
   const investigationTools = availableTools(INVESTIGATOR_TOOL_NAMES, ctx);
   const handles = framed.discoveryPlan.focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
-    request, discoveryPlan: framed.discoveryPlan, workspaceReceipt: workspace.receiptRef, focus, tools: investigationTools,
+    request, discoveryPlan: framed.discoveryPlan, workspaceReceipt: workspace.receiptRef,
+    focus, priorInvestigations: [], tools: investigationTools,
   }, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
@@ -404,7 +401,8 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   let resultDigests: string[] = [];
   let remainingUnknowns = [] as HzPlan["unknowns"];
   let plateau: HzPlateauState = { fingerprint: null, stableCycles: 0 };
-  let specialistRuns = 0; let replans = 0; let transitions = 0; let answer: string | null = null;
+  const replannedPlateaus = new Set<string>();
+  let specialistRuns = 0; let replans = 0; let answer: string | null = null;
   let approvedPlanFact: string | null = null;
   const questionHistory: Array<{ question: HzDecisionQuestion; answer: string }> = [];
   const completedEvidence = (): HzExecutionAttempt[] => completed.flatMap(({ stepId }) => {
@@ -419,7 +417,8 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     specialistRuns += discovery.specialistRuns;
     activeStage = "initial planning";
     current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
-      investigations: discovery.investigations, revision: 1, previousPlan: null, previousState: null,
+      investigations: discovery.investigations, workspaceReceipt: workspace.receiptRef,
+      revision: 1, previousPlan: null, previousState: null,
       completed, completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer, tools: [] }, ctx);
   } catch (error) {
     return unplannedBlockedResult(await recordApplicationFailure(ctx, activeStage, error), workspace, specialistRuns);
@@ -461,32 +460,22 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     specialistRuns += current.planningRuns; replans++; approvedPlanFact = null;
   };
 
-  try { while (transitions++ < MAX_WORKFLOW_TRANSITIONS) {
-    if (current.plan.status === "blocked") {
-      return blockedResult(current.plan, current.fact, completed, current.plan.blockedReason ?? current.plan.summary,
-        current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-    }
+  try { for (;;) {
     if (current.plan.status === "needs-input") {
       activeStage = "planning question";
-      if (current.plan.revision >= MAX_PLAN_REVISIONS) {
-        return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling while user decisions remained open.",
-          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-      }
       activeStage = "planning question reconciliation";
       const reconciledPriorQuestion = questionHistory.length > 0;
-      const alreadyAnswered = await questionWasAnswered(current.plan.question!, questionHistory, ctx);
+      const answered = await priorAnswer(current.plan.question!, questionHistory, ctx);
       if (reconciledPriorQuestion) specialistRuns++;
-      if (alreadyAnswered) {
-        return blockedResult(current.plan, current.fact, completed,
-          "Horizon stopped because planning requested a user decision that this Run already resolved.",
-          current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-      }
-      answer = await answerQuestion(current.plan.question!, current.plan.revision, ctx);
-      questionHistory.push({ question: current.plan.question!, answer });
+      answer = answered ?? await answerQuestion(current.plan.question!, current.plan.revision, ctx);
+      if (answered) await ctx.commit({ kind: "horizon.answer-reused", revision: current.plan.revision,
+        question: current.plan.question, answer }, { tier: "audit" });
+      else questionHistory.push({ question: current.plan.question!, answer });
       const previous = current;
       activeStage = "planning revision";
       const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-        revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+        workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
+        previousPlan: previous.plan, previousState: previous.state, completed,
         completedEvidence: completedEvidence(),
         restartAt: "rubric", executionEvidence: null,
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
@@ -550,14 +539,11 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
       }
       if (approval.decision === "revise") {
-        if (current.plan.revision >= MAX_PLAN_REVISIONS) {
-          return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
-            current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-        }
         const previous = current;
         activeStage = "reviewed planning revision";
         const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-          revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+          workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
+          previousPlan: previous.plan, previousState: previous.state, completed,
           completedEvidence: completedEvidence(),
           restartAt: "rubric", executionEvidence: null,
           replanBrief: "Revise the plan according to the authorized review guidance before any further repository mutation.",
@@ -659,7 +645,8 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     activeStage = "execution reconciliation";
     const reconcilerInput = await storeArtifact(ctx, { request, plan: current.plan, planFact: current.fact,
       completed, attempt: storedAttempt.attempt, restoreAvailable: restorePoint.image !== null,
-      plateau, tools: reconcilerTools });
+      plateau, attemptedPlateauReplan: plateau.fingerprint !== null && replannedPlateaus.has(plateau.fingerprint),
+      tools: reconcilerTools });
     const reconciled = await ctx.spawn(reconciler, reconcilerInput, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
@@ -672,19 +659,10 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
 
     const decision = reconciled.reconciliation;
     remainingUnknowns = decision.remainingUnknowns;
-    if (plateau.stableCycles >= 2 && ["continue", "repair-step", "reverify", "replan"].includes(decision.action)) {
-      await ctx.commit({ kind: "horizon.plateau", planFact: current.fact, step: step.id,
-        stableCycles: plateau.stableCycles, fingerprint: plateau.fingerprint,
-        attemptedTransition: decision.action, remainingUnknowns }, { tier: "audit" });
-      return blockedResult(current.plan, current.fact, completed,
-        "Horizon stopped after repeated execution and verification produced no new evidence or resolved uncertainty.",
-        remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-    }
+    if (plateau.stableCycles >= 2) await ctx.commit({ kind: "horizon.plateau", planFact: current.fact, step: step.id,
+      stableCycles: plateau.stableCycles, fingerprint: plateau.fingerprint,
+      selectedTransition: decision.action, remainingUnknowns }, { tier: "audit" });
     if (decision.action === "continue") continue;
-    if (decision.action === "blocked") {
-      return blockedResult(current.plan, current.fact, completed, decision.blockedReason ?? decision.summary,
-        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-    }
     if (decision.action === "complete") continue;
     if (decision.action === "repair-step") {
       pendingReverify.delete(step.id);
@@ -705,27 +683,25 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       pendingReverify.set(step.id, storedAttempt);
       continue;
     }
-    if (current.plan.revision >= MAX_PLAN_REVISIONS) {
-      return blockedResult(current.plan, current.fact, completed, "Horizon reached its immutable plan revision safety ceiling.",
-        decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-    }
     if (decision.action === "ask") {
       activeStage = "execution question reconciliation";
       const reconciledPriorQuestion = questionHistory.length > 0;
-      const alreadyAnswered = await questionWasAnswered(decision.question!, questionHistory, ctx);
+      const answered = await priorAnswer(decision.question!, questionHistory, ctx);
       if (reconciledPriorQuestion) specialistRuns++;
-      if (alreadyAnswered) {
-        return blockedResult(current.plan, current.fact, completed,
-          "Horizon stopped because reconciliation requested a user decision that this Run already resolved.",
-          decision.remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
-      }
-      answer = await answerQuestion(decision.question!, current.plan.revision, ctx);
-      questionHistory.push({ question: decision.question!, answer });
+      answer = answered ?? await answerQuestion(decision.question!, current.plan.revision, ctx);
+      if (answered) await ctx.commit({ kind: "horizon.answer-reused", revision: current.plan.revision,
+        question: decision.question, answer }, { tier: "audit" });
+      else questionHistory.push({ question: decision.question!, answer });
+      plateau = { fingerprint: null, stableCycles: 0 };
+    }
+    if (decision.action === "replan" && plateau.stableCycles >= 2 && plateau.fingerprint) {
+      replannedPlateaus.add(plateau.fingerprint);
     }
     const previous = current;
     activeStage = `execution replanning from ${decision.planningOwner}`;
     const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
-      revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state, completed,
+      workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
+      previousPlan: previous.plan, previousState: previous.state, completed,
       completedEvidence: completedEvidence(),
       restartAt: decision.planningOwner!, executionEvidence: storedAttempt.attempt,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
@@ -736,8 +712,6 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       pendingReverify.set(storedAttempt.attempt.stepId, storedAttempt);
     }
   }
-    return blockedResult(current.plan, current.fact, completed, "Horizon reached its durable workflow transition safety ceiling.",
-      current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
   } catch (error) {
     const summary = await recordApplicationFailure(ctx, activeStage, error);
     return blockedResult(current.plan, current.fact, completed, summary,

@@ -54,7 +54,7 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
     if (kind === "horizon.plan") {
       const plan = record(artifact?.plan); const planStatus = plan?.status;
       return { ...next,
-        status: planStatus === "needs-input" ? "waiting" as const : planStatus === "blocked" ? "blocked" as const : "executing" as const,
+        status: planStatus === "needs-input" ? "waiting" as const : "executing" as const,
         planRevision: typeof plan?.revision === "number" ? plan.revision : state.planRevision,
         planningPhase: null,
         replans: typeof artifact?.previousRevision === "number" ? state.replans + 1 : state.replans,
@@ -93,9 +93,10 @@ export const horizonProgress: ViewDef<HorizonProgressState, Fact> = {
       const reconciliation = record(artifact?.reconciliation); const action = reconciliation?.action;
       return { ...next,
         status: action === "replan" ? "planning" as const : action === "ask" ? "waiting" as const
-          : action === "blocked" ? "blocked" as const : "executing" as const };
+          : "executing" as const };
     }
-    if (kind === "horizon.plateau" || kind === "horizon.package-failed" || kind === "horizon.workspace-checkpoint-failed"
+    if (kind === "horizon.plateau") return next;
+    if (kind === "horizon.package-failed" || kind === "horizon.workspace-checkpoint-failed"
       || kind === "horizon.application-failure") {
       return { ...next, status: "blocked" as const };
     }

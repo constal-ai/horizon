@@ -29,7 +29,7 @@ interface AssertionPlanRepairInput extends WorkPlanRepairInput { assertions: HzS
 interface ContinuityInput extends AssertionPlanRepairInput {}
 interface CritiqueInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; workPlan: HzWorkPlan;
   assertions: HzStepAssertions[]; continuity: HzPlanContinuity; critiqueStage: "structure" | "complete";
-  prior: HzPlanCritique | null; tools: string[] }
+  prior: HzPlanCritique | null; unavailableRepairOwners: HzPlanCritique["findings"][number]["owner"][]; tools: string[] }
 export interface FinalizerInput extends CritiqueInput { critique: HzPlanCritique; tools: [] }
 
 function context(planning: HzPlanInput): Record<string, unknown> {
@@ -171,6 +171,10 @@ function critiqueArtifact(value: unknown, input: CritiqueInput): HzPlanCritique 
   if (!critique) return null;
   const milestones = new Set(input.design.milestones.map(({ id }) => id));
   const steps = new Set(input.workPlan.steps.map(({ id }) => id));
+  if (critique.verdict === "repair" && critique.findings.some(({ severity, owner }) => severity === "blocking"
+    && input.unavailableRepairOwners.includes(owner))) return null;
+  if (input.critiqueStage === "structure" && critique.findings.some(({ severity, owner }) => severity === "blocking"
+    && ["assertions", "continuity"].includes(owner))) return null;
   return critique.findings.some((finding) => finding.affectedMilestones.some((id) => !milestones.has(id))
     || finding.affectedSteps.some((id) => !steps.has(id))) ? null : critique;
 }
@@ -184,7 +188,7 @@ export const critiqueAgent = subtask<PlanningPhaseResult<HzPlanCritique>>({
       context: { ...context(input.planning), rubric: input.rubric, design: input.design,
         workPlan: input.workPlan, assertions: input.assertions, continuity: input.continuity,
         critiqueStage: input.critiqueStage,
-        priorCritique: input.prior },
+        priorCritique: input.prior, unavailableRepairOwners: input.unavailableRepairOwners },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => critiqueArtifact(value, input) }, ctx);
     return { artifact: loop.artifact, toolEvidence: loop.evidence };

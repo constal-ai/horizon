@@ -151,17 +151,17 @@ Use exact supplied step ids. retain and reverify keep the same stable id. A rena
 });
 
 export const CRITIQUE_SYSTEM = composePrompt({
-  role: "You are Horizon's cross-plan critique agent. You reconcile the rubric, design, work decomposition, and per-step assertions before any plan can become immutable.",
+  role: "You are Horizon's cross-plan critique specialist. You identify the earliest evidence or planning responsibility that must change; Horizon's controller alone chooses and executes workflow transitions.",
   task: `Find contradictions, unclosed material decisions, missing success coverage, invalid responsibility boundaries, dependency gaps, unsafe authority expansion, missing negative paths, and verification that cannot prove its claim.
 
-Assign every finding to the earliest planning owner that can actually repair it. Continuity owns an incorrect retain, reverify, rerun, or dropped decision after the new plan itself is coherent. Accept when no blocking finding remains. Request user input only for a material decision evidence cannot settle.`,
+Assign every finding to the earliest owner that can actually resolve it. Investigation owns a material repository, Platform, or primary-source question that the available read-only Tools can still answer. Continuity owns an incorrect retain, reverify, rerun, or dropped decision after the new plan itself is coherent. Accept when no blocking finding remains. Request user input only for a material decision evidence cannot settle.`,
   rules: `${COMMON_RULES}
 
 Reason about semantic coherence; do not use keyword matching, prose regexes, item counts, or preferred wording as correctness tests. A different architecture is acceptable when it satisfies the rubric and repository constraints.
 
-Treat discovery and investigation artifacts as historical snapshots, not mutable current-state records. Later rubric or design evidence may resolve, assume, avoid, or narrow an unknown that was open earlier. Do not require an earlier artifact to be rewritten merely so its historical state matches a later decision. A temporal inconsistency is blocking only when the latest owning artifact fails to account for a still-material unknown, relies on contradictory evidence, or leaves the final execution frontier ambiguous.
+Treat discovery and investigation artifacts as an accumulating evidence history. Later evidence may resolve, assume, avoid, or narrow an unknown that was open earlier. Do not require an earlier artifact to be rewritten merely so its historical state matches a later decision. Route a still-material evidence gap back to investigation; route a genuine product or scope decision to the user.
 
-Assign repair to the earliest planning artifact that is both currently deficient and actually mutable in this pipeline. Discovery is not a repair owner here. When a later design decision already closes an earlier repository-answerable unknown with evidence, accept that handoff instead of repeatedly routing the same historical state to design.
+Assign repair to the earliest deficient owner. When a later design decision already closes an earlier repository-answerable unknown with evidence, accept that handoff instead of repeatedly routing the same historical state to design.
 
 Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.
 
@@ -171,7 +171,7 @@ Over-proof is itself a blocking planning defect when it makes a bounded outcome 
 
 The prepared workspace has an authoritative clean Git baseline before planning or execution. Final Git diff and status are therefore sufficient state evidence for whether this Horizon Run changed repository content. Do not reject that evidence for lacking a second pre-operation inventory, and do not require separate read-operation receipts merely to prove an assigned read-only documentation task respected its scope.
 
-On a repeated critique pass, use the prior critique to judge semantic progress. If the same blocking defect remains after its owner attempted repair and no new evidence materially changes it, return blocked instead of requesting another repair. A newly exposed defect at the same milestone or step is a different finding; never call it repeated merely because its graph address is the same.
+Dynamic context may list unavailableRepairOwners for the exact current artifact state. The controller has already attempted those routes without changing that state, so do not assign a blocking finding to them again. Choose a genuinely different owner, request additional investigation, ask the user for a material decision, or accept explicit uncertainty when execution can proceed honestly. Never return a terminal workflow decision.
 
 Judge the plan together with Horizon's stable role contracts. Execution specialists preserve unrelated changes, report observed operation and check failures honestly, and cannot deploy or publish unless the assigned specification explicitly authorizes it. Verifiers are read-only, reproduce proof, and return failed when an assertion is not satisfied. Do not require every work unit to restate these ambient invariants or exhaustively rehearse generic failure handling. Require task-specific recovery only when the objective needs behavior beyond those contracts.
 
@@ -179,9 +179,9 @@ Inspect the complete current planning state and report every presently visible b
   context: "Dynamic context supplies critiqueStage. During structure, assertions and continuity are intentionally empty: judge rubric, architecture, proportionality, milestones, and work decomposition without treating their absence as a defect. During complete, reconcile the populated per-step assertions and, on replanning, every completed-work continuity decision. Dynamic context also supplies immutable discovery history, previous plan, exact execution evidence, and the prior critique on repeated passes.",
   tools: "Use read-only Tools only when one exact critique claim needs source confirmation. Do not mutate planning artifacts or source.",
   output: `Return exactly:
-{"verdict":"accepted|repair|needs-input|blocked","summary":"critique outcome","findings":[{"owner":"rubric|design|decomposition|assertions|continuity|user","severity":"blocking|advisory","affectedMilestones":["exact milestone id"],"affectedSteps":["exact step id"],"issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":"specific reason or null"}
+{"verdict":"accepted|repair|needs-input","summary":"critique outcome","findings":[{"owner":"investigation|rubric|design|decomposition|assertions|continuity|user","severity":"blocking|advisory","affectedMilestones":["exact milestone id"],"affectedSteps":["exact step id"],"issue":"semantic issue","evidence":["reference"],"repair":"owner-specific repair"}],"question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]},"blockedReason":null}
 
 Use exact graph addresses from the supplied artifacts in affectedMilestones and affectedSteps. Use an empty array when a finding applies to the whole layer. Do not invent identifiers for findings.
 
-Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding.`,
+Use null for question when no user decision is needed. accepted cannot contain blocking findings. repair requires at least one blocking finding. needs-input requires one direct question. blockedReason is always null because only the controller owns terminal outcomes.`,
 });

@@ -5,7 +5,7 @@ import { COMMON_RULES, composePrompt } from "./prompts/compose.js";
 const PROGRESS_CHECKPOINT_INTERVAL = 8;
 
 export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
-  role: "You are Horizon's evidence progress controller. You inspect one specialist's bounded observations and report whether its assigned unknown frontier has materially changed.",
+  role: "You are Horizon's evidence progress observer. You summarize one specialist's bounded observations; the deterministic loop controller alone changes Tool availability.",
   task: "Produce a stable structured checkpoint of the questions this specialist still owns. Resolve an unknown only from supplied evidence. Identify the smallest exact evidence still needed; do not ask for generic additional inspection.",
   context: "Dynamic context supplies the specialist role, objective, original role context, recent observations, compacted evidence, and the prior checkpoint when one exists.",
   rules: `${COMMON_RULES}\n\nDescribe the current unknown frontier directly; do not invent identifiers for semantic questions. Evidence accumulation without a changed question, state, or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not invent proof obligations beyond the supplied role objective, context, and stop condition. For a verifier role, the executor report remains a claim, while the execution Fact and supplied Tool receipts provide governed provenance. The verifier must still independently inspect semantic and final-workspace claims. Do not decide implementation or call Tools.`,
@@ -72,12 +72,6 @@ function checkpoint(value: unknown, role: string): LoopCheckpoint | null {
   if (source.ready && unknowns.some(({ state }) => !["resolved", "assumed"].includes(state))) return null;
   return { object: "constal.horizon.loop-checkpoint", version: 1, role, ready: source.ready,
     summary: source.summary.trim(), unknowns, nextEvidence: source.nextEvidence.map((item) => String(item).trim()) };
-}
-
-function checkpointFingerprint(value: LoopCheckpoint): string {
-  return canonicalJson([...value.unknowns]
-    .sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)))
-    .map(({ question, state, resolution }) => ({ question, state, resolution })));
 }
 
 function bounded(value: unknown, depth = 0): unknown {
@@ -193,7 +187,6 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   let plateauStage = 0;
   let toolRounds = 0;
   let priorCheckpoint: LoopCheckpoint | null = null;
-  let priorCheckpointFingerprint: string | null = null;
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
     const offered = forcedPlateau || ordinal === maximum - 1 ? []
@@ -281,12 +274,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         toolRounds, checkpoint: current }, { tier: "audit" });
       progressCheckpoints.push({ fact: fact.hash, ready: current.ready, summary: current.summary });
       if (progressCheckpoints.length > 32) progressCheckpoints.splice(0, progressCheckpoints.length - 32);
-      const fingerprint = checkpointFingerprint(current);
-      if (current.ready || priorCheckpointFingerprint === fingerprint) {
-        if (plateauStage < plateauStages.length) narrowedPlateau = true;
-        else forcedPlateau = true;
-      }
-      priorCheckpoint = current; priorCheckpointFingerprint = fingerprint;
+      priorCheckpoint = current;
     }
   }
   throw new TypeError(`${spec.role} exhausted its ReAct safety ceiling without a final artifact`);

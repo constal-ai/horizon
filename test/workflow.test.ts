@@ -71,6 +71,7 @@ function continuity(revision: number, decisions: HzPlanContinuity["decisions"] =
 
 function planningState(value: HzPlan, decisions: HzPlanContinuity["decisions"] = []): HzPlanningState {
   return { object: "constal.horizon.planning-state", version: 1, revision: value.revision,
+    investigations: [investigation], investigationObservationSignatures: [],
     rubric: { object: "constal.horizon.rubric", version: 1, revision: value.revision, objective: value.objective,
       successCriteria: ["The requested behavior is proven."], constraints: [], nonGoals: [], openQuestions: value.unknowns,
       verificationPrinciples: ["Use independent proof."] },
@@ -80,7 +81,7 @@ function planningState(value: HzPlan, decisions: HzPlanContinuity["decisions"] =
     workPlan: { object: "constal.horizon.work-plan", version: 1, revision: value.revision, steps: value.steps },
     assertions: value.assertions, continuity: continuity(value.revision, decisions),
     critique: { object: "constal.horizon.plan-critique", version: 1, revision: value.revision,
-      verdict: value.status === "ready" ? "accepted" : value.status === "needs-input" ? "needs-input" : "blocked",
+      verdict: value.status === "ready" ? "accepted" : "needs-input",
       summary: value.summary, findings: [], question: value.question, blockedReason: value.blockedReason },
   };
 }
@@ -754,25 +755,36 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") {
-          plannerRuns++; const selected = plannerRuns === 1 ? first : repeated;
+          plannerRuns++; const selected = plannerRuns === 1 ? first : plannerRuns === 2 ? repeated
+            : { ...plan, revision: 3,
+                assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 3 })) };
           return handle({ plan: selected, state: planningState(selected), toolEvidence: [], planningRuns: 7 });
         }
         if (task.id === "horizon-question-reconciliation") return handle({
           object: "constal.horizon.question-reconciliation", version: 1, decision: "answered",
           rationale: "The user already selected the contract behavior.",
         });
+        if (task.id === "horizon-executor") return handle({ result: stepResult, toolEvidence: [] });
+        if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
+        if (task.id === "horizon-reconciler") return handle({ reconciliation: {
+          object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "The work is proven.",
+          remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current",
+          replanBrief: null, question: null, blockedReason: null,
+        }, toolEvidence: [] });
         throw new Error(`unexpected task ${task.id}`);
       },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
     } as unknown as Ctx;
     const result = await runHorizon(plan.objective, ctx);
-    expect(result.status).toBe("blocked");
-    expect(result.summary).toContain("already resolved");
+    expect(result.status).toBe("complete");
     expect(awaits).toBe(1);
-    expect(result.longHorizon.replans).toBe(1);
+    expect(result.longHorizon.replans).toBe(2);
   });
 
-  it("stops repeated replan cycles when execution and verification add no evidence", async () => {
+  it("routes an execution plateau through one user decision and resumes toward completion", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0; let plannerRuns = 0;
+    let executionRuns = 0; let reconciliationRuns = 0;
     const failedExecution: HzStepResult = { ...stepResult, status: "failed", summary: "Attempt failed.", changedFiles: [],
       verification: ["same failure"], observations: ["same evidence"], unknowns: [{
         question: "How can this path be repaired?", state: "open", resolution: null, evidence: ["same failure"] }] };
@@ -788,6 +800,7 @@ describe("Horizon workflow", () => {
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
       invoke: casRuntime(),
+      await: () => handle({ answer: "Use the alternative implementation seam identified in the failure evidence." }),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
@@ -797,23 +810,45 @@ describe("Horizon workflow", () => {
             assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: plannerRuns })) };
           return handle({ plan: selected, state: planningState(selected), toolEvidence: [], planningRuns: 7 });
         }
-        if (task.id === "horizon-executor") return handle({ result: failedExecution, toolEvidence: [] });
-        if (task.id === "horizon-verifier") return handle({ verification: failedProof, toolEvidence: [] });
-        if (task.id === "horizon-reconciler") return handle({ reconciliation: {
-          object: "constal.horizon.reconciliation", version: 2, action: "replan",
-          summary: "Try the work unit again.", remainingUnknowns: failedExecution.unknowns,
-          planningOwner: "decomposition", workspaceDisposition: "keep-current",
-          replanBrief: "Retry the unresolved work unit.", question: null, blockedReason: null,
-        }, toolEvidence: [] });
+        if (task.id === "horizon-executor") {
+          executionRuns++; return handle({ result: executionRuns <= 3 ? failedExecution : stepResult, toolEvidence: [] });
+        }
+        if (task.id === "horizon-verifier") return handle({ verification: executionRuns <= 3 ? failedProof : verification,
+          toolEvidence: [] });
+        if (task.id === "horizon-reconciler") {
+          reconciliationRuns++;
+          if (reconciliationRuns === 3) return handle({ reconciliation: {
+            object: "constal.horizon.reconciliation", version: 2, action: "ask",
+            summary: "Repeated evidence requires one implementation decision.", remainingUnknowns: failedExecution.unknowns,
+            planningOwner: "decomposition", workspaceDisposition: "keep-current",
+            replanBrief: "Use the user's selected alternative rather than repeating the unchanged attempt.",
+            question: { prompt: "How should I proceed after the repeated failure?", options: [
+              "Use the alternative implementation seam.", "Narrow the requested behavior.",
+              "Provide additional environment context.",
+            ] }, blockedReason: null,
+          }, toolEvidence: [] });
+          if (reconciliationRuns >= 4) return handle({ reconciliation: {
+            object: "constal.horizon.reconciliation", version: 2, action: "complete",
+            summary: "The alternative is proven.", remainingUnknowns: [], planningOwner: null,
+            workspaceDisposition: "keep-current", replanBrief: null, question: null, blockedReason: null,
+          }, toolEvidence: [] });
+          return handle({ reconciliation: {
+            object: "constal.horizon.reconciliation", version: 2, action: "replan",
+            summary: "Change the implementation approach.", remainingUnknowns: failedExecution.unknowns,
+            planningOwner: "decomposition", workspaceDisposition: "keep-current",
+            replanBrief: "Use a materially different implementation approach.", question: null, blockedReason: null,
+          }, toolEvidence: [] });
+        }
         throw new Error(`unexpected task ${task.id}`);
       },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
     } as unknown as Ctx;
 
     const result = await runHorizon(plan.objective, ctx);
-    expect(result.status).toBe("blocked");
-    expect(result.summary).toContain("no new evidence");
-    expect(result.plan?.revision).toBe(3);
-    expect(result.longHorizon).toMatchObject({ specialistRuns: 32, replans: 2, plateauCycles: 2 });
+    expect(result.status).toBe("complete");
+    expect(result.plan?.revision).toBe(4);
+    expect(result.longHorizon).toMatchObject({ replans: 3 });
     expect(committed.map(({ kind }) => kind)).toContain("horizon.plateau");
   });
 });

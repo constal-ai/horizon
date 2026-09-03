@@ -117,7 +117,7 @@ describe("EvidencePlateauDetector", () => {
     expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
   });
 
-  it("does not let a ready checkpoint bypass a remaining convergence stage", async () => {
+  it("does not let a ready checkpoint change the controller's Tool route", async () => {
     const offered: string[][] = []; let roleTurns = 0; let toolRounds = 0;
     const edit = { ...call({ edited: true }), name: "workspace_edit", maxEffect: "idempotent" as const,
       effectObserved: "idempotent" as const };
@@ -143,7 +143,7 @@ describe("EvidencePlateauDetector", () => {
       plateauStages: [["workspace_edit"], ["workspace_exec"]], maxRounds: 12,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
-    expect(offered[8]).toEqual(["workspace_exec"]);
+    expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
   });
 
   it("propagates Tool availability failures instead of silently degrading the role", async () => {
@@ -201,7 +201,7 @@ describe("EvidencePlateauDetector", () => {
       compactedGovernedToolObservations: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
   });
 
-  it("stops semantically unchanged unknowns even when Tool calls keep changing", async () => {
+  it("records semantic progress observations without letting them control Tool availability", async () => {
     const commits: unknown[] = []; let roleTurns = 0; let checkpoints = 0;
     const ctx = {
       turn: async (spec: { system?: string; tools?: string[] }) => {
@@ -228,7 +228,7 @@ describe("EvidencePlateauDetector", () => {
       tools: ["workspace_read"], maxRounds: 20,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
         ? value as { status: "blocked" } : null }, ctx);
-    expect(result.plateaued).toBe(true);
+    expect(result.plateaued).toBe(false);
     expect(checkpoints).toBe(2);
     expect(roleTurns).toBe(17);
     expect(commits).toEqual(expect.arrayContaining([

@@ -11,7 +11,8 @@ export const investigator = subtask<HzInvestigatorOutput>({
     const conversation = await runReactLoop({
       role: `investigator-${input.focus.id}`, system: INVESTIGATOR_SYSTEM, objective: input.focus.mission,
       context: { request: input.request, discoveryPlan: input.discoveryPlan,
-        workspaceReceipt: input.workspaceReceipt, focus: input.focus },
+        workspaceReceipt: input.workspaceReceipt, focus: input.focus,
+        priorInvestigations: input.priorInvestigations },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzInvestigationResult(value, input.focus.id),
     }, ctx);

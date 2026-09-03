@@ -26,6 +26,7 @@ export const reconciler = subtask<HzReconcilerResult>({
         restoreAvailable: input.restoreAvailable,
         pendingStepIds: pending.map(({ id }) => id),
         plateau: input.plateau,
+        attemptedPlateauReplan: input.attemptedPlateauReplan,
       },
       tools: input.tools,
       model: "model",
@@ -40,6 +41,8 @@ export const reconciler = subtask<HzReconcilerResult>({
           || verification.verdict !== "passed")) return null;
         if (result.action === "repair-step" && latest.status === "complete" && verification.verdict === "passed") return null;
         if (result.action === "reverify" && (latest.status !== "complete" || verification.verdict === "passed")) return null;
+        if (input.plateau.stableCycles >= 2 && ["continue", "repair-step", "reverify"].includes(result.action)) return null;
+        if (input.attemptedPlateauReplan && result.action === "replan") return null;
         return result;
       },
     }, ctx);

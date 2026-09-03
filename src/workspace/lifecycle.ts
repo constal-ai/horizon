@@ -118,18 +118,14 @@ async function resolveRequestedSource(request: HzRequest, ctx: Ctx): Promise<HzS
     throw new WorkspacePreparationError("Horizon requires an explicit artifact source or an authenticated GitHub binding.");
   }
   let answer: string | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     const resolved = await ctx.spawn(sourceResolver, { request, answer, tools }, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS }, attenuation: attenuation(tools, ctx),
     });
-    await ctx.commit({ kind: "horizon.source-resolution", attempt: attempt + 1,
+    await ctx.commit({ kind: "horizon.source-resolution", attempt,
       resolution: resolved.resolution, toolEvidence: resolved.toolEvidence }, { tier: "audit" });
     if (resolved.resolution.status === "ready" && resolved.resolution.source) return resolved.resolution.source;
-    if (resolved.resolution.status === "blocked") {
-      throw new WorkspacePreparationError(resolved.resolution.blockedReason ?? "Repository source resolution was blocked.");
-    }
-    if (attempt === 2) break;
     const response = await ctx.await<{ answer: string }>("horizon-source", {
       schema: { type: "object", required: ["answer"], additionalProperties: false,
         properties: { answer: { type: "string", minLength: 1, maxLength: 65_536 } } }, maxBytes: 65_536, afterRun: "ignore",
@@ -137,7 +133,6 @@ async function resolveRequestedSource(request: HzRequest, ctx: Ctx): Promise<HzS
     answer = response.answer.trim();
     if (!answer) throw new WorkspacePreparationError("Repository source resolution received an empty answer.");
   }
-  throw new WorkspacePreparationError("Repository source resolution remained ambiguous after two user clarifications.");
 }
 
 async function materializeSource(request: HzRequest, ctx: Ctx): Promise<HzResolvedSource> {

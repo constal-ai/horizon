@@ -1,6 +1,6 @@
 # Horizon
 
-Horizon is Constal's long-horizon software agent. It investigates a repository, commits an immutable natural-language execution specification, assigns each semantic responsibility to a focused child Agent, and keeps reconciling actual evidence with the plan until the work is proven complete or progress honestly plateaus.
+Horizon is Constal's long-horizon software agent. It investigates a repository, commits an immutable natural-language execution specification, assigns each semantic responsibility to a focused child Agent, and keeps reconciling actual evidence with the plan until the work is proven complete or one material user decision is required.
 
 It is a standalone Agent package built with `@constal/sdk`. It uses Constal's existing Model, Sandbox Pool, CAS, GitHub, and Web Resources; it does not create a parallel runtime, source store, credential system, or deployment path.
 
@@ -41,7 +41,7 @@ Dependency-ready work unit ──► Execution Agent ReAct
                                       │
                                Reconciliation Agent
                 ┌────────────┬────────┼────────────┐
-                │ continue   │ replan │ ask        │ complete / blocked
+                │ continue   │ replan │ ask        │ complete
                 │            ▼        ▼            ▼
                 │       Plan Fact r2  durable      immutable
                 │       (r1 remains)  await        CAS artifact
@@ -53,6 +53,7 @@ Dependency-ready work unit ──► Execution Agent ReAct
 ```text
 Initial planning
   Rubric
+    ├─ open evidence question ───► Focused investigation ───► Rubric
     ↓
   Design
     ↓
@@ -61,6 +62,10 @@ Initial planning
   Structural critique
        │
        ├─ accepted ──────────────► Assertions
+       │
+       ├─ evidence problem ──────► Focused investigation
+       │                              ↓
+       │                         Rubric → Design → fresh decomposition
        │
        ├─ rubric problem ────────► Rubric → Design → fresh decomposition
        │
@@ -77,10 +82,13 @@ Assertions
 Complete critique
        │
        ├─ assertion problem ─────► Whole-assertion-plan repair
+       ├─ evidence problem ──────► Focused investigation → corresponding upstream route
        └─ upstream problem ──────► corresponding upstream route
 ```
 
-Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique routes to the earliest invalid artifact, records exact affected milestone and step identities, and then critiques the repaired state again. An unchanged or recurring artifact state terminates deterministically. The critic also stops a semantically unchanged defect after its owner has attempted repair, while allowing a newly exposed defect at the same graph location to take the correct route.
+Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique reports the earliest deficient owner; the planning controller chooses the transition. A material evidence gap reopens a focused read-only investigation, whose evidence is accumulated into the same planning state before the affected downstream layers are rebuilt.
+
+Models never own a terminal planning transition. For each exact planning state, the controller records a repair route that returned to an already-observed state and makes that route unavailable on the next critique. The critic must then choose a different evidence or repair owner, accept explicit uncertainty that does not prevent execution, or formulate one durable user decision. This makes convergence a controller property without mechanically judging natural-language semantics.
 
 ### Execution repair and replanning
 
@@ -95,17 +103,17 @@ Execution attempt → Independent verification → Execution reconciliation
                   │                            │                          │
             repair step                    reverify                    replan
                   │                            │                          │
-        keep current workspace       reuse execution evidence     assertions → assertion repair
-        or restore last verified     and rerun verifier only      decomposition → whole-plan repair
-                  │                                                       design → fresh decomposition
-                  └────────────────────────────┐                          rubric → full downstream rebuild
+        keep current workspace       reuse execution evidence     investigation → missing evidence
+        or restore last verified     and rerun verifier only      assertions → assertion repair
+                  │                                               decomposition → whole-plan repair
+                  └────────────────────────────┐                  design → fresh decomposition
                                                ▼                          │
                                           next attempt ◄──────────────────┘
 ```
 
 Every attempt records its plan and step Facts, verification Fact, before/after workspace identity, latest verified restore point, and compact Tool receipts in CAS. Complete evidence remains in the referenced Facts rather than being copied into child-Run input.
 
-Reconciliation is semantic Agent work, but its controller route is structural. It may continue verified work, repair the same specification, repeat verification without repeating implementation, enter planning at the earliest invalid owner, ask one durable user question, or stop honestly. Operation retry is never an LLM decision.
+Reconciliation is semantic Agent work, but its controller route is structural. It may continue verified work, repair the same specification, repeat verification without repeating implementation, enter investigation or planning at the earliest invalid owner, or ask one durable user question. It cannot terminate the workflow. When repeated execution produces the same governed evidence, the controller disallows another identical execution route; one materially different replan may be tried before the unresolved decision is presented to the user. Operation retry is never an LLM decision.
 
 A new plan revision includes an independently critiqued continuity decision for every previously verified work unit: retain, reverify, rerun, or drop. Horizon does not compare plan prose or trust model-generated semantic IDs. Forward repair in the current workspace is the default. Restoration is explicit, uses the existing Sandbox Pool image contract, verifies the exact tree and status, and conservatively discards work beyond the restored verified prefix.
 
@@ -142,12 +150,12 @@ Standard ReAct roles have a 500-model-turn emergency ceiling; execution speciali
 | Whole-work-plan repair | Reconcile ownership and handoffs across the complete work graph after critique |
 | Assertion writer | Define independent positive, negative-path, and invariant proof for one step |
 | Whole-assertion-plan repair | Reconcile proof ownership across every current work unit after critique |
-| Plan critic | Find cross-artifact contradictions and route repair to the earliest owning planning loop |
+| Plan critic | Find cross-artifact contradictions and recommend the earliest evidence or planning owner; it cannot terminate the workflow |
 | Finalizer | Render converged planning artifacts into the immutable natural-language specification |
 | Execution specialist | One coherent semantic responsibility, executed as its own ReAct loop |
 | Verifier | Independently inspect the diff and reproduce proof before a step can complete |
 | Continuity reviewer | Decide whether previously verified work remains proven, needs reverification, must rerun, or was dropped |
-| Reconciler | Evidence-based continue, step repair, reverification, owner-routed replan, ask, complete, or blocked transition |
+| Reconciler | Evidence-based continue, step repair, reverification, owner-routed replan, ask, or complete recommendation |
 | Question reconciler | Decide semantically whether a proposed user decision was already answered |
 
 Role prompts are stable and organized as Role, Task, Context, Rules, Tools, and Output. Request-specific state is supplied as turn context. Tool descriptions explain their behavioral contract and Resource boundary. JSON is used only for transport; semantic intent stays in natural-language specifications.

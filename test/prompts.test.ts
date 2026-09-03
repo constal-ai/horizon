@@ -46,18 +46,18 @@ describe("Horizon role prompts", () => {
     expect(ASSERTION_SYSTEM).toContain("per-step assertion agent");
     expect(ASSERTION_PLAN_REPAIR_SYSTEM).toContain("complete accepted work plan");
     expect(CONTINUITY_SYSTEM).toContain("plan-continuity agent");
-    expect(CRITIQUE_SYSTEM).toContain("cross-plan critique agent");
+    expect(CRITIQUE_SYSTEM).toContain("cross-plan critique specialist");
     expect(PLANNER_SYSTEM).toContain("plan finalization agent");
     expect(EXECUTOR_SYSTEM).toContain("exactly one responsibility");
     expect(VERIFIER_SYSTEM).toContain("independent verification specialist");
     expect(RECONCILER_SYSTEM).toContain("new immutable revision");
   });
 
-  it("reconciles historical discovery unknowns without impossible artifact rewrites", () => {
+  it("reopens investigation for material evidence gaps without rewriting history", () => {
     expect(DESIGN_SYSTEM).toContain("immutable discovery snapshot");
-    expect(CRITIQUE_SYSTEM).toContain("historical snapshots, not mutable current-state records");
+    expect(CRITIQUE_SYSTEM).toContain("accumulating evidence history");
     expect(CRITIQUE_SYSTEM).toContain("Do not require an earlier artifact to be rewritten");
-    expect(CRITIQUE_SYSTEM).toContain("Discovery is not a repair owner here");
+    expect(CRITIQUE_SYSTEM).toContain("Route a still-material evidence gap back to investigation");
   });
 
   it("keeps discovery missions inside their read-only authority", () => {
@@ -76,7 +76,7 @@ describe("Horizon role prompts", () => {
     expect(CRITIQUE_SYSTEM).toContain("Over-proof is itself a blocking planning defect");
     expect(CRITIQUE_SYSTEM).toContain("authoritative clean Git baseline");
     expect(CRITIQUE_SYSTEM).toContain("do not require separate read-operation receipts");
-    expect(CRITIQUE_SYSTEM).toContain("never call it repeated merely because its graph address is the same");
+    expect(CRITIQUE_SYSTEM).toContain("unavailableRepairOwners");
   });
 
   it("gives cross-boundary repair one complete graph and stable structural targets", () => {

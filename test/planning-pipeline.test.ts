@@ -1,7 +1,7 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
-import type { HzDesign, HzExecutionAttempt, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative, HzPlanningState,
-  HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
+import type { HzDesign, HzExecutionAttempt, HzInvestigationResult, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative,
+  HzPlanningState, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
 import { planner, scopeMilestoneStepIds } from "../src/tasks/planner.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -46,10 +46,12 @@ const input: HzPlanInput = { request: { objective: rubric.objective, context: nu
       evidenceNeeded: ["Source"], stopWhen: "Ownership is proven." }], unknowns: [], blockedReason: null },
   investigations: [{ object: "constal.horizon.investigation", version: 1, focusId: "runtime", status: "complete",
     summary: "Runtime owns recovery.", findings: ["Runtime ownership."], evidence: ["src/runtime.ts"], unknowns: [],
-    planImplications: ["Reuse runtime."], blockedReason: null }], revision: 1, previousPlan: null, previousState: null,
+    planImplications: ["Reuse runtime."], blockedReason: null }], workspaceReceipt: "workspace-receipt",
+  revision: 1, previousPlan: null, previousState: null,
   completed: [], completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer: null, tools: [] };
 
 const priorState: HzPlanningState = { object: "constal.horizon.planning-state", version: 1, revision: 1,
+  investigations: input.investigations, investigationObservationSignatures: [],
   rubric, design, workPlan, assertions: [assertions],
   continuity: { object: "constal.horizon.plan-continuity", version: 1, revision: 1, decisions: [] },
   critique: accepted };
@@ -69,19 +71,21 @@ const executionEvidence: HzExecutionAttempt = { object: "constal.horizon.executi
 
 function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [design], options: {
   planningInput?: HzPlanInput;
+  rubrics?: HzRubric[];
   workByMilestone?: Record<string, typeof workPlan.steps>;
   workPlanRepairs?: HzWorkPlan[];
   assertionsByStep?: Record<string, HzStepAssertions>;
   assertionPlanRepairs?: HzStepAssertions[][];
   continuityRepairs?: Array<HzPlanningState["continuity"]["decisions"]>;
+  investigationResults?: HzInvestigationResult[];
   finalPlan?: HzPlan;
 } = {}) {
   const planningInput = options.planningInput ?? input;
   const spawned: string[] = []; const committed: Array<Record<string, unknown>> = [];
   const artifacts = new Map<string, string>([["planning-input", JSON.stringify(planningInput)]]); let artifactSequence = 0;
   const decompositionInputs: Array<{ milestoneId: string; acceptedSteps: typeof workPlan.steps }> = [];
-  let designIndex = 0; let criticIndex = 0; let workRepairIndex = 0; let assertionRepairIndex = 0;
-  let continuityIndex = 0;
+  let rubricIndex = 0; let designIndex = 0; let criticIndex = 0; let workRepairIndex = 0; let assertionRepairIndex = 0;
+  let continuityIndex = 0; let investigationIndex = 0;
   const ctx = {
     resources: { model: "model", cas: "cas" },
     invoke: async (_resource: unknown, operation: string, args: { text?: string; ref?: string }) => {
@@ -96,7 +100,9 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
     },
     spawn: (task: { id: string }, envelope: { ref?: string }) => {
       spawned.push(task.id);
-      if (task.id === "horizon-rubric") return handle({ artifact: rubric, toolEvidence: [] });
+      if (task.id === "horizon-rubric") return handle({
+        artifact: options.rubrics?.[Math.min(rubricIndex++, options.rubrics.length - 1)] ?? rubric, toolEvidence: [],
+      });
       if (task.id === "horizon-design") return handle({ artifact: designs[Math.min(designIndex++, designs.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-milestone-decomposition") {
         const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { milestoneId: string; acceptedSteps: typeof workPlan.steps };
@@ -121,6 +127,12 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
         object: "constal.horizon.plan-continuity", version: 1, revision: planningInput.revision,
         decisions: options.continuityRepairs?.[Math.min(continuityIndex++, options.continuityRepairs.length - 1)] ?? [],
       }, toolEvidence: [] });
+      if (task.id === "horizon-investigator") {
+        const result = options.investigationResults?.[Math.min(investigationIndex++,
+          options.investigationResults.length - 1)]!;
+        const focus = envelope as unknown as { focus: { id: string } };
+        return handle({ investigation: { ...result, focusId: focus.focus.id }, toolEvidence: [] });
+      }
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });
       throw new Error(`unexpected task ${task.id}`);
@@ -154,6 +166,28 @@ describe("Horizon multi-loop planner", () => {
     expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-phase").map(({ phase }) => phase))
       .toEqual(["rubric", "design", "decomposition:behavior", "critique:structure", "assertions:implement",
         "critique:complete", "finalization"]);
+  });
+
+  it("lets the initial rubric reopen investigation before design", async () => {
+    const openRubric: HzRubric = { ...rubric, openQuestions: [{
+      question: "Which existing Resource owns recovery?", state: "open", resolution: null,
+      evidence: ["Authenticated Resource catalog."],
+    }] };
+    const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
+      focusId: "placeholder", status: "complete", summary: "The runtime Resource owns recovery.",
+      findings: ["The existing Resource is the owner."], evidence: ["platform_get Resource catalog"], unknowns: [],
+      planImplications: ["Reuse the existing Resource."], blockedReason: null };
+    const fixture = planningContext([accepted], [design], {
+      rubrics: [openRubric, rubric], investigationResults: [additional],
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan.status).toBe("ready");
+    expect(result.state.investigations).toHaveLength(2);
+    expect(fixture.spawned.slice(0, 4)).toEqual([
+      "horizon-rubric", "horizon-investigator", "horizon-rubric", "horizon-design",
+    ]);
   });
 
   it("enters execution replanning at whole-work-plan repair without rerunning upstream phases", async () => {
@@ -387,6 +421,33 @@ describe("Horizon multi-loop planner", () => {
     expect(fixture.committed.filter(({ kind }) => kind === "horizon.planning-repair")).toHaveLength(2);
   });
 
+  it("routes a material evidence gap back through investigation and rebuilds the plan from accumulated evidence", async () => {
+    const missingEvidence: HzPlanCritique = { ...accepted, verdict: "repair",
+      summary: "The existing platform capability is not yet known.", findings: [{
+        owner: "investigation", severity: "blocking", affectedMilestones: ["behavior"], affectedSteps: [step.id],
+        issue: "Does the existing platform Resource expose the required operation?",
+        evidence: ["Authenticated Platform Resource catalog."],
+        repair: "Inspect the authenticated Resource and its operation contract before assigning implementation ownership.",
+      }] };
+    const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
+      focusId: "planning-gap-placeholder", status: "complete", summary: "The existing Resource owns the operation.",
+      findings: ["The operation belongs to the existing Resource adapter."], evidence: ["platform_get Resource catalog"],
+      unknowns: [], planImplications: ["Extend the existing Resource; do not create a parallel integration."], blockedReason: null };
+    const fixture = planningContext([missingEvidence, accepted, accepted], [design], {
+      investigationResults: [additional],
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan.status).toBe("ready");
+    expect(result.state.investigations).toHaveLength(2);
+    expect(result.state.investigations[1]).toEqual(expect.objectContaining({ summary: additional.summary,
+      focusId: expect.stringMatching(/^planning-gap-/) }));
+    expect(fixture.spawned).toContain("horizon-investigator");
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.investigation",
+      source: "planning-critique" }));
+  });
+
   it("routes an evidence-insoluble semantic decision to a durable user question", async () => {
     const question = { prompt: "Which public contract should the implementation use?", options: [
       "Preserve v1 behavior to maintain compatibility.",
@@ -407,33 +468,47 @@ describe("Horizon multi-loop planner", () => {
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-route");
   });
 
-  it("blocks when owner-routed planning repair leaves the artifacts unchanged", async () => {
+  it("excludes a no-progress repair route and converges on a durable user decision", async () => {
     const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Assertion proof is incomplete.",
       findings: [{ owner: "assertions", severity: "blocking",
         affectedMilestones: ["behavior"], affectedSteps: ["implement"],
         issue: "The negative path is not independently proven.", evidence: ["Current assertion set."],
         repair: "Add executable negative-path proof." }] };
-    const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
-      blockedReason: "Planning repair plateaued without changing the affected artifacts." };
-    const fixture = planningContext([accepted, repair], [design], { finalPlan: blocked });
+    const question = { prompt: "How should the unresolved proof obligation be handled?", options: [
+      "Provide the missing executable proof surface.",
+      "Proceed with the limitation recorded as an explicit assumption.",
+      "Revise the objective to remove the unsupported obligation.",
+    ] as [string, string, string] };
+    const needsDecision: HzPlanCritique = { ...accepted, verdict: "needs-input",
+      summary: "The assertion repair route made no progress and needs a user decision.", findings: [], question };
+    const waiting: HzPlan = { ...finalPlan, status: "needs-input", question };
+    const fixture = planningContext([accepted, repair, needsDecision], [design], { finalPlan: waiting });
     const result = await planner.run(fixture.envelope, fixture.ctx);
-    expect(result.plan.status).toBe("blocked");
-    expect(result.planningRuns).toBe(9);
+    expect(result.plan.status).toBe("needs-input");
+    expect(result.plan.question).toEqual(question);
+    expect(result.planningRuns).toBe(10);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
   });
 
-  it("detects an A to B to A planning repair cycle", async () => {
+  it("detects an A to B to A planning cycle and changes route instead of terminating", async () => {
     const repair: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Design remains inconsistent.",
       findings: [{ owner: "design", severity: "blocking", issue: "Ownership is inconsistent.",
         affectedMilestones: ["behavior"], affectedSteps: [],
         evidence: ["Design artifacts."], repair: "Reconcile ownership." }] };
     const alternate: HzDesign = { ...design, summary: "Alternate ownership design." };
-    const blocked: HzPlan = { ...finalPlan, status: "blocked", question: null,
-      blockedReason: "Planning repair returned to an already-observed artifact state." };
-    const fixture = planningContext([repair, repair], [design, alternate, design], { finalPlan: blocked });
+    const question = { prompt: "Which ownership boundary should govern the implementation?", options: [
+      "Keep runtime ownership and provide the missing contract.",
+      "Move ownership to the caller and revise the design.",
+      "Exclude the disputed behavior from this objective.",
+    ] as [string, string, string] };
+    const needsDecision: HzPlanCritique = { ...accepted, verdict: "needs-input",
+      summary: "Both design routes returned to an observed state.", findings: [], question };
+    const waiting: HzPlan = { ...finalPlan, status: "needs-input", question };
+    const fixture = planningContext([repair, repair, needsDecision], [design, alternate, design], { finalPlan: waiting });
     const result = await planner.run(fixture.envelope, fixture.ctx);
-    expect(result.plan.status).toBe("blocked");
-    expect(result.planningRuns).toBe(11);
+    expect(result.plan.status).toBe("needs-input");
+    expect(result.plan.question).toEqual(question);
+    expect(result.planningRuns).toBe(12);
     expect(fixture.committed.map(({ kind }) => kind)).toContain("horizon.planning-plateau");
   });
 });

@@ -33,7 +33,7 @@ describe("Horizon durable progress view", () => {
       plateau: { stableCycles: 2 } }));
     expect(state).toMatchObject({ currentStep: "implement", plateauCycles: 2 });
     state = horizonProgress.apply(state, fact(10, { kind: "horizon.plateau" }));
-    expect(state.status).toBe("blocked");
+    expect(state.status).toBe("executing");
     state = horizonProgress.apply(state, fact(11, { kind: "horizon.execution-replan-entry" }));
     expect(state.status).toBe("planning");
     state = horizonProgress.apply(state, fact(12, { kind: "horizon.workspace-restored" }));

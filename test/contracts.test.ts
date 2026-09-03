@@ -77,6 +77,25 @@ describe("Horizon transport contracts", () => {
       blockedReason: null }, "runtime")?.status).toBe("complete");
   });
 
+  it("rejects model-authored terminal control from semantic specialists", () => {
+    expect(parseHzSourceResolution({ object: "constal.horizon.source-resolution", version: 1, status: "blocked",
+      source: null, evidence: [], question: null, blockedReason: "No access." })).toBeNull();
+    expect(parseHzDiscoveryPlan({ object: "constal.horizon.discovery-plan", version: 1, status: "blocked",
+      summary: "No evidence.", workspaceRoot: "/workspace/repositories/source",
+      focuses: [{ id: "runtime", title: "Runtime", mission: "Inspect it.", questions: ["Who owns it?"],
+        evidenceNeeded: ["Source"], stopWhen: "Ownership is known." }], unknowns: [], blockedReason: "No access." })).toBeNull();
+    expect(parseHzInvestigationResult({ object: "constal.horizon.investigation", version: 1, focusId: "runtime",
+      status: "blocked", summary: "No evidence.", findings: [], evidence: [], unknowns: [], planImplications: [],
+      blockedReason: "No access." }, "runtime")).toBeNull();
+    expect(parseHzPlanCritique({ object: "constal.horizon.plan-critique", version: 1, revision: 1,
+      verdict: "blocked", summary: "The critic stopped.", findings: [], question: null,
+      blockedReason: "Repeated finding." }, 1)).toBeNull();
+    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "blocked",
+      summary: "Execution stopped.", remainingUnknowns: [], planningOwner: null,
+      workspaceDisposition: "keep-current", replanBrief: null, question: null,
+      blockedReason: "No progress." })).toBeNull();
+  });
+
   it("validates independent verification without interpreting its prose mechanically", () => {
     expect(parseHzVerification({ object: "constal.horizon.verification", version: 1, stepId: "implement",
       verdict: "passed", summary: "The specified behavior and replay proof passed.",

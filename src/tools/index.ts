@@ -19,12 +19,14 @@ export const OPERATIONAL_TOOL_NAMES = [
 export const DISCOVERY_TOOL_NAMES = [
   "github_repository", "github_tree", "github_file",
   "workspace_list", "workspace_search", "workspace_read",
+  "platform_query", "platform_get",
   "web_search", "web_fetch",
 ] as const;
 
 export const INVESTIGATOR_TOOL_NAMES = [
   "github_repository", "github_tree", "github_file",
-  "workspace_list", "workspace_search", "workspace_read", "web_search", "web_fetch",
+  "workspace_list", "workspace_search", "workspace_read",
+  "platform_query", "platform_get", "web_search", "web_fetch",
 ] as const;
 
 export const PLANNER_TOOL_NAMES = INVESTIGATOR_TOOL_NAMES;
