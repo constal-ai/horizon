@@ -3,7 +3,7 @@ import type {
 } from "@constal/sdk";
 import { HORIZON_OPERATIONAL_SYSTEM } from "./prompts/operational.js";
 import { runReactLoop } from "./react-loop.js";
-import { applicationError, rethrowRuntimeControl } from "./runtime-control.js";
+import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "./runtime-control.js";
 import { availableTools, OPERATIONAL_TOOL_NAMES } from "./tools/index.js";
 import type { HorizonRoutedEvent } from "./behaviors.js";
 import type { HzToolEvidence } from "./contracts.js";
@@ -61,7 +61,7 @@ interface SupervisionSnapshot {
     runId: string | null; phase: string | null; detail: string };
 }
 
-export const HORIZON_PROCESS = `Issue work follows one causal Run tree: ingress accepts the request; source preparation pins the repository and workspace; discovery frames unknowns; investigators resolve them; planning produces a rubric, design, ordered work, assertions, and critique; the user approves the immutable plan; execution handles one work unit at a time; independent verification and reconciliation decide whether to continue, replan, ask, or stop; successful work is packaged and published. Child Runs are specialist phases. A suspended parent waiting on a child is still running. Commits in the Run journal are the durable facts available for branching.`;
+export const HORIZON_PROCESS = `Issue work follows one causal Run tree: ingress accepts the request; source preparation pins the repository and workspace; discovery frames unknowns; investigators resolve them; planning produces a rubric, design, ordered work, assertions, and critique; the user approves the immutable plan; execution handles one work unit at a time; independent verification and reconciliation decide whether to continue, repair the current step, reverify without repeating implementation, enter planning at the earliest invalid owner, ask, or stop. New plan revisions explicitly review continuity of completed work. Workspace restoration is exceptional and returns only to an exact verified image. Resource contracts—not the model—own operation retry and uncertain effects. Successful work is packaged and published. Child Runs are specialist phases. A suspended parent waiting on a child is still running. Commits in the Run journal are the durable facts available for branching.`;
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -430,7 +430,7 @@ export async function runHorizonOperational(event: HorizonRoutedEvent, ctx: Ctx)
     rethrowRuntimeControl(error);
     const detail = applicationError(error);
     return { object: "constal.horizon.operational-result", version: 1, status: "blocked", action: { kind: "respond" },
-      message: `I could not complete this operation: ${detail.message}`,
+      message: applicationFailureSummary("this operation", error),
       evidence: [`${detail.name} occurred after platform recovery was exhausted.`] };
   }
 }

@@ -101,7 +101,7 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
       if (task.id === "horizon-milestone-decomposition") {
         const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { milestoneId: string; acceptedSteps: typeof workPlan.steps };
         decompositionInputs.push({ milestoneId: phase.milestoneId, acceptedSteps: phase.acceptedSteps });
-        return handle({ artifact: { object: "constal.horizon.milestone-work", version: 1, revision: 1,
+        return handle({ artifact: { object: "constal.horizon.milestone-work", version: 1, revision: planningInput.revision,
           milestoneId: phase.milestoneId, steps: options.workByMilestone?.[phase.milestoneId] ?? [step] }, toolEvidence: [] });
       }
       if (task.id === "horizon-work-plan-repair") return handle({
@@ -196,6 +196,26 @@ describe("Horizon multi-loop planner", () => {
     expect(result.planningRuns).toBe(5);
     expect(fixture.spawned).toEqual(["horizon-assertion-plan-repair", "horizon-plan-critique",
       "horizon-plan-critique", "horizon-plan-finalizer"]);
+  });
+
+  it.each([
+    { owner: "design" as const, prefix: ["horizon-design", "horizon-milestone-decomposition"] },
+    { owner: "rubric" as const, prefix: ["horizon-rubric", "horizon-design", "horizon-milestone-decomposition"] },
+  ])("enters execution replanning at $owner and rebuilds only its downstream artifacts", async ({ owner, prefix }) => {
+    const revisedAssertions: HzStepAssertions = { ...assertions, revision: 2 };
+    const acceptedRevision: HzPlanCritique = { ...accepted, revision: 2 };
+    const revisedFinal: HzPlan = { ...finalPlan, revision: 2, assertions: [revisedAssertions] };
+    const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
+      restartAt: owner, executionEvidence, replanBrief: `Execution evidence invalidated the ${owner}.` };
+    const revisedDesign: HzDesign = { ...design, revision: 2 };
+    const fixture = planningContext([acceptedRevision, acceptedRevision], [revisedDesign], { planningInput,
+      workByMilestone: { behavior: [step] }, assertionsByStep: { [step.id]: revisedAssertions }, finalPlan: revisedFinal });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(revisedFinal);
+    expect(fixture.spawned.slice(0, prefix.length)).toEqual(prefix);
+    if (owner === "design") expect(fixture.spawned).not.toContain("horizon-rubric");
   });
 
   it("subjects completed-work continuity to cross-plan critique and global repair", async () => {

@@ -4,7 +4,7 @@ import {
 } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
 import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
-import { applicationError, rethrowRuntimeControl } from "../runtime-control.js";
+import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "../runtime-control.js";
 
 const WORKFLOW = { id: "horizon-github", version: "1", targetAgent: "horizon" } as const;
 const PROVIDER = "crn:constal:production:platform:default:credential-provider/github-platform-app";
@@ -260,6 +260,7 @@ export async function runHorizonSetup(message: unknown, ctx: Ctx): Promise<Setup
     rethrowRuntimeControl(error);
     const detail = applicationError(error);
     return terminal("blocked", 1, "Setup needs attention",
-      `${detail.message}. No setup change was reported as complete.`, [{ label: "Failure", value: detail.name }], ctx);
+      `${applicationFailureSummary("setup", error)} No setup change was reported as complete.`,
+      [{ label: "Failure", value: detail.name }], ctx);
   }
 }

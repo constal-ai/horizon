@@ -80,6 +80,33 @@ Complete critique
 
 Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique routes to the earliest invalid artifact, records exact affected milestone and step identities, and then critiques the repaired state again. Repeated repair scopes and repeated artifact states terminate as an honest planning plateau instead of spawning another decomposition wave.
 
+### Execution repair and replanning
+
+```text
+Resource operation recovery
+  repeat / idempotency / reconcile / outcome unknown
+  (owned by the pinned Resource contract)
+                     ↓
+Execution attempt → Independent verification → Execution reconciliation
+                                               │
+                  ┌────────────────────────────┼──────────────────────────┐
+                  │                            │                          │
+            repair step                    reverify                    replan
+                  │                            │                          │
+        keep current workspace       reuse execution evidence     assertions → assertion repair
+        or restore last verified     and rerun verifier only      decomposition → whole-plan repair
+                  │                                                       design → fresh decomposition
+                  └────────────────────────────┐                          rubric → full downstream rebuild
+                                               ▼                          │
+                                          next attempt ◄──────────────────┘
+```
+
+Every attempt records its plan and step Facts, verification Fact, before/after workspace identity, latest verified restore point, and compact Tool receipts in CAS. Complete evidence remains in the referenced Facts rather than being copied into child-Run input.
+
+Reconciliation is semantic Agent work, but its controller route is structural. It may continue verified work, repair the same specification, repeat verification without repeating implementation, enter planning at the earliest invalid owner, ask one durable user question, or stop honestly. Operation retry is never an LLM decision.
+
+A new plan revision includes an independently critiqued continuity decision for every previously verified work unit: retain, reverify, rerun, or drop. Horizon does not compare plan prose or trust model-generated semantic IDs. Forward repair in the current workspace is the default. Restoration is explicit, uses the existing Sandbox Pool image contract, verifies the exact tree and status, and conservatively discards work beyond the restored verified prefix.
+
 One Horizon mission is one Constal Session and one logical Sandbox. Every child Run inherits that Session and therefore sees the same workspace. Provider standby snapshots preserve the live Session between active periods. Verified steps additionally publish immutable provider images with durable checkpoint receipts, while the original source archive, workspace identity, and final outputs remain content-addressed artifacts.
 
 The Run can suspend and resume at every durable primitive. Source identity, WorkspaceReady, Discovery, every planning phase, plans, specialist results, independent verification, workspace checkpoints, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence. Changed completed work is explicitly invalidated and rerun; unchanged completed proof is retained.
@@ -117,7 +144,9 @@ Standard ReAct roles have a 500-model-turn emergency ceiling; execution speciali
 | Finalizer | Render converged planning artifacts into the immutable natural-language specification |
 | Execution specialist | One coherent semantic responsibility, executed as its own ReAct loop |
 | Verifier | Independently inspect the diff and reproduce proof before a step can complete |
-| Reconciler | Evidence-based continue, replan, ask, complete, or blocked transition |
+| Continuity reviewer | Decide whether previously verified work remains proven, needs reverification, must rerun, or was dropped |
+| Reconciler | Evidence-based continue, step repair, reverification, owner-routed replan, ask, complete, or blocked transition |
+| Question reconciler | Decide semantically whether a proposed user decision was already answered |
 
 Role prompts are stable and organized as Role, Task, Context, Rules, Tools, and Output. Request-specific state is supplied as turn context. Tool descriptions explain their behavioral contract and Resource boundary. JSON is used only for transport; semantic intent stays in natural-language specifications.
 

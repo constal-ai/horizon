@@ -79,4 +79,14 @@ describe("Horizon role prompts", () => {
     expect(EXECUTOR_SYSTEM).toContain("previous governed attempt");
     expect(QUESTION_RECONCILIATION_SYSTEM).toContain("semantic choice and consequence");
   });
+
+  it("does not ask models to invent identity for semantic content", () => {
+    for (const prompt of [DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, PLANNER_SYSTEM,
+      EXECUTOR_SYSTEM, VERIFIER_SYSTEM, RECONCILER_SYSTEM, CRITIQUE_SYSTEM, LOOP_CHECKPOINT_SYSTEM]) {
+      expect(prompt).not.toContain('"unknowns":[{"id"');
+      expect(prompt).not.toContain('"openQuestions":[{"id"');
+      expect(prompt).not.toContain("stable unknown id");
+    }
+    expect(CRITIQUE_SYSTEM).toContain("Do not invent identifiers for findings");
+  });
 });

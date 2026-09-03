@@ -1,4 +1,5 @@
 import { canonicalJson, type Ctx } from "@constal/sdk";
+import { DurableHandoffTooLarge } from "./runtime-control.js";
 
 /** Exact maximum accepted by the bound CAS getText operation. */
 export const HORIZON_ARTIFACT_ENVELOPE_MAX_BYTES = 1_048_576;
@@ -11,7 +12,7 @@ export async function storeArtifact(ctx: Ctx, value: unknown): Promise<ArtifactE
   const text = canonicalJson(value);
   const bytes = new TextEncoder().encode(text).byteLength;
   if (bytes > HORIZON_ARTIFACT_ENVELOPE_MAX_BYTES) {
-    throw new RangeError("Horizon handoff exceeds the bound CAS text-read contract");
+    throw new DurableHandoffTooLarge();
   }
   const stored = await ctx.invoke<{ ref: string; bytes: number }>(ctx.resources.cas!, "putText", { text });
   if (!stored.ref || stored.bytes !== bytes) {

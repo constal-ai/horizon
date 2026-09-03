@@ -13,7 +13,7 @@ import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_LOOP_WALL
   HORIZON_STANDARD_LOOP_TURNS } from "./limits.js";
 import { milestoneMarkdown, planMarkdown, questionMarkdown, waitPresentation } from "./github-conversation.js";
 import { publishWorkspace } from "./github-publication.js";
-import { applicationError, rethrowRuntimeControl } from "./runtime-control.js";
+import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "./runtime-control.js";
 import { archiveWorkspace, captureWorkspaceCheckpoint, inspectWorkspaceState, prepareWorkspace, restoreWorkspaceAnchor,
   WorkspacePreparationError,
   type PreparedWorkspace } from "./workspace/lifecycle.js";
@@ -315,7 +315,7 @@ function unplannedBlockedResult(summary: string, workspace: PreparedWorkspace | 
 async function recordApplicationFailure(ctx: Ctx, stage: string, error: unknown): Promise<string> {
   rethrowRuntimeControl(error);
   const detail = applicationError(error);
-  const summary = `Horizon stopped during ${stage}: ${detail.message}`;
+  const summary = applicationFailureSummary(stage, error);
   try { await ctx.commit({ kind: "horizon.application-failure", stage, error: detail }, { tier: "audit" }); }
   catch (commitError) { rethrowRuntimeControl(commitError); throw commitError; }
   return summary;

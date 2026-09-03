@@ -10,8 +10,7 @@ import { assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgen
   workPlanRepairAgent,
   type PlanningPhaseResult } from "./planning-phases.js";
 
-const MAX_REPAIR_CYCLES = 4;
-const MAX_FINDING_REPAIR_ATTEMPTS = 2;
+const PLATEAU_CONFIRMATIONS = 2;
 type RepairOwner = Exclude<HzCritiqueOwner, "user">;
 const REPAIR_ORDER: readonly RepairOwner[] = ["rubric", "design", "decomposition", "assertions", "continuity"];
 
@@ -267,7 +266,7 @@ export const planner = subtask<HzPlannerResult>({
     } | null => {
       const owned = findings.filter((finding) => finding.owner === owner);
       const findingKeys = [...new Set(owned.map(repairFindingKey))].sort();
-      if (findingKeys.some((key) => (repairAttempts.get(key) ?? 0) >= MAX_FINDING_REPAIR_ATTEMPTS)) return null;
+      if (findingKeys.some((key) => (repairAttempts.get(key) ?? 0) >= PLATEAU_CONFIRMATIONS)) return null;
       const attempts: Record<string, number> = {};
       for (const key of findingKeys) {
         const attempt = (repairAttempts.get(key) ?? 0) + 1;
@@ -335,9 +334,6 @@ export const planner = subtask<HzPlannerResult>({
           from: "repair", to: "needs-input", finding: repairFindingKey(userFinding) }, { tier: "audit" });
         break;
       }
-      if (repairCycle >= MAX_REPAIR_CYCLES) {
-        critique = blockedCritique(input, "Structural planning repair exceeded its convergence safety ceiling."); break;
-      }
       if (blocking.some(({ owner }) => owner === "assertions" || owner === "continuity")) {
         critique = blockedCritique(input, "Structural critique required repair of an artifact that does not exist at this stage."); break;
       }
@@ -346,7 +342,7 @@ export const planner = subtask<HzPlannerResult>({
       const findingKeys = [...new Set(blocking.filter((finding) => finding.owner === owner).map(repairFindingKey))].sort();
       const repair = beginRepair(owner, blocking);
       if (!repair) {
-        const reason = `Structural planning did not converge after ${MAX_FINDING_REPAIR_ATTEMPTS} repairs of the same ${owner} scope.`;
+        const reason = `Structural planning did not converge after ${PLATEAU_CONFIRMATIONS} repairs of the same ${owner} scope.`;
         critique = blockedCritique(input, reason);
         await commitPlateau("structure", reason, findingKeys, await planningFingerprint(rubric, design, workPlan, []));
         break;
@@ -394,15 +390,12 @@ export const planner = subtask<HzPlannerResult>({
           from: "repair", to: "needs-input", finding: repairFindingKey(userFinding) }, { tier: "audit" });
         break;
       }
-      if (repairCycle >= MAX_REPAIR_CYCLES) {
-        critique = blockedCritique(input, "Planning repair exceeded its convergence safety ceiling."); break;
-      }
       const owner = earliestRepairOwner(blocking);
       if (!owner) throw new TypeError("Complete critique did not identify a repairable planning owner");
       const findingKeys = [...new Set(blocking.filter((finding) => finding.owner === owner).map(repairFindingKey))].sort();
       const repair = beginRepair(owner, blocking);
       if (!repair) {
-        const reason = `Planning did not converge after ${MAX_FINDING_REPAIR_ATTEMPTS} repairs of the same ${owner} scope.`;
+        const reason = `Planning did not converge after ${PLATEAU_CONFIRMATIONS} repairs of the same ${owner} scope.`;
         critique = blockedCritique(input, reason);
         await commitPlateau("complete", reason, findingKeys,
           await planningFingerprint(rubric, design, workPlan, assertions, continuity));

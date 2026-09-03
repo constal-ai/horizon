@@ -56,6 +56,14 @@ Every workspace Tool reopens the same logical Session sandbox and routes argv ex
 
 Provider standby snapshot/resume is the normal fast path for a live Session. After each passed independent verification, Horizon computes the actual worktree tree through an alternate temporary Git index, publishes an immutable provider image, stores a checkpoint receipt in CAS, and commits its lineage to the plan, execution, and verification Facts.
 
+Each execution attempt is also a durable CAS record. It binds the immutable plan Fact, work-unit identity, prior-attempt reference, executor and verifier Facts, compact Tool receipts, before/after workspace tree and status, and the verified image to which the attempt may safely return. The executor, verifier, reconciler, and planner receive CAS envelopes rather than copied large payloads. Exact Tool evidence remains in the referenced Facts and Run journal.
+
+Failed verification does not automatically rewind the workspace. Reconciliation normally continues useful partial work in place. It may explicitly select the latest verified restore point only when unverified changes are corrupt, mis-scoped, or should be abandoned. Horizon recreates the same logical Session sandbox from that exact image and accepts it only when its inspected tree and status match the checkpoint receipt. If no image exists or verification differs, restoration stops with a durable blocked result.
+
+Execution replanning enters the existing planning pipeline at the earliest invalid owner. Assertion defects repair the complete assertion plan and can re-run verification without implementation. Work ownership or dependency defects enter whole-work-plan repair. Design and rubric defects rebuild their downstream artifacts. A continuity Agent then classifies every prior verified work unit as retained, reverified, rerun, or dropped; the cross-plan critic reviews those decisions before the new plan becomes immutable. Runtime enforcement checks only graph references and receipts, never plan prose.
+
+Resource operation recovery remains below this workflow. The pinned operation contract—not a model—decides whether an invocation repeats, deduplicates, reconciles, or returns an unknown outcome. Restoring files never claims to reverse an external effect.
+
 A prepared cache image is never trusted merely because its identifier resolves. Horizon verifies its runner and WorkspaceReady receipt after forking. If materialization, receipt verification, or baseline verification fails, Horizon:
 
 1. commits a cache-invalid Fact;
