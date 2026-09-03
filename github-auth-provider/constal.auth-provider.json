@@ -3,7 +3,7 @@
   "kind": "auth-provider",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "entry": "src/github-auth-provider/index.ts",
   "config": {},
   "bindings": {

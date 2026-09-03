@@ -9,6 +9,7 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
     "deploy": "node scripts/deploy.mjs",
+    "deploy:components": "node scripts/deploy-components.mjs",
     "sandbox:check": "node scripts/release-sandbox-image.mjs",
     "sandbox:build": "node scripts/release-sandbox-image.mjs --build constal-horizon-sandbox:dev"
   },
