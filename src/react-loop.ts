@@ -100,12 +100,16 @@ function compactBounded(value: unknown, depth = 0): unknown {
   return Object.fromEntries(Object.entries(source).slice(0, 32).map(([key, entry]) => [key, compactBounded(entry, depth + 1)]));
 }
 
-function callValue(call: ToolCallRecord): unknown {
+function durableCallValue(call: ToolCallRecord): unknown {
   if (call.preview !== undefined) return bounded(call.preview);
   if (call.result !== undefined) return bounded(call.result);
   if (call.ref !== undefined) return { ref: call.ref };
   if (call.error !== undefined) return { error: bounded(call.error) };
   return null;
+}
+
+function reasoningCallValue(call: ToolCallRecord): unknown {
+  return Object.hasOwn(call, "result") ? call.result : durableCallValue(call);
 }
 
 const VOLATILE_OBSERVATION_FIELDS = new Set(["commandId", "usage"]);
@@ -122,7 +126,7 @@ function stableObservation(value: unknown, depth = 0): unknown {
 
 function callSignature(call: ToolCallRecord): string {
   return canonicalJson({ name: call.name, args: stableObservation(bounded(call.args)), ref: call.ref ?? null,
-    value: stableObservation(callValue(call)) });
+    status: call.status, value: call.ref ?? stableObservation(durableCallValue(call)) });
 }
 
 export class EvidencePlateauDetector {
@@ -156,14 +160,19 @@ function candidate(draft: Pick<TurnDraft, "artifact" | "message">): unknown {
 }
 
 function evidence(calls: readonly ToolCallRecord[]): HzToolEvidence[] {
-  return calls.map((call) => ({
-    name: call.name, status: call.status, args: bounded(call.args), ref: call.ref ?? null, result: callValue(call),
-  }));
+  return calls.map((call) => {
+    const item: HzToolEvidence = {
+      name: call.name, status: call.status, args: bounded(call.args), ref: call.ref ?? null, result: durableCallValue(call),
+    };
+    if (Object.hasOwn(call, "result")) Object.defineProperty(item, "value",
+      { value: call.result, enumerable: false, configurable: false, writable: false });
+    return item;
+  });
 }
 
 function roundContext(calls: readonly ToolCallRecord[]): unknown[] {
   return calls.map((call) => ({ name: call.name, status: call.status, args: bounded(call.args), ref: call.ref ?? null,
-    result: callValue(call) }));
+    result: reasoningCallValue(call) }));
 }
 
 export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise<ReactLoopResult<T>> {
@@ -247,7 +256,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
       for (const observation of [...compactedEvidence, ...projected]) unique.set(canonicalJson(observation), observation);
       compactedEvidence = [...unique.values()].slice(-128);
       const fact = await ctx.commit({ kind: "horizon.react-compaction", role: spec.role, rounds: older.length,
-        observations: older.flat() }, { tier: "audit" });
+        observations: projected }, { tier: "audit" });
       compacted.push({ fact: fact.hash, rounds: older.length });
       if (compacted.length > 32) compacted.splice(0, compacted.length - 32);
     }

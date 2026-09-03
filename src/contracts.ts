@@ -488,6 +488,8 @@ export interface HzToolEvidence {
   args: unknown;
   ref: string | null;
   result: unknown;
+  /** Complete in-memory Tool value for same-invocation decisions; intentionally omitted from durable serialization. */
+  value?: unknown;
 }
 
 export interface HzToolEvidenceSummary {

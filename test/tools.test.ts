@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
-import { platformGetPreview } from "../src/tools/platform.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
   workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
@@ -22,25 +21,6 @@ describe("Horizon Tool capability projection", () => {
     expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["cas", "model", "sandbox", "web"]);
   });
 
-  it("carries exact Run failure evidence into later reasoning without materializing the full trace", () => {
-    const cursor = "cursor-".repeat(300);
-    const preview = platformGetPreview({ object: "constal.api.object", ref: { kind: "run", id: "horizon/session/run" },
-      next: cursor, evidence: { source: "coordinator", complete: false, warnings: ["older entries remain"], observedAt: 10 },
-      value: { run: { runId: "run", status: "failed", error: "journal continuation does not match the dispatched snapshot",
-        result: { explanation: "x".repeat(20_000) }, limits: { turnsUsed: 22, maxTurns: 500 } },
-      workflow: { currentNodeId: "node:10", nodes: Array.from({ length: 100 }, (_, index) => ({
-        id: `node:${index}`, status: index === 99 ? "failed" : "complete", summary: "work".repeat(100),
-      })) },
-      journal: { head: 300, before: 200, hasOlder: true, entries: Array.from({ length: 100 }, (_, index) => ({
-        seq: index, pos: `root/${index}`, kind: "turn", status: index === 98 ? "failed" : "completed",
-        error: index === 98 ? { message: "model failed" } : undefined, value: { body: "y".repeat(10_000) },
-      })) },
-      resourceInvocations: Array.from({ length: 100 }, (_, index) => ({ id: String(index), terminalStatus: "completed" })) } });
-    expect(preview).toMatchObject({ next: cursor, value: { run: { runId: "run", status: "failed",
-      error: "journal continuation does not match the dispatched snapshot" },
-    journal: { entries: expect.arrayContaining([expect.objectContaining({ pos: "root/98", status: "failed" })]) } } });
-    expect(new TextEncoder().encode(JSON.stringify(preview)).byteLength).toBeLessThanOrEqual(16_384);
-  });
 
   it("confines every normalized Tool path to the governed workspace", () => {
     expect(normalizeWorkspacePath("src/../package.json", "/workspace/repository")).toBe("/workspace/repository/package.json");

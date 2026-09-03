@@ -152,6 +152,30 @@ describe("EvidencePlateauDetector", () => {
       tools: ["workspace_patch"], maxRounds: 8, parse: () => null }, ctx)).rejects.toBeInstanceOf(ToolUnavailable);
   });
 
+  it("passes the complete Tool observation to the next reasoning turn while keeping durable evidence CAS-backed", async () => {
+    const actual = { value: { run: { runId: "failed-run", status: "failed", error: "actual failure" } },
+      journal: "x".repeat(20_000) };
+    const observed = { ...call(null), ref: "result-ref", preview: "{\"object\":\"truncated\"}..." };
+    Object.defineProperty(observed, "result", { value: actual, enumerable: false });
+    const contexts: unknown[] = []; let turns = 0;
+    const ctx = {
+      turn: async (spec: { context?: unknown }) => {
+        contexts.push(spec.context); turns++;
+        if (turns === 1) return { toolCalls: [observed], message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+      commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+      tools: ["workspace_read"], maxRounds: 4,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(contexts[1]).toMatchObject({ recentGovernedToolObservations: [[{ result: actual }]] });
+    expect(result.evidence[0]).toMatchObject({ ref: "result-ref", result: "{\"object\":\"truncated\"}..." });
+    expect(result.evidence[0]?.value).toBe(actual);
+    expect(JSON.stringify(result.evidence)).not.toContain("actual failure");
+  });
+
   it("keeps bounded compacted evidence available while committing complete older rounds", async () => {
     const contexts: unknown[] = []; const commits: unknown[] = []; let turns = 0;
     const ctx = {

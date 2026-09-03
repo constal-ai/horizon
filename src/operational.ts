@@ -348,7 +348,7 @@ function detailHasCheckpoint(value: ApiGetResult | null | { error: string }, che
 function evidenceHasCheckpoint(evidence: readonly HzToolEvidence[], run: string, checkpoint: string): boolean {
   return evidence.some((item) => {
     if (item.name !== "platform_get" || item.status !== "ok") return false;
-    let value = item.result;
+    let value = item.value ?? item.result;
     if (typeof value === "string") try { value = JSON.parse(value); } catch { return false; }
     const result = record(value); const detail = record(result?.value); const selected = record(detail?.run) ?? detail;
     const journal = record(detail?.journal);
