@@ -309,7 +309,8 @@ function activeWork(snapshot: SupervisionSnapshot): boolean {
     && snapshot.history.runs.some(({ status }) => ["queued", "leased", "suspended"].includes(status));
 }
 
-function conversationalWaits(snapshot: SupervisionSnapshot): Record<string, unknown>[] {
+function conversationalWaits(snapshot: SupervisionSnapshot): Record<string, unknown>[] | null {
+  if ("error" in snapshot.waits && (!snapshot.currentRun || "error" in snapshot.currentRun)) return null;
   return conversationalWaitItems(snapshot.currentRun, snapshot.waits);
 }
 
@@ -371,6 +372,9 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
     let operations: Array<{ id: string; operation: HorizonControlOperation; input: Record<string, unknown> }>;
     if (result.action.kind === "answer-work") {
       const waits = conversationalWaits(snapshot);
+      if (waits === null) return { ...result, status: "blocked", action: { kind: "respond" },
+        message: "I recognized this as an answer, but the durable work state is temporarily unavailable. I have not discarded or reinterpreted your reply.",
+        evidence: [...result.evidence, "The work Run and wait observations were unavailable."] };
       if (waits.length !== 1) return { ...result, status: "needs-input", action: { kind: "respond" },
         message: waits.length === 0 ? "There is no open work decision for me to answer right now."
           : "More than one work decision is open, so I need the specific question you are answering.",

@@ -59,6 +59,11 @@ describe("Horizon GitHub Channel", () => {
       .resolves.toMatchObject({ ignored: true, reason: "event_not_configured", response: { status: 202 } });
   });
 
+  it("never activates work from an issue deletion payload", async () => {
+    await expect(horizonGitHub.protocol.receive(request("issues", { ...payload(), action: "deleted" }), context()))
+      .resolves.toMatchObject({ ignored: true, reason: "event_not_configured", response: { status: 202 } });
+  });
+
   it("routes issue comments directly to their selected sink without reconstructing conversation state", async () => {
     const invoke = vi.fn();
     const value = { ...payload("ordinary issue"), action: "created", comment: { body: "What is the current plan?" } };

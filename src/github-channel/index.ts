@@ -102,7 +102,8 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
   const action = boundedText(payload.action, 128);
   const issueValue = issue(payload);
   if (event === "issues") {
-    const activated = selected.mentions.some((mention) => issueValue.body.includes(mention))
+    const activated = ["opened", "reopened", "edited"].includes(action)
+      && selected.mentions.some((mention) => issueValue.body.includes(mention))
       || action === "labeled" && selected.label !== "" && issueValue.labels.includes(selected.label);
     return activated && selected.events.includes("github.issue.activated") ? "github.issue.activated" : null;
   }

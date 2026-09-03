@@ -197,6 +197,28 @@ describe("Horizon behavior routing", () => {
     })] }), expect.any(Object));
   });
 
+  it("does not reinterpret unavailable work state as an empty wait list", async () => {
+    const invoke = vi.fn(async (resource: string, operation: string) => {
+      if (resource === "github" && operation === "issue.get") return { issue: { number: 10, title: "Implement reactions" } };
+      if (resource === "github" && operation === "issue.comments.list") return { comments: [{ id: 2, body: "2" }] };
+      if (resource === "api") throw new Error("PolicyDenied: ConstalApiDelegationInvalid");
+      throw new Error(`unexpected invocation ${resource}#${operation}`);
+    });
+    const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+      object: "constal.horizon.operational-result", version: 1, status: "complete",
+      message: "Decision recorded.", action: { kind: "answer-work", answer: "2" },
+      evidence: ["The reply semantically answers the presented decision."],
+    }) }, artifact: null }));
+    const invokeAsync = vi.fn();
+    const ctx = { invoke, invokeAsync, turn, commit: vi.fn(async () => ({ hash: "a".repeat(64) })),
+      resources: { model: "model", github: "github", api: "api" }, run: { id: "front", namespace: "default" } } as unknown as Ctx;
+    await expect(runHorizonOperational(event("2"), ctx)).resolves.toMatchObject({
+      status: "blocked", action: { kind: "respond" }, message: expect.stringContaining("temporarily unavailable"),
+      evidence: expect.arrayContaining(["The work Run and wait observations were unavailable."]),
+    });
+    expect(invokeAsync).not.toHaveBeenCalled();
+  });
+
   it("applies an exact natural-language pause through the governed Run control", async () => {
     const reads = readFixture({ runStatus: "leased" });
     const plan = { object: "constal.change-plan", id: "plan-pause", hash: "b".repeat(64) };
