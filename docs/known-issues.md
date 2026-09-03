@@ -2,7 +2,7 @@
 
 ## Deleted GitHub issues can activate work
 
-- Status: open
+- Status: fixed in Horizon GitHub Channel 0.3.10
 - Observed: 2026-09-03
 - Evidence: Run `43721e92-dd93-48ca-9d4e-6422078e77cb`
 
@@ -17,7 +17,7 @@ or unrelated update into new work.
 
 ## A classified decision reply can fail to reach the work wait
 
-- Status: open
+- Status: fixed in Horizon 0.6.15 and Constal API Resource 15
 - Observed: 2026-09-03
 - Evidence: foreground Run `951770da-1c9b-4633-88cf-9384cf43aabd`, work Run `0cd361b2-5262-4215-bbae-3d6c11269d79`
 
