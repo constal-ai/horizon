@@ -1,6 +1,6 @@
 import { channel, hashValue, type ChannelContext, type ChannelRequest } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
-import { HORIZON_GITHUB_EVENT_CATALOG } from "../github-events.js";
+import { HORIZON_GITHUB_EVENT_CATALOG, HORIZON_GITHUB_MENTIONS } from "../github-events.js";
 
 const provider = { kind: "local", resourceKind: "auth-provider", id: "horizon-github" } as const;
 const CONSTAL_COMMENT_MARKER = /<!--\s*constal:[a-f0-9]{64}\s*-->/u;
@@ -36,12 +36,14 @@ function encode(value: unknown): string {
 
 function config(value: unknown): HorizonGitHubConfig {
   const source = record(value); const routes = record(source.routes);
+  const mentions = Array.isArray(source.mentions) ? source.mentions
+    : typeof source.mention === "string" ? [...HORIZON_GITHUB_MENTIONS, source.mention] : null;
   const eventIds = HORIZON_GITHUB_EVENT_CATALOG.events.map(({ id }) => id);
   if (!Array.isArray(source.repositories) || source.repositories.length < 1 || source.repositories.length > 500
     || source.repositories.some((item) => typeof item !== "string" || !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/u.test(item))
     || !Array.isArray(source.events) || source.events.length < 1 || source.events.some((item) => !eventIds.includes(item as never))
-    || !Array.isArray(source.mentions) || source.mentions.length < 1 || source.mentions.length > 8
-    || source.mentions.some((item) => typeof item !== "string" || !/^@[A-Za-z0-9-]{1,100}$/u.test(item))
+    || !mentions || mentions.length < 1 || mentions.length > 8
+    || mentions.some((item) => typeof item !== "string" || !/^@[A-Za-z0-9-]{1,100}$/u.test(item))
     || typeof source.label !== "string" || source.label.length > 64
     || !Array.isArray(source.approverPermissions) || source.approverPermissions.length < 1
     || source.approverPermissions.some((item) => !["write", "maintain", "admin"].includes(String(item)))
@@ -55,7 +57,7 @@ function config(value: unknown): HorizonGitHubConfig {
     normalizedRoutes[event] = behavior as "issue-work" | "operate";
   }
   return { repositories: [...new Set(source.repositories as string[])], events: [...new Set(source.events as string[])],
-    routes: normalizedRoutes, mentions: [...new Set(source.mentions as string[])], label: source.label,
+    routes: normalizedRoutes, mentions: [...new Set(mentions as string[])], label: source.label,
     approverPermissions: [...new Set(source.approverPermissions as HorizonGitHubConfig["approverPermissions"])], semanticApproval: true };
 }
 
@@ -114,7 +116,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.8",
+  version: "0.3.9",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],

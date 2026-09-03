@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChannelContext, ChannelRequest } from "@constal/sdk";
-import horizonGitHub from "../src/github-channel/index.js";
+import horizonGitHub, { horizonGitHubConfig } from "../src/github-channel/index.js";
 
 const config = {
   repositories: ["constal-ai/horizon"],
@@ -46,6 +46,12 @@ describe("Horizon GitHub Channel", () => {
       const event = await horizonGitHub.protocol.receive(request("issues", payload(`${mention} work on this`), `delivery-${index}`), context());
       expect(event).toMatchObject({ data: { behavior: "issue-work", eventClass: "github.issue.activated" } });
     }
+  });
+
+  it("normalizes the prior single-mention setup shape during an in-place upgrade", () => {
+    const { mentions: _mentions, ...prior } = config;
+    expect(horizonGitHubConfig({ ...prior, mention: "@constalai" }).mentions)
+      .toEqual(["@constalai", "@constal-ai"]);
   });
 
   it("acknowledges unconfigured or inactive events without creating an Agent Run", async () => {
