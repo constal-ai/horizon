@@ -393,6 +393,84 @@ describe("Horizon workflow", () => {
     expect(lifecycleState.restores).toBe(1);
   });
 
+  it("restores the retained verified prefix and reruns only its failed dependent after replanning", async () => {
+    lifecycleState.restores = 0;
+    const prepareStep = { ...plan.steps[0]!, id: "prepare", title: "Prepare", dependsOn: [] };
+    const implementStep = { ...plan.steps[0]!, id: "implement", dependsOn: ["prepare"] };
+    const prepareResult = { ...stepResult, stepId: "prepare", summary: "Prepared the verified foundation." };
+    const prepareAssertion = { ...plan.assertions[0]!, stepId: "prepare" };
+    const twoStepPlan: HzPlan = { ...plan, steps: [prepareStep, implementStep],
+      assertions: [prepareAssertion, plan.assertions[0]!] };
+    const revisedPlan: HzPlan = { ...twoStepPlan, revision: 2,
+      steps: [prepareStep, { ...implementStep, specification: "Use the live boundary observed by the failed attempt." }],
+      assertions: twoStepPlan.assertions.map((assertion) => ({ ...assertion, revision: 2 })) };
+    const continuityDecision: HzPlanContinuity["decisions"] = [{ priorStepId: "prepare", nextStepId: "prepare",
+      disposition: "retain", reason: "The verified prerequisite remains valid.", evidence: ["prepare-verification"] }];
+    const failed = { ...stepResult, status: "failed" as const, summary: "The dependent used a stale boundary." };
+    const failedProof = { ...verification, verdict: "failed" as const, summary: "The dependent proof failed.",
+      checks: [{ target: "dependent behavior", outcome: "failed" as const, evidence: "stale boundary" }],
+      failureBrief: "Repair the dependent work specification." };
+    const plannerInputs: Array<Record<string, unknown>> = []; const executedSteps: string[] = [];
+    let sequence = 0; let plannerRuns = 0; let executorRuns = 0; let verifierRuns = 0; let reconcilerRuns = 0;
+    const ctx = {
+      resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
+      run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
+        agent: { id: "horizon", version: "0.6.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
+      commit: async (artifact: unknown) => ({ hash: `fact-${++sequence}`, artifact,
+        artifactHash: `artifact-${sequence}` }) as unknown as Fact<unknown>,
+      invoke: casRuntime((stored) => {
+        if (stored && typeof stored === "object" && !Array.isArray(stored) && "restartAt" in stored) {
+          plannerInputs.push(stored as Record<string, unknown>);
+        }
+      }),
+      spawn: (task: { id: string }, envelope: unknown) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
+        if (task.id === "horizon-planner") {
+          plannerRuns++; const selected = plannerRuns === 1 ? twoStepPlan : revisedPlan;
+          return handle({ plan: selected, state: planningState(selected,
+            plannerRuns === 1 ? [] : continuityDecision), toolEvidence: [], planningRuns: 7 });
+        }
+        if (task.id === "horizon-executor") {
+          executorRuns++;
+          const selected = executorRuns === 1 ? prepareResult : executorRuns === 2 ? failed : stepResult;
+          executedSteps.push(selected.stepId); return handle({ result: selected, toolEvidence: [] });
+        }
+        if (task.id === "horizon-verifier") {
+          verifierRuns++;
+          return handle({ verification: verifierRuns === 1 ? { ...verification, stepId: "prepare" }
+            : verifierRuns === 2 ? failedProof : verification, toolEvidence: [] });
+        }
+        if (task.id === "horizon-reconciler") {
+          reconcilerRuns++;
+          const decision = reconcilerRuns === 1
+            ? { action: "continue", summary: "The prerequisite is proven.", planningOwner: null,
+              workspaceDisposition: "keep-current", replanBrief: null }
+            : reconcilerRuns === 2
+              ? { action: "replan", summary: "The dependent specification is stale.", planningOwner: "decomposition",
+                workspaceDisposition: "restore-last-verified", replanBrief: "Repair only the failed dependent." }
+              : { action: "complete", summary: "The repaired dependent is proven.", planningOwner: null,
+                workspaceDisposition: "keep-current", replanBrief: null };
+          return handle({ reconciliation: { object: "constal.horizon.reconciliation", version: 2,
+            ...decision, remainingUnknowns: [], question: null, blockedReason: null }, toolEvidence: [] });
+        }
+        throw new Error(`unexpected task ${task.id}: ${String(envelope)}`);
+      },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
+    } as unknown as Ctx;
+
+    const result = await runHorizon(plan.objective, ctx);
+
+    expect(result).toMatchObject({ status: "complete", plan: { revision: 2 } });
+    expect(executedSteps).toEqual(["prepare", "implement", "implement"]);
+    expect(lifecycleState.restores).toBe(1);
+    expect(plannerInputs[1]).toMatchObject({ restartAt: "decomposition",
+      completed: [{ stepId: "prepare", status: "complete" }],
+      completedEvidence: [{ stepId: "prepare", verification: { verdict: "passed" } }],
+      executionEvidence: { stepId: "implement", execution: { status: "failed" } } });
+  });
+
   it("requires approval of the exact issue-work plan before spawning an executor", async () => {
     const sequence: string[] = []; const committed: Array<{ kind?: string; planFact?: string }> = []; let fact = 0;
     const ctx = {
