@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
+import { PLATFORM_TOOLS } from "../src/tools/platform.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
   workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
@@ -19,6 +20,12 @@ describe("Horizon Tool capability projection", () => {
     expect(availableTools(["workspace_read", "web_fetch", "web_search", "github_file"], { resources }))
       .toEqual(["workspace_read", "web_fetch"]);
     expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["cas", "model", "sandbox", "web"]);
+  });
+
+  it("describes the exact Run projection at the platform Tool boundary", () => {
+    expect(PLATFORM_TOOLS.platform_get?.description).toContain("top-level fields run, workflow, journal, lineage, and resourceInvocations");
+    expect(PLATFORM_TOOLS.platform_get?.description).toContain("status, result, and error are inside run");
+    expect(PLATFORM_TOOLS.platform_get?.description).toContain("Never repeat a completed page");
   });
 
   it("confines every normalized Tool path to the governed workspace", () => {
