@@ -58,7 +58,7 @@ async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>
 
 export default agent({
   id: "horizon",
-  version: "0.6.13",
+  version: "0.6.14",
   model: "model",
   mode: "script",
   tools: TOOLS,
