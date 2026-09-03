@@ -15,7 +15,7 @@ export async function publishWorkspace(request: HzRequest, plan: HzPlan, planFac
   if (request.source?.kind !== "github") return null;
   if (!ctx.resources.github) throw new TypeError("GitHub publication requires the accepted GitHub Resource binding");
   const issue = issueNumber(request);
-  if (issue === null) throw new TypeError("GitHub issue-work publication requires an exact issue number");
+  if (issue === null) return null;
   const marker = await hashValue({ object: "constal.horizon.publication", version: 1, run: ctx.run.id,
     planFact, artifact: artifact.ref, repository: `${request.source.owner}/${request.source.repository}`, issue });
   const branchName = `constal/horizon-${issue}-${planFact.slice(0, 12)}`;

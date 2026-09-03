@@ -4,6 +4,17 @@ import type { HzPlan, HzRequest } from "../src/contracts.js";
 import { publishWorkspace } from "../src/github-publication.js";
 
 describe("Horizon GitHub publication", () => {
+  it("does not publish a direct GitHub-backed Run without issue-work context", async () => {
+    const request: HzRequest = { objective: "Inspect the repository", context: null,
+      constraints: ["Do not publish."], source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
+      environment: { name: "default", cache: true, setup: [] } };
+    const invoke = vi.fn();
+    await expect(publishWorkspace(request, { revision: 1 } as HzPlan, "plan-fact", {
+      ref: "a".repeat(64), bytes: 100, path: "/workspace/final.tar.gz",
+    }, { resources: { github: "github" }, invoke } as unknown as Ctx)).resolves.toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("publishes the immutable artifact to a deterministic branch before creating a pull request", async () => {
     const request: HzRequest = { objective: "Fix the issue", context: { event: { issue: 42 } }, constraints: [],
       source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
