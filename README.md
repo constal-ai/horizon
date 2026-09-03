@@ -4,7 +4,9 @@ Horizon is Constal's long-horizon software agent. It investigates a repository, 
 
 It is a standalone Agent package built with `@constal/sdk`. It uses Constal's existing Model, Sandbox Pool, CAS, GitHub, and Web Resources; it does not create a parallel runtime, source store, credential system, or deployment path.
 
-GitHub issues use two durable Session lanes. The foreground Session remains responsive to questions, decisions, and steering while the work Session owns investigation, planning, approval, execution, and recovery. The foreground supervisor reads the authenticated private issue, recent comments, authoritative Run detail, and open waits before deciding whether to answer, resolve a work decision, steer active work, or start new work. Every work control is applied through a reviewed Constal API ChangePlan.
+GitHub issues use two Session lanes: one stable durable work Session for investigation, planning, approval, execution, and recovery, plus one delivery-scoped foreground Session for each conversational webhook. A new question therefore does not wait behind the long-running work Session. The foreground supervisor reads the authenticated private issue, recent comments, authoritative Run detail, and open waits before deciding whether to answer, resolve a work decision, steer active work, or start new work. It preserves unavailable state as unavailable rather than interpreting a failed read as an empty Run or wait list.
+
+The GitHub Channel authenticates and decodes the webhook, classifies supported lifecycle events, selects the Agent sink, and encodes replies. It does not implement Horizon's conversational or work semantics. Starting idle work is a durable cross-Session delivery to the stable work Session. Controls on existing work use a reviewed Constal API ChangePlan through the ordinary bound Resource; Horizon receives no ambient management credential and creates no separate authority path. See [the execution architecture](docs/execution-architecture.md#conversation-and-work-lanes).
 
 ## Long-horizon architecture
 

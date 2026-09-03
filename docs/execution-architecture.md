@@ -6,6 +6,39 @@ A Horizon mission maps to one Constal Session. The bound Sandbox Pool derives on
 
 The Session sandbox is recoverable compute, not authority. Constal's journal and Facts own orchestration, Policy, accepted Resource revisions, plans, verification, and checkpoint lineage. The sandbox owns only the current working filesystem and local processes. The workspace runner supervises commands, forwards cancellation, confines working directories to `/workspace`, and computes the actual Git worktree tree without mutating the repository index.
 
+## Conversation and work lanes
+
+One GitHub issue has a stable work Session. Each accepted conversational webhook uses a separate delivery-scoped foreground Session, so questions and steering can be evaluated while the work Session is executing, suspended on child work, waiting for a user, or recovering.
+
+```text
+GitHub webhook
+      │
+      ▼
+GitHub Channel + Auth Provider
+  authenticate · decode · classify supported event · select sink
+      │
+      ├─ issue activation ───────────────► stable work Session
+      │                                    investigation → plan → approval → execution
+      │
+      └─ issue conversation ─────────────► delivery-scoped foreground Session
+                                           │
+                                           ├─ read issue, comments, Runs, and waits
+                                           ├─ answer directly
+                                           ├─ deliver new work to the work Session
+                                           └─ apply a reviewed work control
+                                                       │
+                                                       ▼
+                                                stable work Session
+```
+
+The Channel owns transport concerns: webhook authentication evidence, event decoding, idempotent delivery identity, destination selection, and response encoding. Horizon owns semantic interpretation after admission. Unsupported lifecycle events do not activate work merely because their payload still contains a mention.
+
+The foreground supervisor reads GitHub through the bound GitHub Resource and reads authoritative process state through the bound Constal API Resource. It derives a compact activity projection from exact Run and wait evidence. A read failure remains `unavailable`; it is never collapsed into “no active Run” or “no open wait.” Informational replies require no work control. Starting idle work commits one queued cross-Session delivery. Answering a decision, steering, pausing, resuming, cancelling, interrupting, or branching existing work uses a reviewed ChangePlan against the exact observed work Session and Run.
+
+The Constal API Driver receives only short-lived authority derived from its admitted Resource invocation. The capability is bound to the invocation's canonical arguments and pinned authority; whether the arguments are inline or content-addressed cannot change that identity. The Session owner redeems it before a management operation runs. This uses the platform's ordinary Resource invocation and authority contract rather than adding a Horizon-specific queue, controller, or credential system.
+
+Agent responses are committed with presentation metadata and returned through the originating Channel. The Channel sends them to the issue destination using the same governed GitHub Resource and idempotent delivery identity.
+
 ## Image layers
 
 ```text
