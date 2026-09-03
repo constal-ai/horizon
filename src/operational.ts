@@ -54,10 +54,14 @@ interface SupervisionSnapshot {
   thread: GitHubThreadContext;
   issue: unknown;
   comments: unknown;
-  runs: ApiQueryResult | { error: string };
   currentRun: ApiGetResult | null | { error: string };
   rootRun: ApiGetResult | null | { error: string };
   waits: ApiQueryResult | { error: string };
+  history: { state: "available"; runs: Array<{ ref: ApiObjectRef; runId: string | null; parentRun: string | null;
+    status: string; scheduler: unknown; createdAt: unknown; updatedAt: unknown; durationMs: unknown; elapsedMs: unknown;
+    totalMicroUsd: unknown; turnsUsed: unknown; maxTurns: unknown }>;
+    next: string | null; complete: boolean; warnings: unknown[] }
+    | { state: "unavailable"; error: string };
   activity: { state: "idle" | "running" | "waiting-user" | "failed" | "complete" | "transitioning";
     runId: string | null; phase: string | null; detail: string };
 }
@@ -86,9 +90,12 @@ function threadContext(value: unknown): GitHubThreadContext | null {
   const issue = Number(source?.issue);
   const foregroundSession = typeof sessions?.foreground === "string" ? sessions.foreground : "";
   const workSession = typeof sessions?.work === "string" ? sessions.work : "";
+  const thread = workSession.endsWith("-work") ? workSession.slice(0, -5) : "";
+  const foregroundSuffix = thread && foregroundSession.startsWith(`${thread}-front-`)
+    ? foregroundSession.slice(`${thread}-front-`.length) : "";
+  const validForeground = foregroundSession === `${thread}-front` || /^[a-f0-9]{16}$/u.test(foregroundSuffix);
   if (!owner || !name || extra !== undefined || !Number.isSafeInteger(issue) || issue < 1
-    || !foregroundSession.endsWith("-front") || !workSession.endsWith("-work")
-    || foregroundSession.slice(0, -6) !== workSession.slice(0, -5)
+    || !thread || !validForeground
     || foregroundSession.length > 256 || workSession.length > 256) return null;
   return { owner, repository: name, issue, foregroundSession, workSession };
 }
@@ -123,6 +130,23 @@ function runStatus(value: Record<string, unknown>): string {
 
 function activeRunItems(value: ApiQueryResult | { error: string }): Record<string, unknown>[] {
   return queryItems(value).filter((item) => ["queued", "leased", "suspended"].includes(runStatus(item)));
+}
+
+function workHistory(value: ApiQueryResult | { error: string }): SupervisionSnapshot["history"] {
+  if ("error" in value) return { state: "unavailable", error: value.error };
+  const evidence = record(value.evidence); const warnings = Array.isArray(evidence?.warnings) ? evidence.warnings : [];
+  const runs = queryItems(value).flatMap((item) => {
+    const ref = objectRef(item); if (!ref) return [];
+    const fields = runFields(item);
+    return [{ ref, runId: runId(item), parentRun: parentRunId(item), status: runStatus(item),
+      scheduler: fields.scheduler ?? null,
+      createdAt: fields.created_at ?? null, updatedAt: fields.updated_at ?? null,
+      durationMs: fields.duration_ms ?? null, elapsedMs: fields.elapsed_ms ?? null,
+      totalMicroUsd: fields.total_micro_usd ?? null, turnsUsed: fields.turns_used ?? null,
+      maxTurns: fields.max_turns ?? null }];
+  });
+  return { state: "available", runs, next: value.next,
+    complete: value.next === null && evidence?.complete === true, warnings };
 }
 
 function activeLeaf(value: ApiQueryResult | { error: string }): Record<string, unknown> | null {
@@ -182,8 +206,8 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
       { op: "eq", field: "session", value: thread.workSession }] }, limit: 200,
   }));
-  return { object: "constal.horizon.supervision", version: 1, thread, issue, comments, runs, currentRun, rootRun: rootDetail, waits,
-    activity: workActivity(currentRun, waits) };
+  return { object: "constal.horizon.supervision", version: 1, thread, issue, comments, currentRun, rootRun: rootDetail, waits,
+    history: workHistory(runs), activity: workActivity(currentRun, waits) };
 }
 
 function workActivity(current: ApiGetResult | null | { error: string }, waits: ApiQueryResult | { error: string }): SupervisionSnapshot["activity"] {
@@ -281,8 +305,8 @@ function queryItems(value: ApiQueryResult | { error: string }): Record<string, u
 }
 
 function activeWork(snapshot: SupervisionSnapshot): boolean {
-  return queryItems(snapshot.runs).some((item) => ["queued", "leased", "suspended"].includes(String(item.state))
-    || ["queued", "leased", "suspended"].includes(String(record(item.fields)?.status)));
+  return snapshot.history.state === "available"
+    && snapshot.history.runs.some(({ status }) => ["queued", "leased", "suspended"].includes(status));
 }
 
 function conversationalWaits(snapshot: SupervisionSnapshot): Record<string, unknown>[] {
@@ -301,8 +325,9 @@ async function applyWorkOperations(ctx: Ctx, operations: Array<{ id: string; ope
   return { operation: operations.at(-1)!.operation, plan: plan.hash, receipt: receipt.id, state: receipt.state };
 }
 
-function exactRun(snapshot: SupervisionSnapshot, id: string): Record<string, unknown> | null {
-  return queryItems(snapshot.runs).find((item) => runId(item) === id) ?? null;
+function exactRun(snapshot: SupervisionSnapshot, id: string): ApiObjectRef | null {
+  if (snapshot.history.state !== "available") return null;
+  return snapshot.history.runs.find(({ runId }) => runId === id)?.ref ?? null;
 }
 
 function detailRunId(value: ApiGetResult | null | { error: string }): string | null {
@@ -362,6 +387,9 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
         data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id },
       } }];
     } else if (result.action.kind === "start-work") {
+      if (snapshot.history.state === "unavailable") return { ...result, status: "blocked", action: { kind: "respond" },
+        message: "I cannot determine whether issue work is already active because the authoritative Run inventory is unavailable.",
+        evidence: [...result.evidence, snapshot.history.error] };
       if (!activeWork(snapshot)) {
         const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective }, {
           tier: "audit", to: `session:${snapshot.thread.workSession}`, deliver: "queue",

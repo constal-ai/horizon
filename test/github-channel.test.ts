@@ -35,7 +35,7 @@ describe("Horizon GitHub Channel", () => {
     expect(event).toMatchObject({ type: "github.issues", reply: { destination: "constal-ai/horizon#42",
       metadata: { provider: "github", repository: "constal-ai/horizon", issue: 42 } }, data: {
       object: "constal.horizon.event", behavior: "issue-work", eventClass: "github.issue.activated",
-      context: { sessions: { foreground: expect.stringMatching(/-front$/u), work: expect.stringMatching(/-work$/u) } },
+      context: { sessions: { foreground: expect.stringMatching(/-front-[a-f0-9]{16}$/u), work: expect.stringMatching(/-work$/u) } },
       source: { kind: "github", owner: "constal-ai", repository: "horizon", ref: "main" },
     }, session: expect.stringMatching(/^github-[a-f0-9]{48}-work$/u) });
     expect("ignored" in event).toBe(false);
@@ -50,10 +50,17 @@ describe("Horizon GitHub Channel", () => {
     const invoke = vi.fn();
     const value = { ...payload("ordinary issue"), action: "created", comment: { body: "What is the current plan?" } };
     const event = await horizonGitHub.protocol.receive(request("issue_comment", value), context(invoke));
+    const duplicate = await horizonGitHub.protocol.receive(request("issue_comment", value), context(invoke));
+    const next = await horizonGitHub.protocol.receive(request("issue_comment", value, "delivery-2"), context(invoke));
     expect(event).toMatchObject({ data: { behavior: "operate", eventClass: "github.issue.comment",
       objective: "What is the current plan?", context: { comment: { id: "" },
-        sessions: { foreground: expect.stringMatching(/-front$/u), work: expect.stringMatching(/-work$/u) } } },
-    session: expect.stringMatching(/^github-[a-f0-9]{48}-front$/u) });
+        sessions: { foreground: expect.stringMatching(/-front-[a-f0-9]{16}$/u), work: expect.stringMatching(/-work$/u) } } },
+    session: expect.stringMatching(/^github-[a-f0-9]{48}-front-[a-f0-9]{16}$/u) });
+    expect(next).toMatchObject({ data: { context: { sessions: {
+      work: (event as { data: { context: { sessions: { work: string } } } }).data.context.sessions.work,
+    } } } });
+    expect((duplicate as { session: string }).session).toBe((event as { session: string }).session);
+    expect((next as { session: string }).session).not.toBe((event as { session: string }).session);
     expect(invoke).not.toHaveBeenCalled();
   });
 

@@ -3,7 +3,8 @@ import type { Ctx } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG, horizonRoutedEvent } from "../src/behaviors.js";
 import { HORIZON_PROCESS, runHorizonOperational } from "../src/operational.js";
 
-const sessions = { foreground: `github-${"a".repeat(48)}-front`, work: `github-${"a".repeat(48)}-work` };
+const sessions = { foreground: `github-${"a".repeat(48)}-front-${"b".repeat(16)}`,
+  work: `github-${"a".repeat(48)}-work` };
 
 function event(objective: string) {
   return horizonRoutedEvent({ object: "constal.horizon.event", version: 1, behavior: "operate",
@@ -95,6 +96,33 @@ describe("Horizon behavior routing", () => {
       status: "complete", message: "I am currently planning the change.", action: { kind: "respond" },
     });
     expect(invoke).toHaveBeenCalledWith("github", "issue.get", { owner: "constal-ai", repository: "horizon", issue: 10 });
+  });
+
+  it("exposes prior failed attempts as exact queryable work history", async () => {
+    const failed = { ...runItem("failed"), id: `horizon/${sessions.work}/failed-run`,
+      fields: { ...runItem("failed").fields, id: "failed-run", parent_run: "root-run",
+        created_at: 10, updated_at: 30, duration_ms: 20, elapsed_ms: 20 } };
+    const active = { ...runItem("leased"), fields: { ...runItem("leased").fields,
+      created_at: 40, updated_at: 50, duration_ms: null, elapsed_ms: 10 } };
+    const invoke = readFixture({ runs: [active, failed] });
+    const observed: Array<{ tools: string[]; context: { supervision: { history: unknown } } }> = [];
+    const turn = vi.fn(async (input: { tools: string[]; context: { supervision: { history: unknown } } }) => {
+      observed.push(input);
+      return { toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+        object: "constal.horizon.operational-result", version: 1, status: "complete",
+        message: "The failed attempt is available for exact inspection.", action: { kind: "respond" },
+        evidence: ["Work history contains failed-run."],
+      }) }, artifact: null };
+    });
+    const ctx = { invoke, turn, commit: vi.fn(async () => ({ hash: "a".repeat(64) })),
+      resources: { model: "model", github: "github", api: "api" }, run: { id: "front", namespace: "default" } } as unknown as Ctx;
+    await expect(runHorizonOperational(event("What failed previously?"), ctx)).resolves.toMatchObject({ status: "complete" });
+    expect(observed[0]?.tools).toContain("platform_get");
+    expect(observed[0]?.context.supervision.history).toMatchObject({ state: "available", complete: true, next: null,
+      runs: [expect.objectContaining({ runId: "run-1", status: "leased" }), expect.objectContaining({
+        runId: "failed-run", parentRun: "root-run", status: "failed", durationMs: 20,
+        ref: expect.objectContaining({ kind: "run", id: `horizon/${sessions.work}/failed-run` }),
+      })] });
   });
 
   it("starts idle issue work through the existing durable cross-Session commit", async () => {

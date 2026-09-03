@@ -113,7 +113,7 @@ function route(event: string, payload: Record<string, unknown>, selected: Horizo
 
 export default channel({
   id: "horizon-github",
-  version: "0.3.6",
+  version: "0.3.7",
   public: true,
   authProvider: provider,
   needs: [{ binding: "github", kind: "service", ops: ["issue.comment.create", "repository.permission.get"] }],
@@ -141,7 +141,8 @@ export default channel({
       if (!behavior) return ignored(delivery, "behavior_not_configured");
       const installation = record(payload.installation); const sender = record(payload.sender);
       const thread = `github-${(await hashValue({ installation: installation.id, repository: repo.id, issue: issueValue.number })).slice(0, 48)}`;
-      const sessions = { foreground: `${thread}-front`, work: `${thread}-work` };
+      const foregroundDelivery = (await hashValue({ thread, delivery })).slice(0, 16);
+      const sessions = { foreground: `${thread}-front-${foregroundDelivery}`, work: `${thread}-work` };
       const session = behavior === "issue-work" ? sessions.work : sessions.foreground;
       return {
         id: delivery, type: `github.${event}`, session, deliver: "queue",
