@@ -54,6 +54,8 @@ describe("Horizon role prompts", () => {
   });
 
   it("reopens investigation for material evidence gaps without rewriting history", () => {
+    expect(RUBRIC_SYSTEM).toContain("rubricEvidenceClosure is complete");
+    expect(RUBRIC_SYSTEM).toContain("Do not leave a question open or blocked merely to request another version of the same probe");
     expect(DESIGN_SYSTEM).toContain("immutable discovery snapshot");
     expect(CRITIQUE_SYSTEM).toContain("accumulating evidence history");
     expect(CRITIQUE_SYSTEM).toContain("Do not require an earlier artifact to be rewritten");

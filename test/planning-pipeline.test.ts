@@ -1,7 +1,7 @@
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzDesign, HzExecutionAttempt, HzInvestigationResult, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative,
-  HzPlanningState, HzRubric, HzStepAssertions, HzWorkPlan } from "../src/contracts.js";
+  HzPlanningState, HzRubric, HzStepAssertions, HzToolEvidence, HzWorkPlan } from "../src/contracts.js";
 import { planner, scopeMilestoneStepIds } from "../src/tasks/planner.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -78,6 +78,7 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
   assertionPlanRepairs?: HzStepAssertions[][];
   continuityRepairs?: Array<HzPlanningState["continuity"]["decisions"]>;
   investigationResults?: HzInvestigationResult[];
+  investigationToolEvidence?: HzToolEvidence[][];
   finalPlan?: HzPlan;
 } = {}) {
   const planningInput = options.planningInput ?? input;
@@ -128,10 +129,13 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
         decisions: options.continuityRepairs?.[Math.min(continuityIndex++, options.continuityRepairs.length - 1)] ?? [],
       }, toolEvidence: [] });
       if (task.id === "horizon-investigator") {
-        const result = options.investigationResults?.[Math.min(investigationIndex++,
+        const index = investigationIndex++;
+        const result = options.investigationResults?.[Math.min(index,
           options.investigationResults.length - 1)]!;
         const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { focus: { id: string } };
-        return handle({ investigation: { ...result, focusId: phase.focus.id }, toolEvidence: [] });
+        return handle({ investigation: { ...result, focusId: phase.focus.id },
+          toolEvidence: options.investigationToolEvidence?.[Math.min(index,
+            options.investigationToolEvidence.length - 1)] ?? [] });
       }
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });
@@ -188,6 +192,35 @@ describe("Horizon multi-loop planner", () => {
     expect(fixture.spawned.slice(0, 4)).toEqual([
       "horizon-rubric", "horizon-investigator", "horizon-rubric", "horizon-design",
     ]);
+  });
+
+  it("closes one rubric evidence phase even when the decisive pass rephrases an unresolved question", async () => {
+    const first: HzRubric = { ...rubric, openQuestions: [{
+      question: "Does the live Resource expose the operation?", state: "open", resolution: null,
+      evidence: ["Authenticated Resource catalog."],
+    }] };
+    const decisive: HzRubric = { ...rubric, openQuestions: [{
+      question: "Can the currently bound Resource perform the required operation?", state: "blocked", resolution: null,
+      evidence: ["The authorized catalog did not expose operation metadata."],
+    }] };
+    const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
+      focusId: "placeholder", status: "partial", summary: "The live operation list is not observable.", findings: [],
+      evidence: ["platform_get returned no operation metadata"], unknowns: [{
+        question: "Does the live Resource expose the operation?", state: "blocked", resolution: null,
+        evidence: ["platform_get returned no operation metadata"],
+      }], planImplications: ["Preserve the uncertainty explicitly."] };
+    const observation: HzToolEvidence = { name: "platform_get", status: "failed",
+      args: { ref: "service/github" }, ref: null, result: { message: "operation metadata unavailable" } };
+    const fixture = planningContext([accepted], [design], {
+      rubrics: [first, decisive], investigationResults: [additional], investigationToolEvidence: [[observation]],
+    });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan.status).toBe("ready");
+    expect(fixture.spawned.filter((id) => id === "horizon-investigator")).toHaveLength(1);
+    expect(fixture.spawned.filter((id) => id === "horizon-rubric")).toHaveLength(2);
+    expect(fixture.spawned).toContain("horizon-design");
   });
 
   it("enters execution replanning at whole-work-plan repair without rerunning upstream phases", async () => {

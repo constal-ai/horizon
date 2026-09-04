@@ -135,8 +135,8 @@ export const planner = subtask<HzPlannerResult>({
     const investigationObservations = new Set(input.previousState?.investigationObservationSignatures ?? []);
     const currentPlanning = (): HzPlanInput => ({ ...input, investigations });
 
-    const runRubric = async (prior: HzRubric | null): Promise<HzRubric> => {
-      const phaseInput = await storeArtifact(ctx, { planning: currentPlanning(), prior, critique, tools });
+    const runRubric = async (prior: HzRubric | null, evidenceClosure = false): Promise<HzRubric> => {
+      const phaseInput = await storeArtifact(ctx, { planning: currentPlanning(), prior, critique, evidenceClosure, tools });
       const result = await ctx.spawn(rubricAgent, phaseInput, {
         retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
           microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
@@ -303,20 +303,16 @@ export const planner = subtask<HzPlannerResult>({
     };
 
     const resolveRubricEvidence = async (initial: HzRubric): Promise<HzRubric> => {
-      let current = initial;
-      for (;;) {
-        const findings: HzCritiqueFinding[] = current.openQuestions
-          .filter(({ state }) => state === "open" || state === "blocked")
-          .map((unknown) => ({ owner: "investigation", severity: "blocking",
-            affectedMilestones: [], affectedSteps: [], issue: unknown.question,
-            evidence: unknown.evidence,
-            repair: `Resolve this planning unknown from read-only repository, Platform, or primary-source evidence: ${unknown.question}` }));
-        if (findings.length === 0) return current;
-        const progress = await runInvestigation(findings);
-        if (!progress.ran) return current;
-        current = await runRubric(current);
-        if (!progress.observedProgress) return current;
-      }
+      const findings: HzCritiqueFinding[] = initial.openQuestions
+        .filter(({ state }) => state === "open" || state === "blocked")
+        .map((unknown) => ({ owner: "investigation", severity: "blocking",
+          affectedMilestones: [], affectedSteps: [], issue: unknown.question,
+          evidence: unknown.evidence,
+          repair: `Resolve this planning unknown from read-only repository, Platform, or primary-source evidence: ${unknown.question}` }));
+      if (findings.length === 0) return initial;
+      const progress = await runInvestigation(findings);
+      if (!progress.ran) return initial;
+      return runRubric(initial, true);
     };
 
     const repairScope = (owner: RepairOwner, findings: readonly HzCritiqueFinding[]): string[] => {
