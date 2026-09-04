@@ -3,168 +3,112 @@
 
 # Horizon
 
-Horizon is Constal's long-horizon software agent. It investigates a repository, commits an immutable natural-language execution specification, assigns each semantic responsibility to a focused child Agent, and keeps reconciling actual evidence with the plan until the work is proven complete or one material user decision is required.
+**Horizon is a long-horizon software engineering agent that follows the software engineering workflow.**
 
-It is a standalone Agent package built with `@constal/sdk`. It uses Constal's existing Model, Sandbox Pool, CAS, GitHub, and Web Resources; it does not create a parallel runtime, source store, credential system, or deployment path.
+Horizon carries a change from an ambiguous objective to a verified pull request. It builds an evidence-grounded understanding of the repository, turns that evidence into a rubric and design, plans the work and its proof, then implements each responsibility with independent verification. When the evidence changes, the right planning phase opens again.
 
-GitHub issues use two Session lanes: one stable durable work Session for investigation, planning, approval, execution, and recovery, plus one delivery-scoped foreground Session for each conversational webhook. A new question therefore does not wait behind the long-running work Session. The foreground supervisor reads the authenticated private issue, recent comments, authoritative Run detail, and open waits before deciding whether to answer, resolve a work decision, steer active work, or start new work. It preserves unavailable state as unavailable rather than interpreting a failed read as an empty Run or wait list.
+Give Horizon a repository and an objective. It can stay with the work across many specialist runs, failed attempts, replans, approvals, and human pauses—then return a verified pull request or one precise reason it cannot safely continue.
 
-The GitHub Channel authenticates and decodes the webhook, classifies supported lifecycle events, selects the Agent sink, and encodes replies. It does not implement Horizon's conversational or work semantics. Starting idle work is a durable cross-Session delivery to the stable work Session. Controls on existing work use a reviewed Constal API ChangePlan through the ordinary bound Resource; Horizon receives no ambient management credential and creates no separate authority path. See [the execution architecture](docs/execution-architecture.md#conversation-and-work-lanes).
+Horizon is open source under Apache 2.0 and built on the [Constal](https://constal.ai) runtime.
 
-## Long-horizon architecture
+## The long-horizon software engineering loop
 
-```text
-User objective
-      │
-      ▼
-Source Resolver ReAct (only when source is ambiguous)
-      │
-      ▼
-Deterministic workspace controller
-      │ archive → environment digest → cached image fork or base preparation
-      │ runner verification → synthetic Git baseline → WorkspaceReady Fact
-      ▼
-Discovery framer ReAct
-      │
-      ├── Investigation Agent · behavior / call flow
-      ├── Investigation Agent · architecture / ownership
-      ├── Investigation Agent · tests / verification
-      └── other objective-specific investigations
-      │
-      ▼
-Planning pipeline (detailed below)
-      │
-      ▼
-Immutable Plan Fact r1
-      │
-      ▼
-Dependency-ready work unit ──► Execution Agent ReAct
-                                      │
-                               Independent Verifier
-                                      │
-                               Reconciliation Agent
-                ┌────────────┬────────┼────────────┐
-                │ continue   │ replan │ ask        │ complete
-                │            ▼        ▼            ▼
-                │       Plan Fact r2  durable      immutable
-                │       (r1 remains)  await        CAS artifact
-                └────────────┴────────┴─────────────┘
+This is a recursive engineering system. Planning loops until the specification is coherent. Execution loops until the evidence is strong enough to continue, replan, ask for a decision, or ship.
+
+```mermaid
+flowchart TD
+    O[Repository + objective] --> I[Investigate]
+
+    subgraph P[Planning loop]
+        I --> R[Define the rubric]
+        R --> D[Design the solution]
+        D --> W[Plan the work]
+        W --> A[Define the proof]
+        A --> C{Critique the complete plan}
+
+        C -- Missing evidence --> I
+        C -- Rubric gap --> R
+        C -- Design gap --> D
+        C -- Work-plan gap --> W
+        C -- Proof gap --> A
+    end
+
+    C -- Ready --> G{Approval when required}
+    G -- Revise --> RP[Return to the earliest deficient phase]
+    G -- Approved or not required --> E[Implement next ready work unit]
+
+    subgraph X[Execution loop]
+        E --> V[Verify independently]
+        V --> Q{Reconcile the evidence}
+        Q -- Repair the step --> E
+        Q -- Reverify --> V
+        Q -- Step proven, more work remains --> E
+    end
+
+    Q -- Replan --> RP
+    C -- Product decision needed --> H[Ask the user and wait durably]
+    Q -- Product decision needed --> H
+    H --> RP
+
+    RP -. Evidence .-> I
+    RP -. Rubric .-> R
+    RP -. Design .-> D
+    RP -. Work plan .-> W
+    RP -. Proof .-> A
+
+    Q -- All work proven --> S[Package the workspace]
+    S --> PR[Open a pull request for GitHub work]
 ```
 
-### Planning and repair
+Each phase has one job.
 
-```text
-Initial planning
-  Rubric
-    ↓
-  Design
-    ↓
-  Per-milestone decomposition
-    ↓
-  Structural critique
-       │
-       ├─ accepted ──────────────► Assertions
-       │
-       ├─ evidence problem ──────► Focused investigation
-       │                              ↓
-       │                         Design → fresh decomposition
-       │
-       ├─ rubric problem ────────► Rubric → Design → fresh decomposition
-       │
-       ├─ design problem ────────► Design → fresh decomposition
-       │
-       ├─ decomposition problem ─► Whole-work-plan repair
-       │                              ↓
-       │                           Structural critique
-       │
-       └─ user decision ─────────► Durable question
+- **Investigate:** Read the repository before proposing changes. Trace behavior, architecture, call paths, tests, and the evidence specific to the objective.
+- **Define the rubric:** Turn “make this work” into observable success criteria, constraints, non-goals, and material open questions.
+- **Design the solution:** Make the architectural decisions and organize the outcome into dependency-ordered milestones.
+- **Plan the work:** Break each milestone into coherent responsibilities small enough for one execution specialist to own.
+- **Define the proof:** Decide how every responsibility will be tested, including positive behavior, negative paths, and invariants.
+- **Critique and approve:** Attack the plan before the code. Route gaps back to investigation, rubric, design, planning, or proof—and ask for human approval before GitHub-initiated mutation.
+- **Implement:** Change one coherent part of the system at a time in a shared, recoverable workspace.
+- **Verify independently:** Have a separate verifier inspect the diff and reproduce the required evidence. The implementer does not mark its own homework.
+- **Reconcile:** Keep useful work, repair the step, verify again, restore a known-good checkpoint, or revise the plan when reality disagrees with it.
+- **Ship:** Package the verified workspace, publish an immutable branch, and open a pull request tied to the original issue.
 
-Assertions
-  ↓
-Complete critique
-       │
-       ├─ assertion problem ─────► Whole-assertion-plan repair
-       ├─ evidence problem ──────► Focused investigation → corresponding upstream route
-       └─ upstream problem ──────► corresponding upstream route
-```
+That loop is what lets Horizon take on changes that fight back: multi-file refactors, migrations, reliability work, cross-subsystem features, and tasks where the first reasonable plan is rarely the final one.
 
-Initial discovery and investigation own repository evidence before rubric begins. Rubric consumes that evidence and defines success; it never schedules investigation. Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique reports the earliest deficient owner; the planning controller chooses the transition. A material evidence gap creates one controller-owned frontier from its affected milestone and step scope, reopens a focused read-only investigation, accumulates the result in the same planning state, and returns to the requesting downstream phase. An unchanged frontier plateaus as explicit unavailable evidence rather than being regenerated from rephrased model prose.
+## Why it can stay with hard work
 
-Models never own a terminal planning transition. For each exact planning state, the controller records a repair route that returned to an already-observed state and makes that route unavailable on the next critique. The critic must then choose a different evidence or repair owner, accept explicit uncertainty that does not prevent execution, or formulate one durable user decision. This makes convergence a controller property without mechanically judging natural-language semantics.
+- **Plans improve without losing history.** Every revision is critiqued and remains connected to the repository evidence that produced it.
+- **Evidence defines progress.** New observations move the work forward; repetition triggers a different route, a sharper question, or an honest stop.
+- **Verification is independent.** Implementation and proof belong to separate specialist responsibilities.
+- **Decisions remain explainable.** Investigations, rubrics, designs, plans, attempts, user answers, and verification results stay durable and addressable.
+- **Time is part of the workflow.** A run can wait for a person, survive a process failure, and resume from the last durable fact and verified workspace checkpoint.
 
-### Execution repair and replanning
+The goal is not endless autonomy. The goal is to reduce uncertainty until the work is proven complete or there is one clear decision only a human can make.
 
-```text
-Resource operation recovery
-  repeat / idempotency / reconcile / outcome unknown
-  (owned by the pinned Resource contract)
-                     ↓
-Execution attempt → Independent verification → Execution reconciliation
-                                               │
-                  ┌────────────────────────────┼──────────────────────────┐
-                  │                            │                          │
-            repair step                    reverify                    replan
-                  │                            │                          │
-        keep current workspace       reuse execution evidence     investigation → missing evidence
-        or restore last verified     and rerun verifier only      assertions → assertion repair
-                  │                                               decomposition → whole-plan repair
-                  └────────────────────────────┐                  design → fresh decomposition
-                                               ▼                          │
-                                          next attempt ◄──────────────────┘
-```
+## Using Horizon from GitHub
 
-Every attempt records its plan and step Facts, verification Fact, before/after workspace identity, latest verified restore point, and compact Tool receipts in CAS. Complete evidence remains in the referenced Facts rather than being copied into child-Run input.
+Horizon includes a GitHub Channel and Auth Provider. Once they are installed for a repository, the issue becomes the human interface for a run.
 
-Reconciliation is semantic Agent work, but its controller route is structural. It may continue verified work, repair the same specification, repeat verification without repeating implementation, enter investigation or planning at the earliest invalid owner, or ask one durable user question. It cannot terminate the workflow. When repeated execution produces the same governed evidence, the controller disallows another identical execution route; one materially different replan may be tried before the unresolved decision is presented to the user. Operation retry is never an LLM decision.
+1. Open an issue that describes the outcome you want.
+2. Mention the configured Horizon account or apply the configured label.
+3. Horizon prepares the repository, investigates it, and posts its plan.
+4. A collaborator with `write`, `maintain`, or `admin` permission approves, requests a revision, or cancels.
+5. Horizon implements and verifies the approved work.
+6. On success, it publishes an immutable branch and opens a pull request linked to the issue.
 
-A new plan revision includes an independently critiqued continuity decision for every previously verified work unit: retain, reverify, rerun, or drop. Horizon does not compare plan prose or trust model-generated semantic IDs. Forward repair in the current workspace is the default. Restoration is explicit, uses the existing Sandbox Pool image contract, verifies the exact tree and status, and conservatively discards work beyond the restored verified prefix.
+Questions and steering do not wait behind the long-running work. Each GitHub conversation event gets a short foreground Session that reads the issue and the authoritative state of the stable work Session, then either answers directly or applies a reviewed control to the work. A failed state read remains unavailable; it is never mistaken for “nothing is running.”
 
-One Horizon mission is one Constal Session and one logical Sandbox. Every child Run inherits that Session and therefore sees the same workspace. Provider standby snapshots preserve the live Session between active periods. Verified steps additionally publish immutable provider images with durable checkpoint receipts, while the original source archive, workspace identity, and final outputs remain content-addressed artifacts.
+The GitHub integration deliberately separates transport from engineering behavior:
 
-The Run can suspend and resume at every durable primitive. Source identity, WorkspaceReady, Discovery, every planning phase, plans, specialist results, independent verification, workspace checkpoints, user answers, reconciliations, plateau state, and the final artifact are committed Facts. A replan is a new immutable revision, never a mutation of earlier intent or evidence. Changed completed work is explicitly invalidated and rerun; unchanged completed proof is retained.
+- the **Auth Provider** verifies webhook authenticity;
+- the **Channel** decodes events, rejects unsupported activity, routes messages, and delivers idempotent comments;
+- the **Horizon Agent** owns investigation, planning, execution, verification, and conversation semantics.
 
-Large planning handoffs move through content-addressed CAS envelopes rather than inline child-Run input. ReAct loops keep recent observations verbatim, commit complete older rounds, and retain a bounded deduplicated evidence projection after compaction.
+See [conversation and work lanes](docs/execution-architecture.md#conversation-and-work-lanes) for the exact ownership model.
 
-## How Horizon decides to keep going
+## Calling Horizon directly
 
-An agentic loop exists to reduce uncertainty. Horizon treats the following as progress:
-
-- a material unknown is resolved, narrowed, or replaced by a more precise question;
-- a specialist completes a responsibility;
-- a Tool returns a genuinely new observation;
-- execution evidence proves that the plan must change.
-
-Its plateau detector compares canonical Tool arguments and observed results. It does not classify English prose, grep for semantic keywords, or infer correctness from field counts. Two repeated evidence rounds force the role to resolve, replan, ask, or block without making another Tool call. A separate workflow fingerprint prevents identical failed work from looking like progress across replans.
-
-Standard ReAct roles have a 500-model-turn emergency ceiling; execution specialists have 1,000. The shared runner ceiling is 1,000. These are deliberately Hz-scale backstops—the evidence plateau, repeated-state, question-deduplication, and convergence guards are expected to terminate normal work earlier.
-
-## Agent roles
-
-| Role | Responsibility |
-| --- | --- |
-| Source resolver | Resolve one authenticated repository and revision when the request does not supply an exact source |
-| Workspace controller | Archive source, fork or prepare the Session environment, verify the runner, and commit the immutable baseline |
-| Discovery framer | Divide prepared-repository questions by evidence boundary |
-| Investigator | Resolve one bounded software question set without duplicating other investigations |
-| Rubric | Define observable success, constraints, non-goals, and material open questions |
-| Designer | Close architecture decisions and define dependency-ordered outcome milestones |
-| Milestone decomposer | Turn one milestone into specialist loops, consuming accepted prerequisite work |
-| Whole-work-plan repair | Reconcile ownership and handoffs across the complete work graph after critique |
-| Assertion writer | Define independent positive, negative-path, and invariant proof for one step |
-| Whole-assertion-plan repair | Reconcile proof ownership across every current work unit after critique |
-| Plan critic | Find cross-artifact contradictions and recommend the earliest evidence or planning owner; it cannot terminate the workflow |
-| Finalizer | Render converged planning artifacts into the immutable natural-language specification |
-| Execution specialist | One coherent semantic responsibility, executed as its own ReAct loop |
-| Verifier | Independently inspect the diff and reproduce proof before a step can complete |
-| Continuity reviewer | Decide whether previously verified work remains proven, needs reverification, must rerun, or was dropped |
-| Reconciler | Evidence-based continue, step repair, reverification, owner-routed replan, ask, or complete recommendation |
-| Question reconciler | Decide semantically whether a proposed user decision was already answered |
-
-Role prompts are stable and organized as Role, Task, Context, Rules, Tools, and Output. Request-specific state is supplied as turn context. Tool descriptions explain their behavioral contract and Resource boundary. JSON is used only for transport; semantic intent stays in natural-language specifications.
-
-## Input
-
-Horizon accepts either a string objective or a structured request:
+Horizon accepts a plain string objective or a structured request. A structured request is useful when the source revision, environment setup, or constraints must be explicit:
 
 ```json
 {
@@ -179,40 +123,145 @@ Horizon accepts either a string objective or a structured request:
     "name": "node",
     "cache": true,
     "setup": [
-      { "cmd": "npm", "args": ["ci", "--ignore-scripts"], "cwd": "/workspace/repo", "timeoutMs": 600000 }
+      {
+        "cmd": "npm",
+        "args": ["ci", "--ignore-scripts"],
+        "cwd": "/workspace/repo",
+        "timeoutMs": 600000
+      }
     ]
   },
   "constraints": [
-    "Reuse the existing CAS and Sandbox abstractions.",
+    "Reuse the existing storage and sandbox abstractions.",
     "Do not publish or deploy."
   ]
 }
 ```
 
-`source` may instead be an authorized immutable `tar.gz` artifact reference. When it is omitted, a focused Source Resolver uses the Run's bound GitHub Resource and asks only if authenticated evidence leaves multiple plausible repositories. The environment cache key includes the exact source archive, runner digest, setup specification, and Sandbox Pool revision. Credential material never enters Horizon's code, image, snapshot, or model context.
+Save the request as `request.json`, then start it in a stable Session with the Constal CLI:
 
-## Output
+```sh
+constal runs start horizon repository-imports --data @request.json --deliver live
+```
 
-The final result reports:
+The source may also be an authorized immutable `tar.gz` artifact. If no source is supplied, Horizon uses its bound GitHub Resource to resolve one and asks the user when the available evidence is ambiguous.
 
-- the current immutable plan revision and Fact;
-- the durable WorkspaceReady receipt and whether its prepared image was reused;
-- provider snapshot receipts for every independently verified step;
-- every completed specialist responsibility;
-- remaining unknowns, if blocked;
-- the immutable CAS package produced from the governed workspace;
-- long-horizon execution metadata: specialist Runs, replans, and plateau cycles.
+At a high level, a terminal result is always explicit about success or failure. The complete versioned contract lives in [`src/contracts.ts`](src/contracts.ts).
+
+```ts
+type HorizonResult = {
+  status: "complete" | "blocked";
+  summary: string;
+  plan: { revision: number; fact: string } | null;
+  completedSteps: Array<{ id: string; status: string; summary: string }>;
+  remainingUnknowns: unknown[];
+  artifact: { ref: string; bytes: number; path: string } | null;
+  publication: {
+    repository: string;
+    branch: string;
+    commit: string;
+    pullRequest: { number: number; url: string };
+  } | null;
+};
+```
+
+`blocked` is not a disguised success. Horizon uses it when the source cannot be prepared, proof cannot be reproduced, an external outcome is genuinely unknown, or no safe dependency-ready action remains.
+
+## Runtime architecture
+
+One Horizon mission maps to one durable Constal Session and one logical workspace. Child Agents inherit that Session, so they share the same repository and checkpoint history.
+
+The major ownership boundaries are intentionally simple:
+
+- **Constal owns orchestration.** The journal and Facts are authoritative for plans, accepted Resources, Policy, user decisions, recovery, and completion.
+- **The sandbox owns temporary compute.** It holds the live filesystem and processes, but it is replaceable. Horizon can reconstruct it from immutable source and verified checkpoints.
+- **Content-addressed storage owns durable artifacts.** Source archives, planning envelopes, attempt records, checkpoint receipts, and final packages have stable identities.
+- **Resource contracts own external effects.** A model never decides whether an ambiguous API call is safe to retry. The pinned Resource declares repeat, idempotency, reconciliation, or unknown-outcome behavior.
+- **Readers may run in parallel; writers do not.** Investigators can inspect concurrently. Execution specialists get exclusive, ordered access to the Session workspace.
+
+Provider standby snapshots make ordinary resume fast. They are an optimization, not the durable record. Horizon verifies a cached image before trusting it and rebuilds from the immutable source archive when the receipt, runner, Git baseline, tree, or status does not match.
+
+The full state machine, cache identity, checkpoint protocol, recovery behavior, and replan rules are documented in [Horizon execution architecture](docs/execution-architecture.md).
+
+## Safety boundaries
+
+Horizon is intentionally opinionated about what an engineering agent may claim:
+
+- GitHub work requires an approved plan before repository mutation.
+- Source revisions and platform Resources are pinned for the run.
+- Workspace paths are confined to `/workspace/repo`.
+- Credentials stay behind Resources and never enter prompts, setup commands, images, or repository files.
+- Every completed step has independently reproduced evidence.
+- An unavailable read is never treated as an empty result.
+- Repeated evidence does not count as progress; plateau guards force a different route, a precise question, or an honest stop.
+- Restoring files does not pretend to reverse an external side effect.
+- Horizon publishes a branch and pull request; it does not silently merge the result.
+
+The standard specialist loop has a 500-turn emergency ceiling. Execution specialists and the shared runner have a 1,000-turn ceiling. These are backstops, not targets: evidence plateaus and repeated-state guards should end normal work much earlier.
+
+## Current scope
+
+Horizon currently assumes:
+
+- a GitHub repository or immutable source archive;
+- a Constal deployment with Model, Sandbox Pool, CAS, GitHub, Web, Search, and Constal API Resources;
+- one logical writable workspace per mission;
+- explicit argv-based environment setup inside the configured sandbox image;
+- pull-request delivery for GitHub-initiated work.
+
+The default sandbox image is Node-based and contains Git, `tar`, `gzip`, and `ripgrep`. A different toolchain should be prepared through explicit setup or a separately governed Sandbox Pool image. Model output cannot select an arbitrary base image or start a nested container runtime.
+
+Horizon is under active development and remains pre-1.0. Its execution contracts are tested and versioned, but operators should review [known issues](docs/known-issues.md) before using it on critical repositories.
+
+## Repository guide
+
+| Path | Purpose |
+| --- | --- |
+| `src/workflow.ts` | Top-level durable workflow and execution/reconciliation loop |
+| `src/tasks/` | Focused planning, execution, verification, and repair Agents |
+| `src/prompts/` | Stable role prompts; request-specific state is supplied separately |
+| `src/workspace/` | Deterministic preparation, inspection, checkpoints, and restore |
+| `src/tools/` | Model-facing GitHub, workspace, Web, and platform Tools |
+| `src/github-channel/` | Webhook routing and idempotent issue-comment delivery |
+| `src/github-auth-provider/` | GitHub webhook authentication |
+| `src/views/` | Live progress projection for operators and users |
+| `evals/` | Capability, boundary, and proportionality evaluation suites |
+| `sandbox/` | Pinned base image and workspace runner |
+| `docs/` | Detailed architecture and operational notes |
 
 ## Development
 
+Horizon is written in TypeScript and tested with Vitest. Node.js 24 is the reference runtime used by the sandbox image.
+
 ```sh
-npm install
+npm ci
 npm run check
 ```
 
-The package root is directly deployable through Constal's managed Agent deployment flow after its manifest bindings are selected for the target namespace.
+`npm run check` runs TypeScript validation and the complete unit-test suite. The tests cover parsing, planning convergence, evidence plateaus, GitHub routing, workspace confinement, checkpoint recovery, publication, and failure behavior.
 
-Build the code Sandbox base with `docker build --platform linux/amd64 -t <registry>/constal-horizon-sandbox:<version> sandbox`. Configure the platform `sandbox-pool/constal-code` Resource with the published immutable image digest before deploying Horizon. See [docs/execution-architecture.md](docs/execution-architecture.md) for lifecycle and recovery invariants.
+To validate or build the default sandbox image:
+
+```sh
+npm run sandbox:check
+npm run sandbox:build
+```
+
+Model quality is evaluated separately from deterministic runtime correctness. See [Horizon evaluations](evals/README.md) for the capability, safety-boundary, and proportionality suites and their pinned baselines.
+
+## Deployment
+
+Horizon is a Constal Agent package, not a standalone background daemon. Before deploying it into another namespace, update `constal.agent.json` with the exact Resource bindings for that environment and set `expectedCurrentDeploymentRevision` to the target's real current revision (`null` for the first deployment).
+
+With the Constal CLI authenticated:
+
+```sh
+constal deploy . --wait
+```
+
+The GitHub Channel and Auth Provider are separate deployable Resources because they own different security boundaries. Repository maintainers can release those components with `npm run deploy:components`; `npm run deploy` packages and releases the Agent. The release scripts require `CONSTAL_TENANT_ID` and the administrative credential file documented at the top of each script.
+
+Publishing a new sandbox image is a separate operation because the Sandbox Pool pins an immutable image digest. Follow the [release sequence](docs/execution-architecture.md#release-sequence) rather than changing the image underneath an active run.
 
 ## License
 
