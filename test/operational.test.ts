@@ -149,6 +149,42 @@ describe("Horizon behavior routing", () => {
     expect(invoke).not.toHaveBeenCalledWith("api", "plan", expect.anything(), expect.anything());
   });
 
+  it("starts new work when exact root state is terminal even if descendant projections are stale", async () => {
+    const root = { ...runItem("stopped"), id: `horizon/${sessions.work}/root-run`,
+      fields: { ...runItem("stopped").fields, id: "root-run", parent_run: null } };
+    const staleChild = { ...runItem("leased"), id: `horizon/${sessions.work}/stale-child`,
+      fields: { ...runItem("leased").fields, id: "stale-child", parent_run: "root-run" } };
+    const invoke = vi.fn(async (resource: string, operation: string, args: Record<string, unknown>) => {
+      if (resource === "github" && operation === "issue.get") return { issue: { number: 10 } };
+      if (resource === "github" && operation === "issue.comments.list") return { comments: [] };
+      if (resource === "api" && operation === "query" && args.kind === "run") return query([staleChild, root]);
+      if (resource === "api" && operation === "query" && args.kind === "wait") return query([]);
+      if (resource === "api" && operation === "get") {
+        const ref = args.ref as { id?: string };
+        const selected = ref.id?.endsWith("/root-run") ? "stopped" : "leased";
+        return { object: "constal.api.object", ref: args.ref,
+          value: { runId: selected === "stopped" ? "root-run" : "stale-child", status: selected },
+          evidence: { source: "coordinator" } };
+      }
+      throw new Error(`unexpected invocation ${resource}#${operation}`);
+    });
+    const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
+      object: "constal.horizon.operational-result", version: 1, status: "complete",
+      message: "I am starting current work.", action: { kind: "start-work", objective: "Implement issue #10." },
+      evidence: ["The exact root Run is stopped."],
+    }) }, artifact: null }));
+    const commit = vi.fn(async () => ({ hash: "f".repeat(64) }));
+    const ctx = { invoke, turn, commit, resources: { model: "model", github: "github", api: "api" },
+      run: { id: "front", namespace: "default" } } as unknown as Ctx;
+
+    await expect(runHorizonOperational(event("Start current work."), ctx)).resolves.toMatchObject({
+      control: { operation: "session.deliver", state: "queued" },
+    });
+    expect(commit).toHaveBeenCalledWith(expect.objectContaining({ objective: "Implement issue #10." }),
+      { tier: "audit", to: `session:${sessions.work}`, deliver: "queue" });
+    expect(invoke).not.toHaveBeenCalledWith("api", "plan", expect.anything(), expect.anything());
+  });
+
   it("semantically answers the exact open work wait through a governed ChangePlan", async () => {
     const wait = { kind: "wait", id: `horizon/${sessions.work}/promise-1`, crn: null, hash: null, namespace: "default",
       state: "waiting", fields: { waitKind: "await", promise: "promise-1", label: "horizon-plan-1" } };

@@ -306,6 +306,9 @@ function queryItems(value: ApiQueryResult | { error: string }): Record<string, u
 }
 
 function activeWork(snapshot: SupervisionSnapshot): boolean {
+  const exact = snapshot.rootRun && "value" in snapshot.rootRun ? record(snapshot.rootRun.value) : null;
+  const root = record(exact?.run) ?? exact;
+  if (["complete", "failed", "stopped"].includes(String(root?.status ?? ""))) return false;
   return snapshot.history.state === "available"
     && snapshot.history.runs.some(({ status }) => ["queued", "leased", "suspended"].includes(status));
 }
