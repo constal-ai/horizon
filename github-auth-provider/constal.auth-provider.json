@@ -3,12 +3,12 @@
   "kind": "auth-provider",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "entry": "src/github-auth-provider/index.ts",
   "config": {},
   "bindings": {
     "verifier": "crn:constal:production:platform:default:service/github-webhook-verifier"
   },
   "policies": [],
-  "expectedCurrentDeploymentRevision": "b996fd33-a4d1-46bf-b826-fbb71f0f321f"
+  "expectedCurrentDeploymentRevision": "1cdb9867-cbd4-4d4e-acf3-0b7e30a6313a"
 }
