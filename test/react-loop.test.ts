@@ -88,12 +88,12 @@ describe("EvidencePlateauDetector", () => {
     ]);
   });
 
-  it("bounds consecutive failed Tool rounds instead of resetting convergence", async () => {
+  it("treats unchanged Tool failures as plateau evidence even when the model changes invalid arguments", async () => {
     const offered: string[][] = []; let turns = 0;
     const ctx = {
       turn: async (spec: { tools?: string[] }) => {
         offered.push(spec.tools ?? []); turns++;
-        if (turns <= 4) return { toolCalls: [{ ...call(null), id: `failed-${turns}`, args: { kind: `guess-${turns}` },
+        if (turns <= 3) return { toolCalls: [{ ...call(null), id: `failed-${turns}`, args: { kind: `guess-${turns}` },
           status: "error", result: undefined, error: "invalid platform kind" }],
         message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
         return { toolCalls: [], message: { role: "assistant", content: "" },
@@ -105,7 +105,27 @@ describe("EvidencePlateauDetector", () => {
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
         ? value as { status: "blocked" } : null }, ctx);
     expect(result.plateaued).toBe(true);
-    expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+    expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+  });
+
+  it("honors the declared loop budget without a hidden one-thousand-round clamp", async () => {
+    let roleTurns = 0; let facts = 0;
+    const ctx = { turn: async (spec: { system?: string }) => {
+      if (spec.system === LOOP_CHECKPOINT_SYSTEM) return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+        object: "constal.horizon.loop-checkpoint", version: 1, role: "test", ready: false,
+        summary: "Evidence continues to change.", unknowns: [{ question: "What remains?", state: "open",
+          resolution: null, evidence: ["Changing observations"] }], nextEvidence: ["Continue inspection"],
+      } } as unknown as TurnRecord;
+      roleTurns++;
+      if (roleTurns <= 1_000) return { toolCalls: [call({ ref: `evidence-${roleTurns}` })],
+        message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+      return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { status: "complete" } } as unknown as TurnRecord;
+    }, commit: async (artifact: unknown) => ({ hash: `fact-${++facts}`, artifact,
+      artifactHash: `artifact-${facts}` }) as unknown as Fact<unknown> } as unknown as Ctx;
+    await runReactLoop({ role: "test", system: "test", objective: "test", context: {}, tools: [], maxRounds: 1_001,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(roleTurns).toBe(1_001);
   });
 
   it("advances through mutation and proof plateaus before forcing resolution", async () => {

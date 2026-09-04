@@ -6,7 +6,6 @@ import type { HzToolEvidence } from "./contracts.js";
 import { COMMON_RULES, composePrompt } from "./prompts/compose.js";
 
 const PROGRESS_CHECKPOINT_INTERVAL = 8;
-const CONSECUTIVE_TOOL_FAILURE_LIMIT = 4;
 
 export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
   role: "You are Horizon's evidence progress observer. You summarize one specialist's bounded observations; the deterministic loop controller alone changes Tool availability.",
@@ -123,8 +122,10 @@ function stableObservation(value: unknown, depth = 0): unknown {
 }
 
 function callSignature(call: ToolCallRecord): string {
-  return canonicalJson({ name: call.name, args: stableObservation(bounded(call.args)), ref: call.ref ?? null,
-    status: call.status, value: call.ref ?? stableObservation(durableCallValue(call)) });
+  const value = call.ref ?? stableObservation(durableCallValue(call));
+  return canonicalJson({ name: call.name, status: call.status, value,
+    ...(["error", "refused", "unknown", "outcome-unknown"].includes(call.status)
+      ? {} : { args: stableObservation(bounded(call.args)) }) });
 }
 
 export class EvidencePlateauDetector {
@@ -174,7 +175,8 @@ function roundContext(calls: readonly ToolCallRecord[]): unknown[] {
 }
 
 export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise<ReactLoopResult<T>> {
-  const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
+  if (!Number.isSafeInteger(spec.maxRounds) || spec.maxRounds < 1) throw new TypeError("ReAct maxRounds must be a positive integer");
+  const maximum = spec.maxRounds;
   const enabledTools = [...new Set(spec.tools)];
   const enabledToolSet = new Set(enabledTools);
   const usesPlatformTools = enabledTools.some((name) => name === "platform_query" || name === "platform_get");
@@ -202,7 +204,6 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   let narrowedPlateau = false;
   let plateauStage = 0;
   let toolRounds = 0;
-  let consecutiveFailedToolRounds = 0;
   let priorCheckpoint: LoopCheckpoint | null = null;
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
@@ -249,13 +250,11 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         advanced = true;
       }
     }
-    const allCallsFailed = turn.toolCalls.every(({ status }) => !successful.has(status));
-    consecutiveFailedToolRounds = allCallsFailed ? consecutiveFailedToolRounds + 1 : 0;
     if (advanced) plateau.reset();
     const observation = advanced
       ? { plateaued: false, stableRounds: 0, added: 0 }
       : plateau.observe(turn.toolCalls);
-    if (observation.plateaued || consecutiveFailedToolRounds >= CONSECUTIVE_TOOL_FAILURE_LIMIT) {
+    if (observation.plateaued) {
       if (plateauStage < plateauStages.length) narrowedPlateau = true;
       else forcedPlateau = true;
     }
