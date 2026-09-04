@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { copyFile, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { targetManifest } from "./target-manifest.mjs";
 
 const tenant = required("CONSTAL_TENANT_ID");
 const platformBase = (process.env.CONSTAL_PLATFORM_URL ?? "https://platform.constal.ai").replace(/\/$/u, "");
@@ -33,6 +34,7 @@ try {
         resourceCrn: current.crn, resourceHash: current.hash, existing: true });
       continue;
     }
+    await writeFile(join(staging, component.manifest), `${JSON.stringify(targetManifest(manifest, current), null, 2)}\n`);
     await writeFile(join(staging, "package.json"), `${JSON.stringify({ name: `@constal/horizon-${component.directory}`,
       version: manifest.version, private: true, type: "module", dependencies: { "@constal/sdk": "2.5.0" } }, null, 2)}\n`);
     execFileSync("tar", ["-czf", archivePath, "-C", staging, "."], { stdio: "pipe" });

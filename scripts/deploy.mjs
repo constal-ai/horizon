@@ -4,9 +4,10 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { targetManifest } from "./target-manifest.mjs";
 
 const tenant = required("CONSTAL_TENANT_ID");
 const platformBase = (process.env.CONSTAL_PLATFORM_URL ?? "https://platform.constal.ai").replace(/\/$/u, "");
@@ -16,10 +17,30 @@ const temporary = await mkdtemp(join(tmpdir(), "constal-horizon-deploy-"));
 let issued = null;
 
 try {
-  const archivePath = join(temporary, "horizon.tar.gz");
-  execFileSync("git", ["archive", "--format=tar.gz", "HEAD", "-o", archivePath], { stdio: "pipe" });
-  const archive = await readFile(archivePath); const archiveHash = createHash("sha256").update(archive).digest("hex");
   issued = await issueKey(`horizon-deploy-${randomUUID().slice(0, 8)}`);
+  process.stdout.write(`${JSON.stringify({ ok: true, ...await deploy() }, null, 2)}\n`);
+} finally {
+  await rm(temporary, { recursive: true, force: true });
+  if (issued) await fetch(`${authBase}/internal/api-keys/${encodeURIComponent(issued.id)}/revoke`, { method: "POST", headers: {
+    authorization: `Bearer ${adminToken}`, "content-type": "application/json",
+  }, body: JSON.stringify({ tenant_id: tenant }) }).catch(() => undefined);
+}
+
+async function deploy() {
+  const projectPath = join(temporary, "project");
+  const sourcePath = join(temporary, "horizon.tar");
+  const archivePath = join(temporary, "horizon.tar.gz");
+  await mkdir(projectPath);
+  execFileSync("git", ["archive", "--format=tar", "HEAD", "-o", sourcePath], { stdio: "pipe" });
+  execFileSync("tar", ["-xf", sourcePath, "-C", projectPath], { stdio: "pipe" });
+  const manifestPath = join(projectPath, "constal.agent.json");
+  const sourceManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const current = await request(`/v1/namespaces/${encodeURIComponent(sourceManifest.namespace)}/resources/${encodeURIComponent(sourceManifest.kind)}/${encodeURIComponent(sourceManifest.id)}`)
+    .then((value) => value?.data ?? null, (error) => error?.status === 404 ? null : Promise.reject(error));
+  if (current?.version === sourceManifest.version) return { deployment: current, existing: true };
+  await writeFile(manifestPath, `${JSON.stringify(targetManifest(sourceManifest, current), null, 2)}\n`);
+  execFileSync("tar", ["-czf", archivePath, "-C", projectPath, "."], { stdio: "pipe" });
+  const archive = await readFile(archivePath); const archiveHash = createHash("sha256").update(archive).digest("hex");
   let deployment = (await request("/v1/deployments", { method: "POST", headers: {
     "content-type": "application/gzip", "idempotency-key": `horizon-${archiveHash.slice(0, 56)}`,
   }, body: archive })).data;
@@ -30,12 +51,7 @@ try {
     deployment = (await request(`/v1/deployments/${encodeURIComponent(String(deployment?.deploymentRevision ?? ""))}`)).data;
   }
   if (deployment?.status !== "deployed") throw new Error("Horizon deployment did not finish within 10 minutes");
-  process.stdout.write(`${JSON.stringify({ ok: true, deployment }, null, 2)}\n`);
-} finally {
-  await rm(temporary, { recursive: true, force: true });
-  if (issued) await fetch(`${authBase}/internal/api-keys/${encodeURIComponent(issued.id)}/revoke`, { method: "POST", headers: {
-    authorization: `Bearer ${adminToken}`, "content-type": "application/json",
-  }, body: JSON.stringify({ tenant_id: tenant }) }).catch(() => undefined);
+  return { deployment };
 }
 
 async function request(path, init = {}) {
@@ -43,7 +59,10 @@ async function request(path, init = {}) {
     authorization: `Bearer ${issued.key}`, "x-constal-tenant": tenant, "x-constal-namespace": "default", ...(init.headers ?? {}),
   } });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${response.status} ${JSON.stringify(body)?.slice(0, 2_000)}`);
+  if (!response.ok) throw Object.assign(
+    new Error(`${init.method ?? "GET"} ${path}: ${response.status} ${JSON.stringify(body)?.slice(0, 2_000)}`),
+    { status: response.status },
+  );
   return body;
 }
 

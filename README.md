@@ -308,7 +308,7 @@ Model quality is evaluated separately from deterministic runtime correctness. Se
 
 ## Deployment
 
-Horizon is a Constal Agent package, not a standalone background daemon. Before deploying it into another namespace, update `constal.agent.json` with the exact Resource bindings for that environment and set `expectedCurrentDeploymentRevision` to the target's real current revision (`null` for the first deployment).
+Horizon is a Constal Agent package, not a standalone background daemon. Before deploying it into another namespace, update `constal.agent.json` with the exact Resource bindings for that environment. The checked-in manifest stays portable; `npm run deploy` adds the target tenant's current deployment revision to its temporary release archive.
 
 With the Constal CLI authenticated:
 
