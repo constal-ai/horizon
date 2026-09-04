@@ -35,25 +35,72 @@ Planning or execution ──► decision needed ──► durable human wait
         └──────── resume responsible phase ◄──────────┘
 ```
 
-### 2. The planning loop
+### 2. Milestones expand into work and proof
 
 ```text
-Investigate ──► Define rubric ──► Design ──► Work plan ──► Proof plan
-     ▲                                                        │
-     │                                                        ▼
-     └────────────────────── repair ◄────────────────── Complete critique
+Investigations ──► Rubric ──► Design Agent ──► Milestone graph
+                                                    │
+                                                    ▼
+                                  expand in topological order
+
+Milestone A ──► Decomposition Agent A ──► Steps A1, A2, A3
+     │                                           │
+     │        accepted prerequisite steps       │
+     ▼                                           │
+Milestone B ──► Decomposition Agent B ──► Steps B1, B2
+     │                                           │
+     ▼                                           │
+Milestone C ──► Decomposition Agent C ──► Steps C1, C2, C3
+                                                 │
+                    ┌────────────────────────────┘
+                    ▼
+             Combined work graph
+                    │
+                    ▼
+            Structural critique
+                    │ accepted
+                    ▼
+       concurrent proof fan-out by step
+
+Step A1 ──► Assertion Agent A1 ──► Proof for A1 ──┐
+Step A2 ──► Assertion Agent A2 ──► Proof for A2 ──┤
+Step B1 ──► Assertion Agent B1 ──► Proof for B1 ──┼─► Assertion plan
+Step C1 ──► Assertion Agent C1 ──► Proof for C1 ──┘          │
+                                                             ▼
+                                              Continuity review on replans
+                                                             │
+                                                             ▼
+                                                   Complete critique
+                                                             │ accepted
+                                                             ▼
+                                                Immutable plan revision
+```
+
+The Design Agent creates the milestone graph. Horizon then gives each milestone to its own Decomposition Agent, in dependency order, so downstream milestones can consume the accepted terminal steps of their prerequisites. Once structural critique accepts the combined work graph, Horizon creates every per-step Assertion Agent before awaiting any of them. That second expansion is a true concurrent fan-out.
+
+### 3. Planning repair loops
+
+```text
+Structural critique
+    ├─ missing evidence ──► Investigate ──► regenerate downstream planning
+    ├─ rubric gap ────────► Rubric ───────► Design ─► Milestones ─► Steps
+    ├─ design gap ────────► Design ───────► Milestones ─► Steps
+    ├─ work-plan gap ─────► Repair the combined work graph
+    ├─ product decision ──► Ask user and wait durably
+    └─ accepted ──────────► Fan out per-step assertions
 
 Complete critique
-    ├─ missing evidence ──► Investigate
-    ├─ rubric gap ────────► Define rubric
-    ├─ design gap ────────► Design
-    ├─ work-plan gap ─────► Work plan
-    ├─ proof gap ─────────► Proof plan
-    ├─ product decision ──► Ask user, then resume the responsible phase
+    ├─ missing evidence ──► Investigate, then regenerate affected downstream work
+    ├─ rubric gap ────────► Rubric, design, milestones, steps, and assertions
+    ├─ design gap ────────► Design, milestones, steps, and assertions
+    ├─ work-plan gap ─────► Repair work graph, then regenerate assertions
+    ├─ proof gap ─────────► Repair the complete assertion plan
+    ├─ continuity gap ────► Reconcile prior verified work with this revision
+    ├─ product decision ──► Ask user and wait durably
     └─ accepted ──────────► Immutable plan revision
 ```
 
-### 3. The execution loop
+### 4. The execution loop
 
 ```text
 Next dependency-ready unit ──► Implement ──► Independent verification
@@ -74,10 +121,10 @@ Each phase has one job.
 
 - **Investigate:** Read the repository before proposing changes. Trace behavior, architecture, call paths, tests, and the evidence specific to the objective.
 - **Define the rubric:** Turn “make this work” into observable success criteria, constraints, non-goals, and material open questions.
-- **Design the solution:** Make the architectural decisions and organize the outcome into dependency-ordered milestones.
-- **Plan the work:** Break each milestone into coherent responsibilities small enough for one execution specialist to own.
-- **Define the proof:** Decide how every responsibility will be tested, including positive behavior, negative paths, and invariants.
-- **Critique and approve:** Attack the plan before the code. Route gaps back to investigation, rubric, design, planning, or proof—and ask for human approval before GitHub-initiated mutation.
+- **Design the solution:** Make the architectural decisions and generate a dependency-ordered milestone graph.
+- **Plan the work:** Give each milestone to a focused Decomposition Agent, then join its steps into one executable work graph.
+- **Define the proof:** After structural critique, fan every step out to its own Assertion Agent for positive behavior, negative paths, and invariants.
+- **Critique and approve:** Critique structure before assertion fan-out, critique the complete plan afterward, and ask for human approval before GitHub-initiated mutation.
 - **Implement:** Change one coherent part of the system at a time in a shared, recoverable workspace.
 - **Verify independently:** Have a separate verifier inspect the diff and reproduce the required evidence. The implementer does not mark its own homework.
 - **Reconcile:** Keep useful work, repair the step, verify again, restore a known-good checkpoint, or revise the plan when reality disagrees with it.
