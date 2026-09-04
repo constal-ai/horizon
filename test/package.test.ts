@@ -44,6 +44,13 @@ describe("Horizon managed Agent package", () => {
     expect(manifest.labels).toEqual({ "channels.constal.ai/horizon-github": "enabled" });
   });
 
+  it("lets Console target the connected GitHub repository for new work", async () => {
+    const guide = await readFile(new URL("../CONSTAL.md", import.meta.url), "utf8");
+    expect(guide).toContain("(constal:github-issue?title=");
+    expect(guide).toContain("%40constal-ai%20Implement%20this%20feature");
+    expect(guide).not.toContain("github.com/constal-ai/horizon/issues/new");
+  });
+
   it("declares every model-facing Tool and long-horizon subtask exactly once", async () => {
     const manifest = await json("../constal.agent.json");
     const tools = manifest.tools as string[];

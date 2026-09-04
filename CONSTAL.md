@@ -5,7 +5,7 @@
 
 Horizon takes a software change from an initial request through investigation, planning, implementation, independent verification, and a pull request. The GitHub issue is the shared workspace: start the task there, then use the same thread to answer questions, approve the plan, steer the work, or cancel it.
 
-[Create a task for Horizon →](https://github.com/constal-ai/horizon/issues/new?title=Implement%3A%20&body=%40constal-ai%20Implement%20this%20feature%3A%0A%0A%3CDescribe%20the%20outcome%20you%20want.%3E%0A%0AAcceptance%20criteria%3A%0A-%20)
+[Create a task for Horizon →](constal:github-issue?title=Implement%3A%20&body=%40constal-ai%20Implement%20this%20feature%3A%0A%0A%3CDescribe%20the%20outcome%20you%20want.%3E%0A%0AAcceptance%20criteria%3A%0A-%20)
 
 ## Write the request
 
