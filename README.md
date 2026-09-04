@@ -15,49 +15,59 @@ Horizon is open source under Apache 2.0 and built on the [Constal](https://const
 
 This is a recursive engineering system. Planning loops until the specification is coherent. Execution loops until the evidence is strong enough to continue, replan, ask for a decision, or ship.
 
-```mermaid
-flowchart TD
-    O[Repository + objective] --> I[Investigate]
+### 1. The full run
 
-    subgraph P[Planning loop]
-        I --> R[Define the rubric]
-        R --> D[Design the solution]
-        D --> W[Plan the work]
-        W --> A[Define the proof]
-        A --> C{Critique the complete plan}
+```text
+                              revise
+                    ┌──────────────────────┐
+                    │                      │
+                    ▼                      │
+Repository ──► Planning loop ──► Plan approval ──► Execution loop
+    +               ▲                                  │
+ objective          │                                  │
+                    └──────────── replan ──────────────┤
+                                                       │ all work proven
+                                                       ▼
+                                             Verified package / PR
 
-        C -- Missing evidence --> I
-        C -- Rubric gap --> R
-        C -- Design gap --> D
-        C -- Work-plan gap --> W
-        C -- Proof gap --> A
-    end
+Planning or execution ──► decision needed ──► durable human wait
+        ▲                                              │
+        └──────── resume responsible phase ◄──────────┘
+```
 
-    C -- Ready --> G{Approval when required}
-    G -- Revise --> RP[Return to the earliest deficient phase]
-    G -- Approved or not required --> E[Implement next ready work unit]
+### 2. The planning loop
 
-    subgraph X[Execution loop]
-        E --> V[Verify independently]
-        V --> Q{Reconcile the evidence}
-        Q -- Repair the step --> E
-        Q -- Reverify --> V
-        Q -- Step proven, more work remains --> E
-    end
+```text
+Investigate ──► Define rubric ──► Design ──► Work plan ──► Proof plan
+     ▲                                                        │
+     │                                                        ▼
+     └────────────────────── repair ◄────────────────── Complete critique
 
-    Q -- Replan --> RP
-    C -- Product decision needed --> H[Ask the user and wait durably]
-    Q -- Product decision needed --> H
-    H --> RP
+Complete critique
+    ├─ missing evidence ──► Investigate
+    ├─ rubric gap ────────► Define rubric
+    ├─ design gap ────────► Design
+    ├─ work-plan gap ─────► Work plan
+    ├─ proof gap ─────────► Proof plan
+    ├─ product decision ──► Ask user, then resume the responsible phase
+    └─ accepted ──────────► Immutable plan revision
+```
 
-    RP -. Evidence .-> I
-    RP -. Rubric .-> R
-    RP -. Design .-> D
-    RP -. Work plan .-> W
-    RP -. Proof .-> A
+### 3. The execution loop
 
-    Q -- All work proven --> S[Package the workspace]
-    S --> PR[Open a pull request for GitHub work]
+```text
+Next dependency-ready unit ──► Implement ──► Independent verification
+                                    ▲                  │
+                                    │                  ▼
+                                    └────────────── Reconcile evidence
+
+Reconcile evidence
+    ├─ repair step ───────────► Implement again
+    ├─ reverify ──────────────► Independent verification
+    ├─ step proven ───────────► Checkpoint, then take the next ready unit
+    ├─ planning defect ───────► Re-enter the earliest deficient planning phase
+    ├─ product decision ──────► Ask user and wait durably
+    └─ all work proven ───────► Package workspace and publish the PR
 ```
 
 Each phase has one job.
