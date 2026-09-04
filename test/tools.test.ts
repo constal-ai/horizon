@@ -6,7 +6,7 @@ import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTO
 import { PLATFORM_TOOLS } from "../src/tools/platform.js";
 import { WEB_TOOLS } from "../src/tools/web.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
-  workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
+  WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
   it("defines executor mutation Tools independently of Resource recovery effects", () => {
@@ -23,7 +23,7 @@ describe("Horizon Tool capability projection", () => {
     const resources = { model: "model", sandbox: "sandbox", cas: "cas", web: "web" } as never;
     expect(availableTools(["workspace_read", "web_fetch", "web_search", "github_file"], { resources }))
       .toEqual(["workspace_read", "web_fetch"]);
-    expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["cas", "model", "sandbox", "web"]);
+    expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["model", "sandbox", "web"]);
   });
 
   it("advertises only arguments supported by the bound platform Search provider", () => {
@@ -76,35 +76,35 @@ describe("Horizon Tool capability projection", () => {
     expect(() => editWorkspaceText("current", "missing", "new")).toThrow("was not found");
   });
 
-  it("keeps workspace read limits internal instead of asking the model to guess bytes", () => {
+  it("exposes continuation without imposing a Horizon-specific file ceiling", () => {
     const schema = WORKSPACE_TOOLS.workspace_read!.schema as { properties: Record<string, unknown> };
-    expect(schema.properties).toEqual({ path: expect.any(Object) });
-    expect(workspaceReadMaximum(9_420)).toBe(9_420);
-    expect(workspaceReadMaximum(0)).toBe(1);
-    expect(workspaceReadMaximum(1_048_577)).toBeNull();
-    expect(() => workspaceReadMaximum(-1)).toThrow("file size is invalid");
+    expect(Object.keys(schema.properties)).toEqual(["path", "offset", "limit"]);
   });
 
-  it("discovers the exact file size before reading through CAS", async () => {
-    const ref = "a".repeat(64); const getFile = vi.fn(async () => ({ path: "/workspace/repo/src/contracts.ts", ref, bytes: 36_408 }));
-    const invoke = vi.fn(async () => ({ ref, bytes: 36_408, text: "contract" }));
+  it("reads the requested workspace range directly from the Sandbox Resource", async () => {
+    const contentHash = "a".repeat(64);
+    const invoke = vi.fn(async () => ({ path: "/workspace/repo/src/contracts.ts", contentHash, bytes: 36_408,
+      offset: 1_024, returnedBytes: 8, nextOffset: 1_032, content: "contract" }));
     const ctx = { resources: { sandbox: "sandbox", cas: "cas" }, run: { agent: { crn: "agent" }, session: "session" },
-      sandboxPool: () => ({ createSandbox: async () => ({ getFile }) }), invoke } as never;
-    await expect(WORKSPACE_TOOLS.workspace_read!.run({ path: "/workspace/repo/src/contracts.ts" }, ctx))
-      .resolves.toMatchObject({ bytes: 36_408, text: "contract" });
-    expect(invoke).toHaveBeenCalledWith("cas", "getText", { ref, maximumBytes: 36_408 });
+      sandboxPool: () => ({ createSandbox: async () => ({ id: "sbx" }) }), invoke } as never;
+    await expect(WORKSPACE_TOOLS.workspace_read!.run({ path: "/workspace/repo/src/contracts.ts", offset: 1_024, limit: 8 }, ctx))
+      .resolves.toMatchObject({ contentHash, bytes: 36_408, offset: 1_024, nextOffset: 1_032, text: "contract" });
+    expect(invoke).toHaveBeenCalledWith("sandbox", "read_file", {
+      sandbox: "sbx", path: "/workspace/repo/src/contracts.ts", offset: 1_024, limit: 8,
+    }, { timeoutMs: 600_000 });
   });
 
-  it("returns actionable metadata instead of failing when a file exceeds the internal ceiling", async () => {
-    const ref = "b".repeat(64); const getFile = vi.fn(async () => ({ path: "/workspace/repo/large.txt", ref, bytes: 1_048_577 }));
-    const invoke = vi.fn();
+  it("returns the native continuation for files larger than one response", async () => {
+    const contentHash = "b".repeat(64);
+    const invoke = vi.fn(async () => ({ path: "/workspace/repo/large.txt", contentHash, bytes: 20_000_000,
+      offset: 0, returnedBytes: 16_777_216, nextOffset: 16_777_216, content: "page" }));
     const ctx = { resources: { sandbox: "sandbox", cas: "cas" }, run: { agent: { crn: "agent" }, session: "session" },
-      sandboxPool: () => ({ createSandbox: async () => ({ getFile }) }), invoke } as never;
+      sandboxPool: () => ({ createSandbox: async () => ({ id: "sbx" }) }), invoke } as never;
     await expect(WORKSPACE_TOOLS.workspace_read!.run({ path: "/workspace/repo/large.txt" }, ctx)).resolves.toEqual({
-      path: "/workspace/repo/large.txt", ref, bytes: 1_048_577, text: null, truncated: true,
-      reason: "The file exceeds the internal 1 MiB text-read ceiling; use workspace_search to locate relevant sections.",
+      path: "/workspace/repo/large.txt", contentHash, bytes: 20_000_000, offset: 0,
+      returnedBytes: 16_777_216, nextOffset: 16_777_216, text: "page",
     });
-    expect(invoke).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledOnce();
   });
 
   it("accepts structured bounded workspace listings with exact file metadata", () => {

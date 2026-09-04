@@ -5,7 +5,6 @@ import { type Ctx, type Sandbox, type SandboxCommandResult, type Tool } from "@c
 import { HORIZON_RUNNER_PATH, HORIZON_WORKSPACE_ROOT } from "../workspace/runner-source.js";
 
 const TIMEOUT_MS = 600_000;
-const WORKSPACE_READ_CEILING_BYTES = 1_048_576;
 const WORKSPACE_LIST_OUTPUT_BYTES = 1_000_000;
 
 export function normalizeWorkspacePath(path: string, cwd = "/workspace"): string {
@@ -63,9 +62,44 @@ function succeeded(result: SandboxCommandResult): boolean {
   return result.status === "completed" && result.exitCode === 0;
 }
 
-export function workspaceReadMaximum(fileBytes: number): number | null {
-  if (!Number.isSafeInteger(fileBytes) || fileBytes < 0) throw new TypeError("workspace file size is invalid");
-  return fileBytes > WORKSPACE_READ_CEILING_BYTES ? null : Math.max(1, fileBytes);
+interface SandboxReadFileResult {
+  path: string;
+  content: string;
+  contentHash: string;
+  bytes: number;
+  offset: number;
+  returnedBytes: number;
+  nextOffset: number | null;
+}
+
+interface SandboxWriteFileResult { path: string; contentHash: string; bytes: number }
+
+async function readFilePage(selected: Sandbox, path: string, ctx: Ctx,
+  range: { offset?: number; limit?: number } = {}): Promise<SandboxReadFileResult> {
+  return ctx.invoke<SandboxReadFileResult>(ctx.resources.sandbox!, "read_file", {
+    sandbox: selected.id, path,
+    ...(range.offset === undefined ? {} : { offset: range.offset }),
+    ...(range.limit === undefined ? {} : { limit: range.limit }),
+  }, { timeoutMs: TIMEOUT_MS });
+}
+
+async function readWholeFile(selected: Sandbox, path: string, ctx: Ctx): Promise<SandboxReadFileResult> {
+  const pages: string[] = []; let offset = 0; let identity: Pick<SandboxReadFileResult, "path" | "contentHash" | "bytes"> | null = null;
+  for (;;) {
+    const page = await readFilePage(selected, path, ctx, { offset });
+    identity ??= { path: page.path, contentHash: page.contentHash, bytes: page.bytes };
+    if (page.path !== identity.path || page.contentHash !== identity.contentHash || page.bytes !== identity.bytes) {
+      throw new TypeError("workspace file changed while it was being read; retry from the current file");
+    }
+    if (page.offset !== offset || page.returnedBytes !== new TextEncoder().encode(page.content).byteLength) {
+      throw new TypeError("sandbox returned an invalid workspace file range");
+    }
+    pages.push(page.content);
+    if (page.nextOffset === null) return { ...page, content: pages.join(""), offset: 0,
+      returnedBytes: identity.bytes, nextOffset: null };
+    if (page.nextOffset <= offset) throw new TypeError("sandbox workspace file continuation did not advance");
+    offset = page.nextOffset;
+  }
 }
 
 export interface WorkspaceListEntry {
@@ -194,31 +228,25 @@ const search: Tool = {
 };
 
 const read: Tool = {
-  name: "workspace_read", version: "2",
-  description: "Read one UTF-8 repository file through CAS. Supply only an exact path discovered from workspace_list or workspace_search; file size and the internal read ceiling are handled automatically.",
-  schema: { type: "object", properties: { path: pathProperty }, required: ["path"], additionalProperties: false },
-  maxEffect: "idempotent", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile"] },
-    { binding: "cas", kind: "cas", ops: ["getText"] }],
+  name: "workspace_read", version: "3",
+  description: "Read one UTF-8 repository file directly from the workspace. Continue from nextOffset when the returned range does not reach end of file.",
+  schema: { type: "object", properties: { path: pathProperty,
+    offset: { type: "integer", minimum: 0 }, limit: { type: "integer", minimum: 1 } },
+  required: ["path"], additionalProperties: false },
+  maxEffect: "idempotent", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "read_file"] }],
   preview(result) {
-    const value = result as { path?: unknown; ref?: unknown; bytes?: unknown; text?: unknown; truncated?: unknown; reason?: unknown };
-    const text = typeof value.text === "string" ? value.text : ""; const maximum = 65_536;
-    const truncated = value.truncated === true || text.length > maximum;
-    return { path: value.path, ref: value.ref, bytes: value.bytes, text: text.slice(0, maximum), truncated,
-      ...(typeof value.reason === "string" ? { reason: value.reason } : truncated
-        ? { reason: "The model preview is truncated; use workspace_search to locate additional relevant sections." } : {}) };
+    const value = result as Partial<SandboxReadFileResult>;
+    return { path: value.path, contentHash: value.contentHash, bytes: value.bytes, offset: value.offset,
+      returnedBytes: value.returnedBytes, nextOffset: value.nextOffset };
   },
-  async run(args: { path: string }, ctx) {
+  async run(args: { path: string; offset?: number; limit?: number }, ctx) {
     const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
     if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
       throw new TypeError("workspace read path is outside /workspace/repo");
     }
-    const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
-    const maximumBytes = workspaceReadMaximum(file.bytes);
-    if (maximumBytes === null) return { path: file.path, ref: file.ref, bytes: file.bytes, text: null, truncated: true,
-      reason: "The file exceeds the internal 1 MiB text-read ceiling; use workspace_search to locate relevant sections." };
-    const value = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-      { ref: file.ref, maximumBytes });
-    return { path: file.path, ref: value.ref, bytes: value.bytes, text: value.text };
+    const value = await readFilePage(selected, path, ctx, args);
+    return { path: value.path, contentHash: value.contentHash, bytes: value.bytes, offset: value.offset,
+      returnedBytes: value.returnedBytes, nextOffset: value.nextOffset, text: value.content };
   },
 };
 
@@ -239,52 +267,45 @@ const exec: Tool = {
 };
 
 const write: Tool = {
-  name: "workspace_write", version: "1",
-  description: "Write one complete UTF-8 file through tenant-scoped CAS into the governed workspace. Use for new files or intentional whole-file replacement after inspecting the relevant current state; prefer workspace_edit for a bounded change to an existing file.",
-  schema: { type: "object", properties: { path: pathProperty, text: { type: "string", maxLength: 2_097_152 },
+  name: "workspace_write", version: "2",
+  description: "Write one complete UTF-8 file directly to the governed workspace. Use for new files or intentional whole-file replacement after inspecting the relevant current state; prefer workspace_edit for a bounded change to an existing file.",
+  schema: { type: "object", properties: { path: pathProperty, text: { type: "string" },
     mode: { type: "integer", minimum: 0, maximum: 511 } }, required: ["path", "text"], additionalProperties: false },
-  maxEffect: "idempotent", needs: [{ binding: "cas", kind: "cas", ops: ["putText"] },
-    { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "putFile"] }],
+  maxEffect: "idempotent", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "write_file"] }],
   async run(args: { path: string; text: string; mode?: number }, ctx) {
-    const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: args.text });
     const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
     if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
       throw new TypeError("workspace write path is outside /workspace/repo");
     }
-    await Promise.resolve(selected.putFile(path, stored.ref, { ...(args.mode === undefined ? {} : { mode: args.mode }),
-      invoke: { timeoutMs: TIMEOUT_MS } }));
-    return { path, ref: stored.ref, bytes: stored.bytes, created: stored.created };
+    return ctx.invoke<SandboxWriteFileResult>(ctx.resources.sandbox!, "write_file", {
+      sandbox: selected.id, path, content: args.text, ...(args.mode === undefined ? {} : { mode: args.mode }),
+    }, { timeoutMs: TIMEOUT_MS });
   },
 };
 
 const edit: Tool = {
-  name: "workspace_edit", version: "1",
+  name: "workspace_edit", version: "2",
   description: "Replace one unique exact text span in an existing governed workspace file. Include enough unchanged surrounding text in oldText to make the match unique. The Tool preserves line endings and returns before/after content references; use it for routine bounded edits instead of authoring a raw Git patch.",
   schema: { type: "object", properties: { path: pathProperty,
-    oldText: { type: "string", minLength: 1, maxLength: 1_048_576 },
-    newText: { type: "string", maxLength: 1_048_576 },
-    expectedRef: { type: "string", pattern: "^[a-f0-9]{64}$" } },
+    oldText: { type: "string", minLength: 1 }, newText: { type: "string" },
+    expectedHash: { type: "string", pattern: "^[a-f0-9]{64}$" } },
   required: ["path", "oldText", "newText"], additionalProperties: false },
   maxEffect: "idempotent", once: "per-run-and-args",
-  needs: [{ binding: "cas", kind: "cas", ops: ["getText", "putText"] },
-    { binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "getFile", "putFile"] }],
-  async run(args: { path: string; oldText: string; newText: string; expectedRef?: string }, ctx) {
+  needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "read_file", "write_file"] }],
+  async run(args: { path: string; oldText: string; newText: string; expectedHash?: string }, ctx) {
     const selected = await workspace(ctx); const path = normalizeWorkspacePath(args.path, HORIZON_WORKSPACE_ROOT);
     if (path !== HORIZON_WORKSPACE_ROOT && !path.startsWith(`${HORIZON_WORKSPACE_ROOT}/`)) {
       throw new TypeError("workspace edit path is outside /workspace/repo");
     }
-    const file = await Promise.resolve(selected.getFile(path, { timeoutMs: TIMEOUT_MS }));
-    if (args.expectedRef !== undefined && args.expectedRef !== file.ref) {
-      throw new TypeError("workspace edit expectedRef is stale; read the current file before retrying");
+    const file = await readWholeFile(selected, path, ctx);
+    if (args.expectedHash !== undefined && args.expectedHash !== file.contentHash) {
+      throw new TypeError("workspace edit expectedHash is stale; read the current file before retrying");
     }
-    const maximumBytes = workspaceReadMaximum(file.bytes);
-    if (maximumBytes === null) throw new TypeError("workspace file exceeds the supported edit ceiling");
-    const current = await ctx.invoke<{ ref: string; text: string; bytes: number }>(ctx.resources.cas!, "getText",
-      { ref: file.ref, maximumBytes });
-    const edited = editWorkspaceText(current.text, args.oldText, args.newText);
-    const stored = await ctx.invoke<{ ref: string; created: boolean; bytes: number }>(ctx.resources.cas!, "putText", { text: edited.text });
-    await Promise.resolve(selected.putFile(path, stored.ref, { invoke: { timeoutMs: TIMEOUT_MS } }));
-    return { path, beforeRef: file.ref, afterRef: stored.ref, bytes: stored.bytes, replacements: edited.replacements };
+    const edited = editWorkspaceText(file.content, args.oldText, args.newText);
+    const written = await ctx.invoke<SandboxWriteFileResult>(ctx.resources.sandbox!, "write_file",
+      { sandbox: selected.id, path, content: edited.text }, { timeoutMs: TIMEOUT_MS });
+    return { path, beforeHash: file.contentHash, afterHash: written.contentHash,
+      bytes: written.bytes, replacements: edited.replacements };
   },
 };
 

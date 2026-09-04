@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { readFile } from "node:fs/promises";
-import type { CRN, CreateSandboxOptions, Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool } from "@constal/sdk";
+import type {
+  CRN, CreateSandboxOptions, Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool,
+  SandboxReadFileResult, SandboxWriteFileResult,
+} from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzRequest, HzWorkspaceAnchor, HzWorkspaceReceipt } from "../src/contracts.js";
 import { captureWorkspaceCheckpoint, inspectWorkspaceState, prepareWorkspace, restoreWorkspaceAnchor } from "../src/workspace/lifecycle.js";
@@ -126,6 +129,17 @@ class FakeSandbox implements Sandbox {
   getFile(path: string): Handle<{ path: string; ref: never; bytes: number }> {
     const ref = this.files.get(path); if (!ref) throw new Error(`missing file ${path}`);
     return handle({ path, ref: ref as never, bytes: this.backend.cas.get(ref)?.length ?? 0 });
+  }
+  async readFile(path: string, options?: { offset?: number; limit?: number }): Promise<SandboxReadFileResult> {
+    const ref = this.files.get(path); if (!ref) throw new Error(`missing file ${path}`);
+    const content = this.backend.cas.get(ref) ?? ""; const encoded = new TextEncoder().encode(content);
+    const offset = options?.offset ?? 0; const end = Math.min(encoded.byteLength, offset + (options?.limit ?? encoded.byteLength));
+    return { path, content: new TextDecoder().decode(encoded.subarray(offset, end)), contentHash: ref as never,
+      bytes: encoded.byteLength, offset, returnedBytes: end - offset, nextOffset: end < encoded.byteLength ? end : null };
+  }
+  async writeFile(path: string, content: string): Promise<SandboxWriteFileResult> {
+    const ref = `direct-${++this.backend.sequence}`; this.backend.cas.set(ref, content); this.files.set(path, ref);
+    return { path, contentHash: ref as never, bytes: new TextEncoder().encode(content).byteLength };
   }
   putFile(path: string, ref: never): Handle<{ ok: boolean }> { this.files.set(path, String(ref)); return handle({ ok: true }); }
   deleteFile(path: string): Handle<{ ok: boolean }> { this.files.delete(path); return handle({ ok: true }); }
