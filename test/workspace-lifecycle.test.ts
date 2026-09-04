@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { readFile } from "node:fs/promises";
 import type { CRN, CreateSandboxOptions, Ctx, Fact, Handle, Sandbox, SandboxCommandResult, SandboxImage, SandboxPool } from "@constal/sdk";
 import { describe, expect, it } from "vitest";

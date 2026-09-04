@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it, vi } from "vitest";
 import type { AuthProviderContext } from "@constal/sdk";
 import horizonGitHubAuth from "../src/github-auth-provider/index.js";

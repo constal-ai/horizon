@@ -1,5 +1,11 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 /** Generated from sandbox/constal-workspace-runner.mjs; kept inline for governed bootstrap during image rollouts. */
 export const WORKSPACE_RUNNER_SOURCE = `#!/usr/bin/env node
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, lstatSync, mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

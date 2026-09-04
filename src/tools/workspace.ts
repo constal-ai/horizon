@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { type Ctx, type Sandbox, type SandboxCommandResult, type Tool } from "@constal/sdk";
 import { HORIZON_RUNNER_PATH, HORIZON_WORKSPACE_ROOT } from "../workspace/runner-source.js";
 

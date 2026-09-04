@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Ctx, Tool } from "@constal/sdk";
 import { GITHUB_TOOLS as GITHUB_PACKAGE_TOOLS } from "@constal-ai/github";
 import { PLATFORM_TOOLS } from "./platform.js";

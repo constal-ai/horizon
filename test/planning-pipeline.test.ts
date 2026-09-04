@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Ctx, Fact, Handle } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import type { HzDesign, HzExecutionAttempt, HzInvestigationResult, HzPlan, HzPlanInput, HzPlanCritique, HzPlanNarrative,

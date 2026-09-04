@@ -2,6 +2,8 @@
   "name": "@constal/horizon",
   "version": "0.6.32",
   "description": "Constal's long-horizon software agent.",
+  "license": "Apache-2.0",
+  "author": "Coresource AI, Inc.",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it, vi } from "vitest";
 import type { ChannelContext, ChannelRequest } from "@constal/sdk";
 import horizonGitHub, { horizonGitHubConfig } from "../src/github-channel/index.js";

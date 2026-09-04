@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { canonicalJson, type Ctx, type ToolCallRecord, type TurnDraft } from "@constal/sdk";
 import type { HzToolEvidence } from "./contracts.js";
 import { COMMON_RULES, composePrompt } from "./prompts/compose.js";

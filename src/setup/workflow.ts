@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import {
   setupAwait, setupScreen, setupSubmission,
   type ConstalApiChangePlan, type ConstalApiChangeReceipt, type Ctx, type SetupScreen, type SetupSubmission,

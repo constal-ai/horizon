@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { WEB_SEARCH_ARGUMENT_SCHEMA, webFetch, webSearch, type Tool } from "@constal/sdk";
 
 const searchProperties = WEB_SEARCH_ARGUMENT_SCHEMA.properties;

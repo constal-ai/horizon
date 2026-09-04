@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import type { ConstalApiChangePlan, ConstalApiChangeReceipt, Ctx, Fact, Handle, SetupScreen, SetupSubmission } from "@constal/sdk";
 import { runHorizonSetup } from "../src/setup/workflow.js";

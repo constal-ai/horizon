@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 export { discoveryFramer } from "./discovery.js";
 export { investigator } from "./investigator.js";
 export { planner } from "./planner.js";

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { channel, hashValue, type ChannelContext, type ChannelRequest } from "@constal/sdk";
 import { HORIZON_BEHAVIOR_CATALOG } from "../behaviors.js";
 import { HORIZON_GITHUB_EVENT_CATALOG, HORIZON_GITHUB_MENTIONS } from "../github-events.js";

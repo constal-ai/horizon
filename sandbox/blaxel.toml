@@ -1,3 +1,6 @@
+# Copyright 2026 Coresource AI, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 type = "sandbox"
 # Blaxel's importer currently resolves the release tag. The release pipeline
 # verifies that this tag resolves to canonical digest

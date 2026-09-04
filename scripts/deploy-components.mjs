@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFile, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

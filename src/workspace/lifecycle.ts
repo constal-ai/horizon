@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import {
   canonicalJson, hashValue,
   type Ctx, type Sandbox, type SandboxCommandResult, type SandboxImage, type SandboxPool, type SpawnAttenuation,

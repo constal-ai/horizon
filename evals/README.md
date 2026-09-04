@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Coresource AI, Inc. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Horizon evaluations
 
 Horizon is evaluated through Constal's normal Dataset, Scorer, and Suite Resources. The cases in this directory are immutable inputs to ordinary Horizon Runs; there is no test-only execution path.

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { subtask } from "@constal/sdk";
 import { parseHzDiscoveryPlan, type HzDiscoveryInput, type HzDiscoveryResult } from "../contracts.js";
 import { DISCOVERY_SYSTEM } from "../prompts/discovery.js";

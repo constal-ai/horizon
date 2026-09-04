@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Coresource AI, Inc. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Horizon
 
 Horizon is Constal's long-horizon software agent. It investigates a repository, commits an immutable natural-language execution specification, assigns each semantic responsibility to a focused child Agent, and keeps reconciling actual evidence with the plan until the work is proven complete or one material user decision is required.
@@ -210,3 +213,9 @@ npm run check
 The package root is directly deployable through Constal's managed Agent deployment flow after its manifest bindings are selected for the target namespace.
 
 Build the code Sandbox base with `docker build --platform linux/amd64 -t <registry>/constal-horizon-sandbox:<version> sandbox`. Configure the platform `sandbox-pool/constal-code` Resource with the published immutable image digest before deploying Horizon. See [docs/execution-architecture.md](docs/execution-architecture.md) for lifecycle and recovery invariants.
+
+## License
+
+Copyright 2026 Coresource AI, Inc.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

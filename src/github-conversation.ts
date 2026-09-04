@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { AwaitPresentation } from "@constal/sdk";
 import type { HzDecisionQuestion, HzPlan, HzRunResult, HzStepResult } from "./contracts.js";
 import type { HorizonOperationalResult } from "./operational.js";

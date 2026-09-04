@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzMilestoneWork, parseHzPlan, parseHzWorkPlan, type HzCritiqueFinding, type HzCritiqueOwner, type HzDesign,

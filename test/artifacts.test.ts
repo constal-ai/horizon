@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Ctx } from "@constal/sdk";
 import { describe, expect, it, vi } from "vitest";
 import { HORIZON_ARTIFACT_ENVELOPE_MAX_BYTES, loadArtifact, storeArtifact } from "../src/artifacts.js";

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { agent, type HistoryView } from "@constal/sdk";
 import { assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgent, decompositionAgent, designAgent, discoveryFramer, executor,
   investigator, planFinalizer, planner, reconciler, rubricAgent, verifier, approvalInterpreter,

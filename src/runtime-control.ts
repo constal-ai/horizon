@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 const RUNTIME_CONTROL_ERRORS = new Set([
   "AfterYield",
   "CommitConflict",

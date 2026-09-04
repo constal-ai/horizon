@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Coresource AI, Inc. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Horizon sandbox image
 
 The Dockerfile pins its default multi-platform Node base by digest. Override it only with another immutable reference:

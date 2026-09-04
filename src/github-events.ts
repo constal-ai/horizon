@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 export const HORIZON_GITHUB_MENTIONS = ["@constalai", "@constal-ai"] as const;
 
 export const HORIZON_GITHUB_EVENT_CATALOG = {

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { subtask } from "@constal/sdk";
 import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzReconciliation, type HzReconcilerInput, type HzReconcilerResult } from "../contracts.js";

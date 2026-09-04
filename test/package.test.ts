@@ -1,4 +1,7 @@
-import { readFile } from "node:fs/promises";
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import agent from "../src/index.js";
 import { HORIZON_EXECUTION_LOOP_TURNS, HORIZON_LOOP_MICRO_USD, HORIZON_STANDARD_LOOP_TURNS } from "../src/limits.js";
@@ -7,7 +10,31 @@ async function json(path: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(new URL(path, import.meta.url), "utf8")) as Record<string, unknown>;
 }
 
+async function filesUnder(directory: URL): Promise<URL[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  return (await Promise.all(entries.filter((entry) => ![".git", "node_modules", "dist", "coverage"].includes(entry.name))
+    .map((entry) => entry.isDirectory() ? filesUnder(new URL(`${entry.name}/`, directory)) : [new URL(entry.name, directory)]))).flat();
+}
+
 describe("Horizon managed Agent package", () => {
+  it("licenses the complete authored repository to Coresource AI under Apache-2.0", async () => {
+    const root = new URL("../", import.meta.url);
+    const [license, notice, readme, pkg, files] = await Promise.all([
+      readFile(new URL("LICENSE", root), "utf8"), readFile(new URL("NOTICE", root), "utf8"),
+      readFile(new URL("README.md", root), "utf8"), json("../package.json"), filesUnder(root),
+    ]);
+    expect(license).toContain("Apache License\n                           Version 2.0, January 2004");
+    expect(notice).toContain("Copyright 2026 Coresource AI, Inc.");
+    expect(readme).toContain("Licensed under the [Apache License, Version 2.0](LICENSE).");
+    expect(pkg).toMatchObject({ license: "Apache-2.0", author: "Coresource AI, Inc." });
+    const commentSafe = files.filter((file) => /(?:\.ts|\.mjs|\.md|\.toml|\/Dockerfile|\/\.gitignore)$/u.test(file.pathname));
+    const missing = [];
+    for (const file of commentSafe) {
+      if (!(await readFile(file, "utf8")).includes("SPDX-License-Identifier: Apache-2.0")) missing.push(file.pathname);
+    }
+    expect(missing).toEqual([]);
+  });
+
   it("keeps package, manifest, and executable identity aligned", async () => {
     const [manifest, pkg] = await Promise.all([json("../constal.agent.json"), json("../package.json")]);
     expect({ id: manifest.id, version: manifest.version, mode: manifest.mode })

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { CONSTAL_API_OPERATION_SCHEMAS, opTool, type Tool } from "@constal/sdk";
 
 const tools = [

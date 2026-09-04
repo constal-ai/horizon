@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Coresource AI, Inc. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Known issues
 
 ## Deleted GitHub issues can activate work

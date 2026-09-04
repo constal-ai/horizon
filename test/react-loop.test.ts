@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { ToolUnavailable, type Ctx, type Fact, type ToolCallRecord, type TurnRecord } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import { EvidencePlateauDetector, LOOP_CHECKPOINT_SYSTEM, runReactLoop } from "../src/react-loop.js";

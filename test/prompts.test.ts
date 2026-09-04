@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import { EXECUTOR_SYSTEM } from "../src/prompts/executor.js";
 import { DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM } from "../src/prompts/discovery.js";

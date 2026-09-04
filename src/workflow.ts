@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { canonicalJson, hashValue, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "./artifacts.js";

@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { agent } from "@constal/sdk";
 import { runHorizonSetup } from "./workflow.js";
 

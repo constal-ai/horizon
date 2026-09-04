@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Ctx } from "@constal/sdk";
 import type { HzRunResult } from "../contracts.js";
 import { waitPresentation } from "../github-conversation.js";

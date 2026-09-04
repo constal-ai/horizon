@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 export type HzPlanStatus = "ready" | "needs-input";
 export type HzUnknownState = "open" | "resolved" | "assumed" | "needs-input" | "blocked";
 

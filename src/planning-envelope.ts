@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 type PlanningRecord = Record<string, unknown>;
 
 function record(value: unknown): PlanningRecord | null {

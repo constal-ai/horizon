@@ -1,3 +1,6 @@
+# Copyright 2026 Coresource AI, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 ARG BASE_IMAGE=docker.io/library/node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
 ARG BLAXEL_SANDBOX_API_IMAGE=ghcr.io/blaxel-ai/sandbox@sha256:7c05b166d7e3cc9c98f2ed7f156657f95be80e1a669efbc8e5b9aa5aa96cd967
 FROM ${BLAXEL_SANDBOX_API_IMAGE} AS blaxel-sandbox-api

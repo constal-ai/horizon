@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Fact, Hash, ViewDef } from "@constal/sdk";
 
 export interface HorizonProgressState {

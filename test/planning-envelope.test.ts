@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import { parseHzAssertionPlan, parseHzMilestoneWork, parseHzPlanNarrative, parseHzStepAssertions } from "../src/contracts.js";
 import { assertionPlanArtifact, milestoneWorkArtifact, planningArtifact } from "../src/planning-envelope.js";

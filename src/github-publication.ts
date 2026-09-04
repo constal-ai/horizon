@@ -1,3 +1,6 @@
+// Copyright 2026 Coresource AI, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { hashValue, type Ctx } from "@constal/sdk";
 import { invokeGitHub } from "@constal-ai/github";
 import type { HzPlan, HzRequest, HzRunResult } from "./contracts.js";
