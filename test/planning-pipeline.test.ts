@@ -172,37 +172,32 @@ describe("Horizon multi-loop planner", () => {
         "critique:complete", "finalization"]);
   });
 
-  it("lets the initial rubric reopen investigation before design", async () => {
+  it("keeps evidence questions in the rubric without letting rubric schedule investigation", async () => {
     const openRubric: HzRubric = { ...rubric, openQuestions: [{
       question: "Which existing Resource owns recovery?", state: "open", resolution: null,
       evidence: ["Authenticated Resource catalog."],
     }] };
-    const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
-      focusId: "placeholder", status: "complete", summary: "The runtime Resource owns recovery.",
-      findings: ["The existing Resource is the owner."], evidence: ["platform_get Resource catalog"], unknowns: [],
-      planImplications: ["Reuse the existing Resource."] };
-    const fixture = planningContext([accepted], [design], {
-      rubrics: [openRubric, rubric], investigationResults: [additional],
-    });
+    const fixture = planningContext([accepted], [design], { rubrics: [openRubric] });
 
     const result = await planner.run(fixture.envelope, fixture.ctx);
 
     expect(result.plan.status).toBe("ready");
-    expect(result.state.investigations).toHaveLength(2);
-    expect(fixture.spawned.slice(0, 4)).toEqual([
-      "horizon-rubric", "horizon-investigator", "horizon-rubric", "horizon-design",
+    expect(result.state.investigations).toHaveLength(1);
+    expect(fixture.spawned.slice(0, 3)).toEqual([
+      "horizon-rubric", "horizon-design", "horizon-milestone-decomposition",
     ]);
+    expect(fixture.spawned).not.toContain("horizon-investigator");
   });
 
-  it("closes one rubric evidence phase even when the decisive pass rephrases an unresolved question", async () => {
-    const first: HzRubric = { ...rubric, openQuestions: [{
-      question: "Does the live Resource expose the operation?", state: "open", resolution: null,
-      evidence: ["Authenticated Resource catalog."],
-    }] };
-    const decisive: HzRubric = { ...rubric, openQuestions: [{
-      question: "Can the currently bound Resource perform the required operation?", state: "blocked", resolution: null,
-      evidence: ["The authorized catalog did not expose operation metadata."],
-    }] };
+  it("runs one controller-owned evidence frontier when critique rephrases the same scoped gap", async () => {
+    const first: HzPlanCritique = { ...accepted, verdict: "repair", summary: "Operation evidence is missing.",
+      findings: [{ owner: "investigation", severity: "blocking", affectedMilestones: ["behavior"],
+        affectedSteps: [step.id], issue: "Does the live Resource expose the operation?",
+        evidence: ["Authenticated Resource catalog."], repair: "Read the live Resource operation contract." }] };
+    const rephrased: HzPlanCritique = { ...accepted, verdict: "repair", summary: "The capability remains uncertain.",
+      findings: [{ owner: "investigation", severity: "blocking", affectedMilestones: ["behavior"],
+        affectedSteps: [step.id], issue: "Can the current binding perform the required operation?",
+        evidence: ["The operation list was unavailable."], repair: "Inspect the bound capability metadata." }] };
     const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
       focusId: "placeholder", status: "partial", summary: "The live operation list is not observable.", findings: [],
       evidence: ["platform_get returned no operation metadata"], unknowns: [{
@@ -211,16 +206,18 @@ describe("Horizon multi-loop planner", () => {
       }], planImplications: ["Preserve the uncertainty explicitly."] };
     const observation: HzToolEvidence = { name: "platform_get", status: "failed",
       args: { ref: "service/github" }, ref: null, result: { message: "operation metadata unavailable" } };
-    const fixture = planningContext([accepted], [design], {
-      rubrics: [first, decisive], investigationResults: [additional], investigationToolEvidence: [[observation]],
+    const fixture = planningContext([first, rephrased, accepted, accepted], [design], {
+      investigationResults: [additional], investigationToolEvidence: [[observation]],
     });
 
     const result = await planner.run(fixture.envelope, fixture.ctx);
 
     expect(result.plan.status).toBe("ready");
     expect(fixture.spawned.filter((id) => id === "horizon-investigator")).toHaveLength(1);
-    expect(fixture.spawned.filter((id) => id === "horizon-rubric")).toHaveLength(2);
-    expect(fixture.spawned).toContain("horizon-design");
+    expect(fixture.spawned.filter((id) => id === "horizon-rubric")).toHaveLength(1);
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.investigation",
+      frontier: expect.objectContaining({ phase: "structure" }) }));
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.planning-plateau" }));
   });
 
   it("enters execution replanning at whole-work-plan repair without rerunning upstream phases", async () => {
@@ -283,6 +280,34 @@ describe("Horizon multi-loop planner", () => {
     expect(result.plan).toEqual(revisedFinal);
     expect(fixture.spawned.slice(0, prefix.length)).toEqual(prefix);
     if (owner === "design") expect(fixture.spawned).not.toContain("horizon-rubric");
+  });
+
+  it("returns execution-origin evidence repair directly to design", async () => {
+    const revisedAssertions: HzStepAssertions = { ...assertions, revision: 2 };
+    const acceptedRevision: HzPlanCritique = { ...accepted, revision: 2 };
+    const revisedFinal: HzPlan = { ...finalPlan, revision: 2, assertions: [revisedAssertions] };
+    const planningInput: HzPlanInput = { ...input, revision: 2, previousPlan: finalPlan, previousState: priorState,
+      restartAt: "investigation", executionEvidence,
+      replanBrief: "Execution exposed a repository fact that the prior design did not observe." };
+    const revisedDesign: HzDesign = { ...design, revision: 2,
+      summary: "The design incorporates the newly investigated repository fact." };
+    const additional: HzInvestigationResult = { object: "constal.horizon.investigation", version: 1,
+      focusId: "placeholder", status: "complete", summary: "The repository fact is now observed.",
+      findings: ["The existing runtime seam owns the behavior."], evidence: ["src/runtime.ts"], unknowns: [],
+      planImplications: ["Repair design through the existing runtime seam."] };
+    const fixture = planningContext([acceptedRevision, acceptedRevision], [revisedDesign], { planningInput,
+      investigationResults: [additional], workByMilestone: { behavior: [step] },
+      assertionsByStep: { [step.id]: revisedAssertions }, finalPlan: revisedFinal });
+
+    const result = await planner.run(fixture.envelope, fixture.ctx);
+
+    expect(result.plan).toEqual(revisedFinal);
+    expect(fixture.spawned.slice(0, 3)).toEqual([
+      "horizon-investigator", "horizon-design", "horizon-milestone-decomposition",
+    ]);
+    expect(fixture.spawned).not.toContain("horizon-rubric");
+    expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.investigation",
+      frontier: expect.objectContaining({ phase: "execution" }) }));
   });
 
   it("subjects completed-work continuity to cross-plan critique and global repair", async () => {
@@ -475,10 +500,11 @@ describe("Horizon multi-loop planner", () => {
     expect(result.plan.status).toBe("ready");
     expect(result.state.investigations).toHaveLength(2);
     expect(result.state.investigations[1]).toEqual(expect.objectContaining({ summary: additional.summary,
-      focusId: expect.stringMatching(/^planning-gap-/) }));
+      focusId: expect.stringMatching(/^planning-evidence-/) }));
     expect(fixture.spawned).toContain("horizon-investigator");
+    expect(fixture.spawned.filter((id) => id === "horizon-rubric")).toHaveLength(1);
     expect(fixture.committed).toContainEqual(expect.objectContaining({ kind: "horizon.investigation",
-      source: "planning-critique" }));
+      source: "planning-critique", frontier: expect.objectContaining({ phase: "structure" }) }));
   });
 
   it("routes an evidence-insoluble semantic decision to a durable user question", async () => {

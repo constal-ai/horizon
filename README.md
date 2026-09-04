@@ -53,7 +53,6 @@ Dependency-ready work unit ──► Execution Agent ReAct
 ```text
 Initial planning
   Rubric
-    ├─ open evidence question ───► Focused investigation ───► Rubric
     ↓
   Design
     ↓
@@ -65,7 +64,7 @@ Initial planning
        │
        ├─ evidence problem ──────► Focused investigation
        │                              ↓
-       │                         Rubric → Design → fresh decomposition
+       │                         Design → fresh decomposition
        │
        ├─ rubric problem ────────► Rubric → Design → fresh decomposition
        │
@@ -86,7 +85,7 @@ Complete critique
        └─ upstream problem ──────► corresponding upstream route
 ```
 
-Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique reports the earliest deficient owner; the planning controller chooses the transition. A material evidence gap reopens a focused read-only investigation, whose evidence is accumulated into the same planning state before the affected downstream layers are rebuilt.
+Initial discovery and investigation own repository evidence before rubric begins. Rubric consumes that evidence and defines success; it never schedules investigation. Initial decomposition stays parallel and milestone-scoped. Repair is different: the whole-work-plan repair Agent owns the complete dependency graph, so it can merge duplicate responsibilities, move ownership, and repair cross-milestone handoffs in one pass. The whole-assertion-plan repair Agent does the same for proof obligations. Critique reports the earliest deficient owner; the planning controller chooses the transition. A material evidence gap creates one controller-owned frontier from its affected milestone and step scope, reopens a focused read-only investigation, accumulates the result in the same planning state, and returns to the requesting downstream phase. An unchanged frontier plateaus as explicit unavailable evidence rather than being regenerated from rephrased model prose.
 
 Models never own a terminal planning transition. For each exact planning state, the controller records a repair route that returned to an already-observed state and makes that route unavailable on the next critique. The critic must then choose a different evidence or repair owner, accept explicit uncertainty that does not prevent execution, or formulate one durable user decision. This makes convergence a controller property without mechanically judging natural-language semantics.
 

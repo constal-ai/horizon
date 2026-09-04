@@ -16,8 +16,7 @@ export interface PlanningPhaseResult<T> {
   toolEvidence: HzToolEvidence[];
 }
 
-interface RubricInput { planning: HzPlanInput; prior: HzRubric | null; critique: HzPlanCritique | null;
-  evidenceClosure: boolean; tools: string[] }
+interface RubricInput { planning: HzPlanInput; prior: HzRubric | null; critique: HzPlanCritique | null; tools: string[] }
 interface DesignInput { planning: HzPlanInput; rubric: HzRubric; prior: HzDesign | null; critique: HzPlanCritique | null; tools: string[] }
 interface DecompositionInput { planning: HzPlanInput; rubric: HzRubric; design: HzDesign; milestoneId: string;
   acceptedSteps: HzPlanStep[]; requiredPrerequisiteStepIds: string[];
@@ -44,16 +43,12 @@ function context(planning: HzPlanInput): Record<string, unknown> {
 }
 
 export const rubricAgent = subtask<PlanningPhaseResult<HzRubric>>({
-  id: "horizon-rubric", version: "5",
+  id: "horizon-rubric", version: "6",
   async run(envelope: ArtifactEnvelope, ctx) {
     const input = await loadArtifact<RubricInput>(ctx, envelope);
     const loop = await runReactLoop({ role: "rubric", system: RUBRIC_SYSTEM,
       objective: "Define the evidence-grounded success rubric.",
-      context: { ...context(input.planning), priorRubric: input.prior, critique: input.critique,
-        rubricEvidenceClosure: input.evidenceClosure ? {
-          status: "complete",
-          guidance: "Focused evidence closure for this rubric revision is complete. Classify every remaining unknown decisively; a later structural critique may reopen investigation if new evidence makes that necessary.",
-        } : null },
+      context: { ...context(input.planning), priorRubric: input.prior, critique: input.critique },
       tools: input.tools, model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzRubric(planningArtifact(value,
         { object: "constal.horizon.rubric", revision: input.planning.revision }), input.planning.revision) }, ctx);
