@@ -26,6 +26,13 @@ try {
     await cp("src", join(staging, "src"), { recursive: true });
     await copyFile(join(component.directory, component.manifest), join(staging, component.manifest));
     const manifest = JSON.parse(await readFile(join(staging, component.manifest), "utf8"));
+    const current = await request(`/v1/namespaces/default/resources/${encodeURIComponent(manifest.kind)}/${encodeURIComponent(manifest.id)}`)
+      .then((value) => value?.data ?? null, (error) => error?.status === 404 ? null : Promise.reject(error));
+    if (current?.version === manifest.version) {
+      deployments.push({ component: component.id, deploymentRevision: current.deploymentRevision,
+        resourceCrn: current.crn, resourceHash: current.hash, existing: true });
+      continue;
+    }
     await writeFile(join(staging, "package.json"), `${JSON.stringify({ name: `@constal/horizon-${component.directory}`,
       version: manifest.version, private: true, type: "module", dependencies: { "@constal/sdk": "2.5.0" } }, null, 2)}\n`);
     execFileSync("tar", ["-czf", archivePath, "-C", staging, "."], { stdio: "pipe" });
@@ -56,7 +63,10 @@ async function request(path, init = {}) {
     authorization: `Bearer ${issued.key}`, "x-constal-tenant": tenant, "x-constal-namespace": "default", ...(init.headers ?? {}),
   } });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${response.status} ${JSON.stringify(body)?.slice(0, 2_000)}`);
+  if (!response.ok) throw Object.assign(
+    new Error(`${init.method ?? "GET"} ${path}: ${response.status} ${JSON.stringify(body)?.slice(0, 2_000)}`),
+    { status: response.status },
+  );
   return body;
 }
 
