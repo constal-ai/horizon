@@ -3,7 +3,7 @@
   "kind": "agent",
   "id": "horizon-setup",
   "namespace": "default",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "entry": "src/setup/index.ts",
   "mode": "script",
   "bindings": {
@@ -14,7 +14,7 @@
   "tools": [],
   "limits": {
     "maxRunMicroUsd": 5000000,
-    "maxTurns": 16
+    "maxTurns": 1
   },
   "expectedCurrentDeploymentRevision": null
 }

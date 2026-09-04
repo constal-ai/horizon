@@ -6,7 +6,7 @@ import { runHorizonSetup } from "./workflow.js";
 
 export default agent({
   id: "horizon-setup",
-  version: "0.1.0",
+  version: "0.1.1",
   model: "model",
   mode: "script",
   onMessage: runHorizonSetup,
