@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
+import { PLATFORM_TOOLS } from "../src/tools/platform.js";
 import { WEB_TOOLS } from "../src/tools/web.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
   workspaceReadMaximum, WORKSPACE_TOOLS } from "../src/tools/workspace.js";
@@ -32,6 +33,15 @@ describe("Horizon Tool capability projection", () => {
     expect(schema.properties).not.toHaveProperty("includeImages");
     expect(schema.properties).not.toHaveProperty("includeImageDescriptions");
     expect(schema.properties).not.toHaveProperty("searchDepth");
+  });
+
+  it("projects exact Constal API query and object-ref schemas to the model", () => {
+    const query = PLATFORM_TOOLS.platform_query!.schema as { required: string[]; properties: Record<string, unknown> };
+    const get = PLATFORM_TOOLS.platform_get!.schema as { required: string[]; properties: Record<string, unknown> };
+    expect(query.required).toEqual(["kind", "scope"]);
+    expect(query.properties.kind).toMatchObject({ pattern: "^[a-z][a-z0-9-]{0,63}$" });
+    expect(get.required).toEqual(["ref"]);
+    expect(get.properties.ref).toHaveProperty("anyOf");
   });
 
 
