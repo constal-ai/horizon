@@ -3,10 +3,10 @@
   "kind": "channel",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "entry": "src/github-channel/index.ts",
   "config": {
-    "repositories": ["constal-ai/horizon"],
+    "repositories": ["constal-ai/horizon", "constal-ai/const-alpha"],
     "events": ["github.issue.activated", "github.issue.comment", "github.pull-request.comment", "github.status"],
     "routes": {
       "github.issue.activated": "issue-work",
@@ -32,5 +32,5 @@
   },
   "bindings": { "github": "crn:constal:production:platform:default:service/github" },
   "policies": [],
-  "expectedCurrentDeploymentRevision": "e9664abc-78da-40cb-98fd-a2c50d1bd703"
+  "expectedCurrentDeploymentRevision": "bf79623d-f293-4e8c-9a16-eaadf4066d52"
 }
