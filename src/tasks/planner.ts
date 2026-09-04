@@ -1,7 +1,7 @@
 import { canonicalJson, hashValue, subtask, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { loadArtifact, storeArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzMilestoneWork, parseHzPlan, parseHzWorkPlan, type HzCritiqueFinding, type HzCritiqueOwner, type HzDesign,
-  type HzDiscoveryFocus, type HzInvestigationResult, type HzMilestone, type HzPlanContinuity, type HzPlanCritique,
+  type HzDiscoveryFocus, type HzInvestigatorOutput, type HzInvestigationResult, type HzMilestone, type HzPlanContinuity, type HzPlanCritique,
   type HzPlanInput, type HzPlannerResult, type HzPlanningOwner, type HzPlanningState, type HzRubric,
   type HzStepAssertions, type HzToolEvidence, type HzWorkPlan } from "../contracts.js";
 import { bindingsForTools } from "../tools/index.js";
@@ -276,13 +276,15 @@ export const planner = subtask<HzPlannerResult>({
           stopWhen: "The question is answered from governed evidence or narrowed to one material user decision." });
       }
       if (focuses.length === 0) return { ran: false, observedProgress: false };
-      const handles = focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
-        request: input.request, discoveryPlan: input.discoveryPlan, workspaceReceipt: input.workspaceReceipt,
-        focus, priorInvestigations: investigations, tools,
-      }, {
-        retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
-          microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS }, attenuation: childAttenuation,
-      }) }));
+      const handles: Array<{ focus: HzDiscoveryFocus; handle: Handle<HzInvestigatorOutput> }> = [];
+      for (const focus of focuses) {
+        const phaseInput = await storeArtifact(ctx, { request: input.request, discoveryPlan: input.discoveryPlan,
+          workspaceReceipt: input.workspaceReceipt, focus, priorInvestigations: investigations, tools });
+        handles.push({ focus, handle: ctx.spawn(investigator, phaseInput, {
+          retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+            microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS }, attenuation: childAttenuation,
+        }) });
+      }
       let observedProgress = false;
       for (const { focus, handle } of handles) {
         const result = await Promise.resolve(handle);

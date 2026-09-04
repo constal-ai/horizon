@@ -130,8 +130,8 @@ function planningContext(critics: HzPlanCritique[], designs: HzDesign[] = [desig
       if (task.id === "horizon-investigator") {
         const result = options.investigationResults?.[Math.min(investigationIndex++,
           options.investigationResults.length - 1)]!;
-        const focus = envelope as unknown as { focus: { id: string } };
-        return handle({ investigation: { ...result, focusId: focus.focus.id }, toolEvidence: [] });
+        const phase = JSON.parse(artifacts.get(envelope.ref!)!) as { focus: { id: string } };
+        return handle({ investigation: { ...result, focusId: phase.focus.id }, toolEvidence: [] });
       }
       if (task.id === "horizon-plan-critique") return handle({ artifact: critics[Math.min(criticIndex++, critics.length - 1)]!, toolEvidence: [] });
       if (task.id === "horizon-plan-finalizer") return handle({ artifact: narrative(options.finalPlan ?? finalPlan), toolEvidence: [] });

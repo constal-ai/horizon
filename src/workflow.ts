@@ -1,7 +1,8 @@
-import { canonicalJson, hashValue, type Ctx, type SpawnAttenuation } from "@constal/sdk";
+import { canonicalJson, hashValue, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
 import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "./artifacts.js";
-import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigationResult,
+import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigatorOutput,
+  type HzInvestigationResult,
   type HzPlan, type HzPlanContinuity, type HzPlanInput, type HzPlanningState, type HzPlateauState, type HzRequest,
   type HzRunResult, type HzStepResult, type HzToolEvidence, type HzToolEvidenceSummary,
   type HzWorkspaceAnchor, type HzWorkspaceState } from "./contracts.js";
@@ -353,14 +354,17 @@ async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: C
   const discoveryFact = await ctx.commit({ kind: "horizon.discovery-plan", discoveryPlan: framed.discoveryPlan,
     toolEvidence: framed.toolEvidence }, { tier: "audit" });
   const investigationTools = availableTools(INVESTIGATOR_TOOL_NAMES, ctx);
-  const handles = framed.discoveryPlan.focuses.map((focus) => ({ focus, handle: ctx.spawn(investigator, {
-    request, discoveryPlan: framed.discoveryPlan, workspaceReceipt: workspace.receiptRef,
-    focus, priorInvestigations: [], tools: investigationTools,
-  }, {
-    retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
-      microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
-    attenuation: attenuation(investigationTools, ctx),
-  }) }));
+  const handles: Array<{ focus: typeof framed.discoveryPlan.focuses[number];
+    handle: Handle<HzInvestigatorOutput> }> = [];
+  for (const focus of framed.discoveryPlan.focuses) {
+    const input = await storeArtifact(ctx, { request, discoveryPlan: framed.discoveryPlan,
+      workspaceReceipt: workspace.receiptRef, focus, priorInvestigations: [], tools: investigationTools });
+    handles.push({ focus, handle: ctx.spawn(investigator, input, {
+      retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
+        microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
+      attenuation: attenuation(investigationTools, ctx),
+    }) });
+  }
   const investigations: HzInvestigationResult[] = [];
   for (const { focus, handle } of handles) {
     const result = await Promise.resolve(handle);
