@@ -3,6 +3,7 @@ import type { HzToolEvidence } from "./contracts.js";
 import { COMMON_RULES, composePrompt } from "./prompts/compose.js";
 
 const PROGRESS_CHECKPOINT_INTERVAL = 8;
+const CONSECUTIVE_TOOL_FAILURE_LIMIT = 4;
 
 export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
   role: "You are Horizon's evidence progress observer. You summarize one specialist's bounded observations; the deterministic loop controller alone changes Tool availability.",
@@ -173,6 +174,18 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   const maximum = Math.max(1, Math.min(spec.maxRounds, 1_000));
   const enabledTools = [...new Set(spec.tools)];
   const enabledToolSet = new Set(enabledTools);
+  const usesPlatformTools = enabledTools.some((name) => name === "platform_query" || name === "platform_get");
+  const initialContext = usesPlatformTools ? {
+    ...(record(spec.context) ?? { request: spec.context }),
+    platformToolContract: {
+      queryScope: { kind: "namespace", namespace: ctx.run.namespace },
+      rules: [
+        "Use queryScope unchanged; it is the namespace guaranteed to this delegated Run.",
+        "Select platform_query.kind only from its exact lower-case schema enum; do not guess or pluralize kinds.",
+        "Pass platform_get refs unchanged from governed context or prior platform results; do not synthesize refs.",
+      ],
+    },
+  } : spec.context;
   const plateauStages = (spec.plateauStages ?? [])
     .map((stage) => [...new Set(stage)].filter((name) => enabledToolSet.has(name)))
     .filter((stage) => stage.length > 0);
@@ -186,6 +199,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
   let narrowedPlateau = false;
   let plateauStage = 0;
   let toolRounds = 0;
+  let consecutiveFailedToolRounds = 0;
   let priorCheckpoint: LoopCheckpoint | null = null;
 
   for (let ordinal = 0; ordinal < maximum; ordinal++) {
@@ -195,8 +209,8 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
       system: spec.system,
       objective: spec.objective,
       context: ordinal === 0
-        ? spec.context
-        : { request: spec.context, compacted, compactedGovernedToolObservations: compactedEvidence,
+        ? initialContext
+        : { request: initialContext, compacted, compactedGovernedToolObservations: compactedEvidence,
           recentGovernedToolObservations: recentRounds,
           progressCheckpoints,
           ...(narrowedPlateau ? { plateau: "The current evidence phase stopped changing. Use one of the remaining convergence Tools if the assigned stop condition still needs that effect or proof; otherwise resolve from the governed observations already recorded." }
@@ -232,12 +246,13 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         advanced = true;
       }
     }
-    const hasFailedCall = turn.toolCalls.some(({ status }) => !successful.has(status));
-    if (advanced || hasFailedCall) plateau.reset();
-    const observation = advanced || hasFailedCall
+    const allCallsFailed = turn.toolCalls.every(({ status }) => !successful.has(status));
+    consecutiveFailedToolRounds = allCallsFailed ? consecutiveFailedToolRounds + 1 : 0;
+    if (advanced) plateau.reset();
+    const observation = advanced
       ? { plateaued: false, stableRounds: 0, added: 0 }
       : plateau.observe(turn.toolCalls);
-    if (observation.plateaued) {
+    if (observation.plateaued || consecutiveFailedToolRounds >= CONSECUTIVE_TOOL_FAILURE_LIMIT) {
       if (plateauStage < plateauStages.length) narrowedPlateau = true;
       else forcedPlateau = true;
     }

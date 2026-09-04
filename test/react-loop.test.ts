@@ -85,6 +85,26 @@ describe("EvidencePlateauDetector", () => {
     ]);
   });
 
+  it("bounds consecutive failed Tool rounds instead of resetting convergence", async () => {
+    const offered: string[][] = []; let turns = 0;
+    const ctx = {
+      turn: async (spec: { tools?: string[] }) => {
+        offered.push(spec.tools ?? []); turns++;
+        if (turns <= 4) return { toolCalls: [{ ...call(null), id: `failed-${turns}`, args: { kind: `guess-${turns}` },
+          status: "error", result: undefined, error: "invalid platform kind" }],
+        message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+        return { toolCalls: [], message: { role: "assistant", content: "" },
+          artifact: { status: "blocked" } } as unknown as TurnRecord;
+      },
+    } as unknown as Ctx;
+    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+      tools: ["workspace_read"], maxRounds: 12,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
+        ? value as { status: "blocked" } : null }, ctx);
+    expect(result.plateaued).toBe(true);
+    expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+  });
+
   it("advances through mutation and proof plateaus before forcing resolution", async () => {
     const offered: string[][] = []; let turns = 0;
     const tool = (name: string, maxEffect: ToolCallRecord["maxEffect"]): ToolCallRecord => ({
@@ -174,6 +194,26 @@ describe("EvidencePlateauDetector", () => {
     expect(result.evidence[0]).toMatchObject({ ref: "result-ref", result: "{\"object\":\"truncated\"}..." });
     expect(result.evidence[0]?.value).toBe(actual);
     expect(JSON.stringify(result.evidence)).not.toContain("actual failure");
+  });
+
+  it("supplies the exact delegated namespace whenever platform Tools are offered", async () => {
+    const contexts: unknown[] = [];
+    const ctx = {
+      run: { namespace: "delegated-space" },
+      turn: async (spec: { context?: unknown }) => {
+        contexts.push(spec.context);
+        return { toolCalls: [], message: { role: "assistant", content: "" },
+          artifact: { status: "complete" } } as unknown as TurnRecord;
+      },
+    } as unknown as Ctx;
+    await runReactLoop({ role: "test", system: "test", objective: "test", context: { request: "inspect" },
+      tools: ["platform_query", "platform_get"], maxRounds: 2,
+      parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
+        ? value as { status: "complete" } : null }, ctx);
+    expect(contexts[0]).toMatchObject({ request: "inspect", platformToolContract: {
+      queryScope: { kind: "namespace", namespace: "delegated-space" },
+      rules: expect.arrayContaining([expect.stringContaining("Use queryScope unchanged")]),
+    } });
   });
 
   it("keeps bounded compacted evidence available while committing complete older rounds", async () => {

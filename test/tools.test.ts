@@ -39,7 +39,8 @@ describe("Horizon Tool capability projection", () => {
     const query = PLATFORM_TOOLS.platform_query!.schema as { required: string[]; properties: Record<string, unknown> };
     const get = PLATFORM_TOOLS.platform_get!.schema as { required: string[]; properties: Record<string, unknown> };
     expect(query.required).toEqual(["kind", "scope"]);
-    expect(query.properties.kind).toMatchObject({ pattern: "^[a-z][a-z0-9-]{0,63}$" });
+    expect(query.properties.kind).toMatchObject({ enum: expect.arrayContaining(["agent", "run", "deployment"]) });
+    expect((query.properties.kind as { enum: string[] }).enum).not.toContain("ledger");
     expect(get.required).toEqual(["ref"]);
     expect(get.properties.ref).toHaveProperty("anyOf");
   });
