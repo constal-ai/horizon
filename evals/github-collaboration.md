@@ -66,3 +66,13 @@ Separately, platform logs show repeated Billing receipt rejections. The deployed
 Source `2ce9728`, deployed as `8708d371-0fb1-4039-8c19-7b1329f92a7b`, also avoids the duplicate frontend acknowledgment after a successful work handoff. The work Run remains responsible for its start update; questions and failed handoffs are not suppressed. All 172 Horizon tests passed.
 
 The authoritative input of issue #2's work Run was checked through the conversation endpoint: its original issue body and the full punctuation/synonym-dictionary qualifications were both present.
+
+### Current execution checkpoint
+
+- Issue #2's [status question](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5551005676) received a [reply](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5551010833) while its work Run was still active; it was not serialized behind completion of that work.
+- Issue #3's [scope answer](https://github.com/constal-ai/const-alpha/issues/3#issuecomment-5551005678) was delivered without another mention. It created work Run `c8de6e70-3258-45b3-9b87-df7706e98ace` in `github-0ddf1d3f68ccb3448964c56b86a4b00812865d71140f026a-work`, followed by [one start acknowledgment](https://github.com/constal-ai/const-alpha/issues/3#issuecomment-5551013838).
+- Both work Runs completed workspace preparation and entered focused investigation. No implementation approval, repository edit, or pull request has been observed yet.
+- The latest check showed issue #2's investigators queued at journal positions 39 and 33 without progress for more than 12 minutes, with 130 pending outbox items. Issue #3 had 92 pending outbox items. Neither work Session had an open human-input wait.
+- The Billing worker's latest deployment is `f8e8f495-3ba4-4ffd-84e6-58b913305ec8` from 2026-09-04, before main's itemized-debit change `1578ac84`. The old debit validator requires `amountMicroUsd`; the current platform submits canonical meter `lines`. Current Billing typecheck and all 45 Billing tests pass. Deployment approval was requested because aligning the service may process accumulated usage charges.
+
+The end-to-end result remains unproven. Keep the existing Runs; do not mark the evaluation passed or replace them just because observation is slow.
