@@ -82,3 +82,7 @@ The end-to-end result remains unproven. Keep the existing Runs; do not mark the 
 The completed `docs-search-tokenization` investigation (`c763e0bc-4560-8bce-8cea-98084f6d49f2`, result artifact `71360920c70d4311298c47f7b2183703cd100cd03aa294fd646c3ebfd7729ac9`) found the real filter and normalization requirements. It also suggested treating the example acronyms as a possible whitelist. Review the eventual plan for this overfitting: the issue says “such as” and rejects an acronym dictionary, not general support for other meaningful short technical terms. No work-plan approval has been given.
 
 Source `0b3c583` restores the API's existing basic-Run projection for supervision metadata. The earlier change to request full traces for status was unnecessary; the API explicitly supports basic fields without trace authority. All 172 Horizon tests passed after restoring it.
+
+### Billing deployment and backlog recovery
+
+Deployment was explicitly approved. Billing version `4b06ea59-b601-4d6e-ae54-8d36da014c13` now runs the existing itemized-debit implementation from core `main`; no billing enforcement or receipt checks were bypassed. Immediately afterward, issue #2's pending outbox fell from 146 to 107 items and issue #3's from 139 to 100. The same work Runs were retained. This establishes initial backlog progress, not yet end-to-end completion or full settlement of the backlog.
