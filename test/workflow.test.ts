@@ -173,6 +173,9 @@ describe("Horizon workflow", () => {
     const result = await runHorizon({ objective: plan.objective, context: { event: { issue: 2 } } }, ctx,
       { requirePlanApproval: true });
     expect(result.status, result.summary).toBe("complete");
+    expect(result.summary).toBe("I've completed the approved changes.");
+    expect(result.summary).not.toContain(plan.summary);
+    expect(result.summary).not.toContain("Durable result");
     expect(executed).toBe(1);
     const plans = stored.filter((value) => "restartAt" in value);
     expect(plans.at(-1)).toMatchObject({ request: { context: { steering: [event] } } });

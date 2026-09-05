@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { operationalPresentation, planMarkdown, questionMarkdown, terminalMarkdown } from "../src/github-conversation.js";
-import type { HzPlan } from "../src/contracts.js";
+import type { HzPlan, HzRunResult } from "../src/contracts.js";
 import { parseHorizonOperationalResult, type HorizonOperationalResult } from "../src/operational.js";
 
 describe("GitHub decision questions", () => {
@@ -57,6 +57,24 @@ describe("GitHub decision questions", () => {
     const message = "I'm checking the command's existing-file behavior.\n\nThe tests cover replacement; I'm now checking the default path.";
     expect(terminalMarkdown({ object: "constal.horizon.operational-result", version: 1,
       status: "complete", message, action: { kind: "respond" }, evidence: [] })).toBe(message);
+  });
+
+  it("reports completed work and a review link without exposing execution hashes", () => {
+    const result: HzRunResult = { object: "constal.horizon.result", version: 1, status: "complete",
+      summary: "I've completed the approved changes and opened a pull request for review.",
+      plan: { revision: 2, fact: "private-plan-fact" }, workspace: null, checkpoints: [],
+      completedSteps: [{ id: "internal-work-id", status: "complete", summary: "Added the contributor guide and checked its links." }],
+      remainingUnknowns: [], artifact: { path: "/workspace/final.tar.gz", ref: "private-artifact-ref", bytes: 42 },
+      publication: { provider: "github", repository: "constal-ai/const-alpha", branch: "constal/guide", commit: "private-commit",
+        pullRequest: { number: 5, url: "https://github.com/constal-ai/const-alpha/pull/5" }, marker: "private-marker" },
+      longHorizon: { durablePlan: true, specialistRuns: 10, replans: 0, plateauCycles: 0 } };
+    const body = terminalMarkdown(result);
+    expect(body).toContain("## Ready for review");
+    expect(body).toContain(result.summary);
+    expect(body).toContain("- Added the contributor guide and checked its links.");
+    expect(body).toContain("[#5](https://github.com/constal-ai/const-alpha/pull/5)");
+    expect(body).not.toContain("private-");
+    expect(body).not.toContain("internal-work-id");
   });
 
   it("uses the same question contract for conversational and planning questions", () => {

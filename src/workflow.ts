@@ -555,7 +555,9 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
             remainingUnknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
         }
         const result: HzRunResult = {
-          object: "constal.horizon.result", version: 1, status: "complete", summary: current.plan.summary,
+          object: "constal.horizon.result", version: 1, status: "complete",
+          summary: publication ? "I've completed the approved changes and opened a pull request for review."
+            : "I've completed the approved changes.",
           plan: { revision: current.plan.revision, fact: current.fact },
           workspace: { receipt: workspace.receiptRef, cacheHit: workspace.receipt.cache.hit,
             image: workspace.receipt.cache.image }, checkpoints,
@@ -565,8 +567,8 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           publication,
           longHorizon: { durablePlan: true, specialistRuns, replans, plateauCycles: plateau.stableCycles },
         };
-        const final = await ctx.commit({ kind: "horizon.result", result }, { tier: "audit" });
-        return { ...result, summary: `${result.summary}\n\nDurable result: ${final.hash}` };
+        await ctx.commit({ kind: "horizon.result", result }, { tier: "audit" });
+        return result;
       }
       return blockedResult(current.plan, current.fact, completed, "No dependency-ready execution or reverification unit remains; the immutable plan requires reconciliation.",
         current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);
