@@ -200,11 +200,9 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
   const latest = objectRef(latestItem);
   const root = objectRef(rootItem);
   const currentRun = latest ? await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: latest, fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
-      "budget", "limits", "task", "parent", "awaiting"] })) : null;
+    { ref: latest, fields: ["run"] })) : null;
   const rootDetail = root ? latest?.id === root.id ? currentRun : await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: root, fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
-      "budget", "limits", "task", "parent", "awaiting"] })) : null;
+    { ref: root, fields: ["run"] })) : null;
   const waits = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "wait", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
@@ -402,7 +400,11 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
         message: "I cannot determine whether issue work is already active because the authoritative Run inventory is unavailable.",
         evidence: [...result.evidence, snapshot.history.error] };
       if (!activeWork(snapshot)) {
-        const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective }, {
+        const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective,
+          context: { ...record(event.context), request: {
+            trigger: event.objective, issue: snapshot.issue, comments: snapshot.comments,
+          } },
+        }, {
           tier: "audit", to: `session:${snapshot.thread.workSession}`, deliver: "queue",
         });
         return { ...result, control: { operation: "session.deliver", fact: fact.hash, state: "queued" } };

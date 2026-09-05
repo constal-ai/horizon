@@ -33,10 +33,11 @@ function query(items: unknown[]) {
     evidence: { source: "coordinator", observedAt: 1, authoritativeFor: [], lagMs: 0, complete: true, warnings: [], queryHash: "a".repeat(64) } };
 }
 
-function readFixture(options: { waits?: unknown[]; runs?: unknown[]; runStatus?: string; awaiting?: unknown[] } = {}) {
+function readFixture(options: { waits?: unknown[]; runs?: unknown[]; runStatus?: string; awaiting?: unknown[];
+  issue?: unknown; comments?: unknown } = {}) {
   const invoke = vi.fn(async (resource: string, operation: string, args: Record<string, unknown>, _options?: unknown) => {
-    if (resource === "github" && operation === "issue.get") return { issue: { number: 10, title: "Implement reactions" } };
-    if (resource === "github" && operation === "issue.comments.list") return { comments: [{ id: 1, body: "Progress?" }] };
+    if (resource === "github" && operation === "issue.get") return options.issue ?? { issue: { number: 10, title: "Implement reactions" } };
+    if (resource === "github" && operation === "issue.comments.list") return options.comments ?? { comments: [{ id: 1, body: "Progress?" }] };
     if (resource === "api" && operation === "query" && args.kind === "run") return query(options.runs ?? [runItem(options.runStatus)]);
     if (resource === "api" && operation === "get") return { object: "constal.api.object", ref: runItem(),
       value: { runId: "run-1", status: options.runStatus ?? "suspended", task: { id: "horizon-planner", version: "11" },
@@ -104,6 +105,7 @@ describe("Horizon behavior routing", () => {
       status: "complete", message: "I am currently planning the change.", action: { kind: "respond" },
     });
     expect(invoke).toHaveBeenCalledWith("github", "issue.get", { owner: "constal-ai", repository: "horizon", issue: 10 });
+    expect(invoke).toHaveBeenCalledWith("api", "get", { ref: expect.objectContaining({ kind: "run" }), fields: ["run"] });
   });
 
   it("exposes prior failed attempts as exact queryable work history", async () => {
@@ -134,7 +136,9 @@ describe("Horizon behavior routing", () => {
   });
 
   it("starts idle issue work through the existing durable cross-Session commit", async () => {
-    const invoke = readFixture({ runs: [] });
+    const issue = { issue: { number: 10, title: "Implement reactions", body: "Keep the public API unchanged.\n\nAdd regression tests." } };
+    const comments = { comments: [{ id: 1, body: "Use the existing GitHub adapter; do not add a new driver." }] };
+    const invoke = readFixture({ runs: [], issue, comments });
     const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
       object: "constal.horizon.operational-result", version: 1, status: "complete",
       message: "I am starting the requested issue work.", action: { kind: "start-work", objective: "Implement issue #10." },
@@ -148,7 +152,9 @@ describe("Horizon behavior routing", () => {
       control: { operation: "session.deliver", fact: "f".repeat(64), state: "queued" },
     });
     expect(commit).toHaveBeenCalledWith(expect.objectContaining({ object: "constal.horizon.event", behavior: "issue-work",
-      objective: "Implement issue #10." }), { tier: "audit", to: `session:${sessions.work}`, deliver: "queue" });
+      objective: "Implement issue #10.", context: expect.objectContaining({ issue: 10, sessions,
+        request: { trigger: "Start the work.", issue, comments } }) }),
+    { tier: "audit", to: `session:${sessions.work}`, deliver: "queue" });
     expect(invoke).not.toHaveBeenCalledWith("api", "plan", expect.anything(), expect.anything());
   });
 
