@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { planMarkdown, questionMarkdown, terminalMarkdown } from "../src/github-conversation.js";
+import { operationalPresentation, planMarkdown, questionMarkdown, terminalMarkdown } from "../src/github-conversation.js";
 import type { HzPlan } from "../src/contracts.js";
-import { parseHorizonOperationalResult } from "../src/operational.js";
+import { parseHorizonOperationalResult, type HorizonOperationalResult } from "../src/operational.js";
 
 describe("GitHub decision questions", () => {
   it("renders one first-person question, three choices, and a free-form path", () => {
@@ -61,5 +61,17 @@ describe("GitHub decision questions", () => {
     expect(terminalMarkdown(result!)).toBe(questionMarkdown(question));
     expect(terminalMarkdown(result!)).toContain("4. **Write your own answer.**");
     expect(parseHorizonOperationalResult({ ...result, question: { prompt: "Choose?", options: ["One"] } })).toBeNull();
+  });
+
+  it("publishes one start acknowledgment without suppressing questions or failed handoffs", () => {
+    const result: HorizonOperationalResult = { object: "constal.horizon.operational-result", version: 1,
+      status: "complete", message: "I'll start the investigation.", action: { kind: "start-work", objective: "Fix search." },
+      evidence: [], control: { operation: "session.deliver", fact: "f".repeat(64), state: "queued" } };
+    expect(operationalPresentation(result)).toBeNull();
+    const question = { prompt: "Which behavior do you prefer?", options: ["Preserve.", "Normalize.", "Support both."] as [string, string, string] };
+    expect(operationalPresentation({ ...result, question })?.body).toBe(questionMarkdown(question));
+    const { control: _control, ...withoutReceipt } = result;
+    expect(operationalPresentation({ ...withoutReceipt, status: "blocked",
+      message: "I couldn't start the investigation." })?.body).toBe("I couldn't start the investigation.");
   });
 });

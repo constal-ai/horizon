@@ -47,3 +47,10 @@ export function terminalMarkdown(result: HzRunResult | HorizonOperationalResult)
   }
   return `## I couldn't finish the change\n\n${result.summary}`;
 }
+
+export function operationalPresentation(result: HorizonOperationalResult): AwaitPresentation | null {
+  // The work Run publishes its own start acknowledgment. Keep the handoff
+  // receipt in the journal without posting a second acknowledgment here.
+  if (result.control?.operation === "session.deliver" && !result.question) return null;
+  return waitPresentation("operational", "Update", terminalMarkdown(result));
+}

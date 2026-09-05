@@ -11,7 +11,7 @@ import { horizonProgress } from "./views/progress.js";
 import { runHorizon } from "./workflow.js";
 import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
-import { terminalMarkdown, waitPresentation } from "./github-conversation.js";
+import { operationalPresentation, terminalMarkdown, waitPresentation } from "./github-conversation.js";
 import { runHorizonSetup } from "./setup/workflow.js";
 import { startIssueWork } from "./tasks/issue-work.js";
 
@@ -45,10 +45,9 @@ async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>
   if (!event) return runHorizon(message, ctx);
   if (event.behavior === "operate") {
     const result = await runHorizonOperational(event, ctx);
-    await ctx.commit({ kind: "horizon.channel-update", phase: result.object === "constal.horizon.operational-result" ? "operational" : "terminal",
-      status: result.status, result }, { tier: "audit", presentation: result.object === "constal.horizon.operational-result"
-      ? waitPresentation("operational", "Update", terminalMarkdown(result))
-      : waitPresentation("terminal", result.status === "complete" ? "Completed" : "Work stopped", terminalMarkdown(result)) });
+    const presentation = operationalPresentation(result);
+    await ctx.commit({ kind: "horizon.channel-update", phase: "operational", status: result.status, result },
+      { tier: "audit", ...(presentation ? { presentation } : {}) });
     return result;
   }
   const result = await startIssueWork({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
