@@ -59,11 +59,11 @@ describe("EvidencePlateauDetector", () => {
     expect(detector.observe([call({ usage: 2, sandbox: "b", commandId: "b" })]).added).toBe(1);
   });
 
-  it("removes Tools after a plateau and requires the role to terminate honestly", async () => {
-    const offered: string[][] = []; let turns = 0;
+  it("reports repeated evidence without removing the role's Tools", async () => {
+    const offered: string[][] = []; const contexts: unknown[] = []; let turns = 0;
     const ctx = {
-      turn: async (spec: { tools?: string[] }) => {
-        offered.push(spec.tools ?? []); turns++;
+      turn: async (spec: { tools?: string[]; context?: unknown }) => {
+        contexts.push(structuredClone(spec.context)); offered.push(spec.tools ?? []); turns++;
         if (turns <= 3) return { toolCalls: [call({ ref: "unchanged" })], message: { role: "assistant", content: "Inspecting." },
           artifact: null } as unknown as TurnRecord;
         return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { status: "blocked" } } as unknown as TurnRecord;
@@ -75,10 +75,35 @@ describe("EvidencePlateauDetector", () => {
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
         ? value as { status: "blocked" } : null }, ctx);
     expect(result.plateaued).toBe(true);
-    expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+    expect(offered).toEqual(Array.from({ length: 4 }, () => ["workspace_read"]));
+    expect(contexts[2]).toMatchObject({ evidenceProgress: { stableRounds: 1 }, plateau: expect.any(String) });
+    expect(contexts[3]).toMatchObject({ evidenceProgress: { plateaued: true, stableRounds: 2 }, plateau: expect.any(String) });
   });
 
-  it("narrows an executor inspection plateau to action Tools before forcing termination", async () => {
+  it("lets a verifier obtain missing file and command proof after repeated diffs", async () => {
+    let turns = 0;
+    const tools = ["workspace_diff", "workspace_read", "workspace_exec"];
+    const ctx = { turn: async (input: { tools: string[]; context: unknown }) => {
+      expect(input.tools).toEqual(tools); turns++;
+      if (turns <= 3) return { toolCalls: [{ ...call({ diff: "README link" }), name: "workspace_diff" }],
+        message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+      if (turns === 4) {
+        expect(input.context).toMatchObject({ evidenceProgress: { plateaued: true }, plateau: expect.any(String) });
+        return { toolCalls: [{ ...call({ scripts: { check: "tsc && vitest" } }), args: { path: "package.json" } },
+          { ...call({ exitCode: 0, stdout: "checks passed" }), name: "workspace_exec", args: { cmd: "npm", args: ["run", "check"] } }],
+        message: { role: "assistant", content: "" }, artifact: null } as unknown as TurnRecord;
+      }
+      return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: { verdict: "passed" } } as unknown as TurnRecord;
+    } } as unknown as Ctx;
+    const result = await runReactLoop({ role: "verifier", system: "test", objective: "Verify the guide and its checks", context: {},
+      tools, maxRounds: 10, parse: (value) => value && typeof value === "object" && (value as { verdict?: unknown }).verdict === "passed"
+        ? value as { verdict: "passed" } : null }, ctx);
+    expect(result.artifact.verdict).toBe("passed");
+    expect(result.plateaued).toBe(false);
+    expect(turns).toBe(5);
+  });
+
+  it("allows a new action to resolve an inspection plateau", async () => {
     const offered: string[][] = []; let turns = 0;
     const patchCall = { ...call({ applied: true }), name: "workspace_patch", maxEffect: "reconcilable" as const,
       effectObserved: "reconcilable" as const, args: { patch: "change" } };
@@ -95,7 +120,7 @@ describe("EvidencePlateauDetector", () => {
       commit: async (artifact: unknown) => ({ hash: "fact", artifact, artifactHash: "artifact" }) as unknown as Fact<unknown>,
     } as unknown as Ctx;
     const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
-      tools: ["workspace_read", "workspace_patch"], plateauStages: [["workspace_patch"]], maxRounds: 8,
+      tools: ["workspace_read", "workspace_patch"], maxRounds: 8,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(result.plateaued).toBe(false);
@@ -103,7 +128,7 @@ describe("EvidencePlateauDetector", () => {
       ["workspace_read", "workspace_patch"],
       ["workspace_read", "workspace_patch"],
       ["workspace_read", "workspace_patch"],
-      ["workspace_patch"],
+      ["workspace_read", "workspace_patch"],
       ["workspace_read", "workspace_patch"],
     ]);
   });
@@ -125,7 +150,7 @@ describe("EvidencePlateauDetector", () => {
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "blocked"
         ? value as { status: "blocked" } : null }, ctx);
     expect(result.plateaued).toBe(true);
-    expect(offered).toEqual([["workspace_read"], ["workspace_read"], ["workspace_read"], []]);
+    expect(offered).toEqual(Array.from({ length: 4 }, () => ["workspace_read"]));
   });
 
   it("honors the declared loop budget without a hidden one-thousand-round clamp", async () => {
@@ -148,7 +173,7 @@ describe("EvidencePlateauDetector", () => {
     expect(roleTurns).toBe(1_001);
   });
 
-  it("advances through mutation and proof plateaus before forcing resolution", async () => {
+  it("keeps both mutation and proof available across repeated inspection rounds", async () => {
     const offered: string[][] = []; let turns = 0;
     const tool = (name: string, maxEffect: ToolCallRecord["maxEffect"]): ToolCallRecord => ({
       ...call({ name, ok: true }), name, maxEffect, effectObserved: maxEffect, args: { name },
@@ -171,12 +196,12 @@ describe("EvidencePlateauDetector", () => {
     } as unknown as Ctx;
     const result = await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
       tools: ["workspace_read", "workspace_edit", "workspace_exec"],
-      plateauStages: [["workspace_edit"], ["workspace_exec"]], maxRounds: 12,
+      maxRounds: 12,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(result.plateaued).toBe(false);
-    expect(offered[3]).toEqual(["workspace_edit"]);
-    expect(offered[7]).toEqual(["workspace_exec"]);
+    expect(offered[3]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
+    expect(offered[7]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
     expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);
   });
 
@@ -203,7 +228,7 @@ describe("EvidencePlateauDetector", () => {
     } as unknown as Ctx;
     await runReactLoop({ role: "executor", system: "test", objective: "test", context: {},
       tools: ["workspace_read", "workspace_edit", "workspace_exec"],
-      plateauStages: [["workspace_edit"], ["workspace_exec"]], maxRounds: 12,
+      maxRounds: 12,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(offered[8]).toEqual(["workspace_read", "workspace_edit", "workspace_exec"]);

@@ -24,7 +24,6 @@ export const verifier = subtask<HzVerifierResult>({
         previousAttempt: input.previousAttempt, executionReused: input.executionReused,
         workspaceBefore: input.workspaceBefore },
       tools: input.tools,
-      plateauStages: [input.tools.filter((name) => name === "workspace_read")],
       model: "model", maxRounds: HORIZON_STANDARD_LOOP_TURNS,
       parse: (value) => parseHzVerification(value, input.step.id),
     }, ctx);

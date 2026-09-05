@@ -258,11 +258,11 @@ Horizon is intentionally opinionated about what an engineering agent may claim:
 - Credentials stay behind Resources and never enter prompts, setup commands, images, or repository files.
 - Every completed step has independently reproduced evidence.
 - An unavailable read is never treated as an empty result.
-- Repeated evidence does not count as progress; plateau guards force a different route, a precise question, or an honest stop.
+- Repeated evidence is surfaced to the specialist alongside its working-memory checkpoint. It can choose a different action, resolve the remaining question, or stop without losing access to its declared Tools.
 - Restoring files does not pretend to reverse an external side effect.
 - Horizon publishes a branch and pull request; it does not silently merge the result.
 
-The standard specialist loop has a 500-turn emergency ceiling. Execution specialists and the shared runner have a 1,000-turn ceiling. These are backstops, not targets: evidence plateaus and repeated-state guards should end normal work much earlier.
+The standard specialist loop has a 500-turn emergency ceiling. Execution specialists and the shared runner have a 1,000-turn ceiling. These are backstops, not targets: specialists use their retained findings and remaining unknowns to decide when their work is complete. Evidence repetition is feedback, not an artificial capability denial.
 
 ## Current scope
 

@@ -2,21 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it, vi } from "vitest";
-import { availableTools, bindingsForTools, EXECUTOR_MUTATION_TOOL_NAMES, EXECUTOR_PROOF_TOOL_NAMES } from "../src/tools/index.js";
+import { availableTools, bindingsForTools, EXECUTOR_TOOL_NAMES, VERIFIER_TOOL_NAMES } from "../src/tools/index.js";
 import { PLATFORM_TOOLS } from "../src/tools/platform.js";
 import { WEB_TOOLS } from "../src/tools/web.js";
 import { editWorkspaceText, normalizeRepositoryPath, normalizeWorkspacePath, parseWorkspaceListing,
   WORKSPACE_TOOLS } from "../src/tools/workspace.js";
 
 describe("Horizon Tool capability projection", () => {
-  it("defines executor mutation Tools independently of Resource recovery effects", () => {
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).toEqual(["workspace_write", "workspace_edit", "workspace_patch"]);
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_list");
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_search");
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_read");
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_exec");
-    expect(EXECUTOR_MUTATION_TOOL_NAMES).not.toContain("workspace_diff");
-    expect(EXECUTOR_PROOF_TOOL_NAMES).toEqual(["workspace_exec", "workspace_diff"]);
+  it("keeps role capabilities independent of progress heuristics", () => {
+    expect(EXECUTOR_TOOL_NAMES).toEqual(expect.arrayContaining(["workspace_write", "workspace_edit", "workspace_patch", "workspace_exec"]));
+    expect(VERIFIER_TOOL_NAMES).toEqual(["workspace_list", "workspace_search", "workspace_read", "workspace_exec", "workspace_diff"]);
+    expect(VERIFIER_TOOL_NAMES).not.toContain("workspace_write");
   });
 
   it("requires catalog bindings as well as direct Tool needs", () => {
