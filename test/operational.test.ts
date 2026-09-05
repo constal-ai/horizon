@@ -105,7 +105,9 @@ describe("Horizon behavior routing", () => {
       status: "complete", message: "I am currently planning the change.", action: { kind: "respond" },
     });
     expect(invoke).toHaveBeenCalledWith("github", "issue.get", { owner: "constal-ai", repository: "horizon", issue: 10 });
-    expect(invoke).toHaveBeenCalledWith("api", "get", { ref: expect.objectContaining({ kind: "run" }), fields: ["run"] });
+    expect(invoke).toHaveBeenCalledWith("api", "get", { ref: expect.objectContaining({ kind: "run" }),
+      fields: ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
+        "budget", "limits", "task", "parent", "awaiting"] });
   });
 
   it("exposes prior failed attempts as exact queryable work history", async () => {

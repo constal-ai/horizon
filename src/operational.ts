@@ -44,6 +44,8 @@ interface ApiObjectRef {
 interface ApiQueryResult { object: "constal.api.query"; items: Array<Record<string, unknown>>; next: string | null; evidence: unknown }
 interface ApiGetResult { object: "constal.api.object"; ref: ApiObjectRef; value: unknown; evidence: unknown; next?: string | null }
 type WorkControlReceipt = NonNullable<HorizonOperationalResult["control"]>;
+const RUN_STATE_FIELDS = ["runId", "session", "status", "scheduler", "createdAt", "updatedAt", "error", "result",
+  "budget", "limits", "task", "parent", "awaiting"];
 
 interface GitHubThreadContext {
   owner: string;
@@ -201,9 +203,9 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
   const latest = objectRef(latestItem);
   const root = objectRef(rootItem);
   const currentRun = latest ? await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: latest, fields: ["run"] })) : null;
+    { ref: latest, fields: RUN_STATE_FIELDS })) : null;
   const rootDetail = root ? latest?.id === root.id ? currentRun : await observed(() => ctx.invoke<ApiGetResult>(ctx.resources.api!, "get",
-    { ref: root, fields: ["run"] })) : null;
+    { ref: root, fields: RUN_STATE_FIELDS })) : null;
   const waits = await observed(() => ctx.invoke<ApiQueryResult>(ctx.resources.api!, "query", {
     kind: "wait", scope: { kind: "namespace", namespace: ctx.run.namespace },
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
