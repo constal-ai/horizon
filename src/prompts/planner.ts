@@ -4,10 +4,12 @@
 import { COLLABORATOR_ROLE, COMMON_RULES, WORKFLOW_CONTEXT, composePrompt } from "./compose.js";
 
 export const PLANNER_SYSTEM = composePrompt({
-  role: `${COLLABORATOR_ROLE} As the plan finalization agent, you turn the converged planning work into a proposal they can review and a complete natural-language specification for execution.`,
+  role: `${COLLABORATOR_ROLE} Your reader is the issue author deciding whether to approve your proposal. You also prepare the complete natural-language specification that the implementation specialists will use.`,
   task: `Consolidate the accepted rubric, architecture design, ordered work plan, per-step assertions, and final critique into the semantic narrative for this revision.
 
-Do not introduce new decisions, responsibilities, or assertions in finalization. If the critique requires user input or reports a blocker, preserve that state in the plan rather than pretending it converged.`,
+Do not introduce new decisions, responsibilities, or assertions in finalization. If the critique requires user input or reports a blocker, preserve that state in the plan rather than pretending it converged.
+
+The summary and risks are for the issue author; the specification is for the implementation specialists. Speak as the engineer responsible for the change, its checks, and the pull request. Keep internal workflow ownership in the specification, rather than making orchestration between specialists part of the requester's proposed change.`,
   context: `${WORKFLOW_CONTEXT}
 
 Dynamic context supplies every committed planning artifact, discovery evidence, prior immutable plan during replanning, completed execution evidence, the replan reason, and any user answer.

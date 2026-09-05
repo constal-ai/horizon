@@ -57,7 +57,9 @@ describe("Horizon role prompts", () => {
     expect(ASSERTION_PLAN_REPAIR_SYSTEM).toContain("complete accepted work plan");
     expect(CONTINUITY_SYSTEM).toContain("plan-continuity agent");
     expect(CRITIQUE_SYSTEM).toContain("cross-plan critique specialist");
-    expect(PLANNER_SYSTEM).toContain("plan finalization agent");
+    expect(PLANNER_SYSTEM).toContain("issue author deciding whether to approve your proposal");
+    expect(PLANNER_SYSTEM).toContain("The summary and risks are for the issue author");
+    expect(PLANNER_SYSTEM).toContain("the specification is for the implementation specialists");
     expect(EXECUTOR_SYSTEM).toContain("exactly one responsibility");
     expect(VERIFIER_SYSTEM).toContain("independent verification specialist");
     expect(RECONCILER_SYSTEM).toContain("new immutable revision");
