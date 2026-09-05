@@ -3,9 +3,26 @@
   "kind": "agent",
   "id": "horizon",
   "namespace": "default",
-  "version": "0.6.39",
+  "version": "0.6.40",
   "entry": "src/index.ts",
   "mode": "script",
+  "displayName": "Horizon",
+  "description": "Long-Horizon Coding Agent",
+  "setup": {
+    "protocol": "constal.setup.v1",
+    "agent": "horizon",
+    "session": "setup-horizon-github-v1",
+    "input": {
+      "package": {
+        "channel": {
+          "deploymentRevision": "0f3d3c78-217d-4036-8538-15b71dd426d7"
+        },
+        "authProvider": {
+          "deploymentRevision": "94e82cfe-b03d-4619-b8d7-59cb2b3a48b7"
+        }
+      }
+    }
+  },
   "labels": {
     "channels.constal.ai/horizon-github": "enabled"
   },
