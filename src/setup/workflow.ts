@@ -61,9 +61,10 @@ function steps(index: number, blocked = false): SetupScreen["steps"] {
 
 async function present(input: Omit<SetupScreen, "object" | "version" | "workflow">, ctx: Ctx): Promise<SetupSubmission> {
   const screen = setupScreen({ object: "constal.setup.screen", version: 1, workflow: WORKFLOW, ...input });
+  // Register without suspending so the wait and screen become durable together.
+  const response = ctx.await<SetupSubmission>(screen.waitLabel!, setupAwait(screen));
   await ctx.commit(screen, { tier: "audit" });
-  const response = await ctx.await<SetupSubmission>(screen.waitLabel!, setupAwait(screen));
-  return setupSubmission(response, screen);
+  return setupSubmission(await response, screen);
 }
 
 function connectionReceipt(value: unknown): ConnectionReceipt {

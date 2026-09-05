@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import type { ConstalApiChangePlan, ConstalApiChangeReceipt, Ctx, Fact, Handle, SetupScreen, SetupSubmission } from "@constal/sdk";
+import { setupAwait, type AwaitOpts, type ConstalApiChangePlan, type ConstalApiChangeReceipt, type Ctx,
+  type Fact, type Handle, type SetupScreen, type SetupSubmission } from "@constal/sdk";
 import { runHorizonSetup } from "../src/setup/workflow.js";
 
 function handle<T>(value: T): Handle<T> {
@@ -14,7 +15,8 @@ function handle<T>(value: T): Handle<T> {
 
 describe("Horizon durable setup workflow", () => {
   it("builds routing from advertised catalogs and applies only the reviewed ChangePlan", async () => {
-    const screens: SetupScreen[] = []; let active: SetupScreen | null = null; let sequence = 0;
+    const screens: SetupScreen[] = []; let sequence = 0;
+    let pending: { label: string; opts: AwaitOpts<SetupSubmission>; resolve(value: SetupSubmission): void } | null = null;
     const plan: ConstalApiChangePlan = { object: "constal.change-plan", id: "plan-1", hash: "a".repeat(64),
       catalogRevision: "b".repeat(64), tenant: "tenant", principal: "crn:constal:production:tenant:identity:principal/operator" as never,
       authorityHash: "c".repeat(64), createdAt: 1, expiresAt: 2, objective: "Install Horizon", operations: [], diff: [],
@@ -40,16 +42,26 @@ describe("Horizon durable setup workflow", () => {
         agent: { id: "horizon-setup", version: "0.1.0", crn: "crn:constal:production:tenant:default:agent/horizon-setup" }, mode: "script" },
       commit: async (artifact: unknown) => {
         if (artifact && typeof artifact === "object" && (artifact as { object?: string }).object === "constal.setup.screen") {
-          active = artifact as SetupScreen; screens.push(active);
+          const screen = artifact as SetupScreen; screens.push(screen);
+          if (screen.status === "active") {
+            expect(pending, "the input wait must be registered before publishing its screen").not.toBeNull();
+            expect(pending!.label).toBe(screen.waitLabel);
+            expect(pending!.opts).toEqual(setupAwait(screen));
+            // A user may submit immediately, before the Runner awaits the Handle.
+            pending!.resolve({ object: "constal.setup.submission", version: 1, workflow: screen.workflow.id,
+              revision: screen.revision, step: screen.current.id,
+              action: screen.current.actions.find(({ intent }) => intent === "primary")!.id,
+              values: values[screen.current.id] as Record<string, unknown> });
+            pending = null;
+          } else expect(pending).toBeNull();
         }
         return { hash: `fact-${++sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
-      await: () => {
-        const screen = active!;
-        return handle({ object: "constal.setup.submission", version: 1, workflow: screen.workflow.id,
-          revision: screen.revision, step: screen.current.id,
-          action: screen.current.actions.find(({ intent }) => intent === "primary")!.id,
-          values: values[screen.current.id] as Record<string, unknown> } satisfies SetupSubmission);
+      await: (label: string, opts: AwaitOpts<SetupSubmission>) => {
+        expect(pending).toBeNull();
+        const promise = new Promise<SetupSubmission>((resolve) => { pending = { label, opts, resolve }; });
+        return Object.assign(promise, { id: label, resolved: false, seq: null, outcome: null,
+          result: undefined, error: undefined, cancel: async () => undefined }) as Handle<SetupSubmission>;
       },
       invoke: async (_resource: string, operation: string, args: unknown) => {
         if (operation === "plan") {
