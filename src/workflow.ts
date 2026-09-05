@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { canonicalJson, hashValue, type Ctx, type Handle, type SpawnAttenuation, type SteerEvent } from "@constal/sdk";
-import { pendingSteering, requestWithSteering } from "./views/steering.js";
+import { pendingSteering, requestWithContext } from "./views/steering.js";
 import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "./artifacts.js";
 import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigatorOutput,
@@ -56,7 +56,9 @@ async function approvalAuthorized(event: HorizonRoutedEvent, ctx: Ctx): Promise<
   return { authorized: target.permissions.includes(permission), permission };
 }
 
-async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequest, ctx: Ctx): Promise<HorizonPlanDecision> {
+async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequest, ctx: Ctx): Promise<HorizonPlanDecision & {
+  review: { fact: string; planFact: string; decision: HorizonPlanDecision; event: HorizonRoutedEvent | null };
+}> {
   await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
     instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
   const body = planMarkdown(plan);
@@ -94,8 +96,8 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequ
         continue;
       }
     }
-    await ctx.commit({ kind: "horizon.approval-decision", planFact, decision }, { tier: "audit" });
-    return decision;
+    const fact = await ctx.commit({ kind: "horizon.approval-decision", planFact, decision, event }, { tier: "audit" });
+    return { ...decision, review: { fact: fact.hash, planFact, decision, event } };
   }
 }
 
@@ -417,13 +419,12 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   const completedEvidence = (): HzExecutionAttempt[] => completed.flatMap(({ stepId }) => {
     const stored = successfulAttempts.get(stepId); return stored ? [stored.attempt] : [];
   });
-  const originalRequest = request;
   const steering: SteerEvent[] = [];
   const collectSteering = async (): Promise<SteerEvent[]> => {
     const fresh = await pendingSteering(ctx, steering.at(-1)?.seq ?? 0);
     if (fresh.length > 0) {
       steering.push(...fresh);
-      request = requestWithSteering(originalRequest, steering.slice());
+      request = requestWithContext(request, { steering: steering.slice() });
     }
     return fresh;
   };
@@ -573,6 +574,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     if (options.requirePlanApproval === true && approvedPlanFact !== current.fact) {
       activeStage = "plan approval";
       const approval = await awaitPlanDecision(current.plan, current.fact, request, ctx);
+      request = requestWithContext(request, { review: approval.review });
       if (approval.decision === "cancel") {
         return blockedResult(current.plan, current.fact, completed, "Horizon execution was cancelled before repository mutation.",
           current.plan.unknowns, specialistRuns, replans, plateau.stableCycles, workspace, checkpoints);

@@ -153,6 +153,9 @@ describe("Horizon workflow", () => {
           executed++;
           const input = stored.at(-1)!;
           expect(input.request).toMatchObject({ context: { event: { issue: 2 }, steering: [event] } });
+          expect(input.request).toMatchObject({ context: { review: {
+            planFact: input.planFact, decision: { decision: "approve" }, fact: expect.any(String),
+          } } });
           expect(planning).toBe(arrival === "discovery" ? 1 : 2);
           expect(approvals).toBe(arrival === "approval" ? 2 : 1);
           return handle({ result: stepResult, toolEvidence: [] });
@@ -539,6 +542,7 @@ describe("Horizon workflow", () => {
 
   it("requires approval of the exact issue-work plan before spawning an executor", async () => {
     const sequence: string[] = []; const committed: Array<{ kind?: string; planFact?: string }> = []; let fact = 0;
+    const handedOff: Array<{ request?: { context?: { review?: unknown } }; step?: unknown; planFact?: string }> = [];
     const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
@@ -548,7 +552,7 @@ describe("Horizon workflow", () => {
         return { hash: `fact-${fact}`, artifact, artifactHash: `artifact-${fact}` } as unknown as Fact<unknown>;
       },
       invoke: async (resource: unknown, operation: string, args: { text?: string; ref?: string }) => operation === "repository.permission.get"
-        ? { permission: "write" } : casRuntime()(resource, operation, args),
+        ? { permission: "write" } : casRuntime((value) => handedOff.push(value as typeof handedOff[number]))(resource, operation, args),
       await: (label: string) => {
         sequence.push(`await:${label}`);
         return handle({ object: "constal.horizon.event", version: 1, behavior: "operate", eventClass: "github.issue.comment",
@@ -584,6 +588,17 @@ describe("Horizon workflow", () => {
     expect(approval).toBeGreaterThan(-1);
     expect(execution).toBeGreaterThan(approval);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.approval-decision");
+    const approvalIndex = committed.findIndex(({ kind }) => kind === "horizon.approval-decision");
+    const workInputs = handedOff.filter((input) => input.step);
+    expect(workInputs).toHaveLength(2);
+    for (const input of workInputs) expect(input.request?.context?.review).toEqual({
+      fact: `fact-${approvalIndex + 1}`, planFact: input.planFact,
+      decision: { object: "constal.horizon.plan-decision", version: 1, planFact: input.planFact, decision: "approve", guidance: null },
+      event: expect.objectContaining({ objective: "This plan looks good. Please go ahead.",
+        context: expect.objectContaining({ sender: { login: "reviewer" } }) }),
+    });
+    const reconciliation = handedOff.find((input) => "restoreAvailable" in input);
+    expect(reconciliation?.request?.context?.review).toEqual(workInputs[0]!.request?.context?.review);
   });
 
   it("does not report complete when the immutable final artifact cannot be created", async () => {

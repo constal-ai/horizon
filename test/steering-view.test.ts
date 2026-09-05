@@ -4,7 +4,7 @@
 import type { Ctx, LedgerEvent, SteerEvent } from "@constal/sdk";
 import { describe, expect, it } from "vitest";
 import agent from "../src/index.js";
-import { horizonSteering, pendingSteering, requestWithSteering } from "../src/views/steering.js";
+import { horizonSteering, pendingSteering, requestWithContext } from "../src/views/steering.js";
 import { parseHzRequest } from "../src/contracts.js";
 
 function steer(seq: number, run: string | null = "work"): SteerEvent {
@@ -32,10 +32,13 @@ describe("Horizon work steering", () => {
   it("preserves the original issue context, raw message, actor, and prior guidance", () => {
     const original = parseHzRequest({ objective: "Fix search", context: { event: { issue: 2 } } });
     const events = [steer(1), steer(2)];
-    expect(requestWithSteering(original, events)).toMatchObject({ objective: "Fix search",
+    expect(requestWithContext(original, { steering: events })).toMatchObject({ objective: "Fix search",
       context: { event: { issue: 2 }, steering: events } });
     expect(original.context).toEqual({ event: { issue: 2 } });
     const textContext = parseHzRequest({ objective: "Fix search", context: "Original background" });
-    expect(requestWithSteering(textContext, events).context).toEqual({ original: "Original background", steering: events });
+    expect(requestWithContext(textContext, { steering: events }).context).toEqual({ original: "Original background", steering: events });
+    const reviewed = requestWithContext(original, { review: { fact: "approval", decision: "approve" } });
+    expect(requestWithContext(reviewed, { steering: events }).context).toEqual({ event: { issue: 2 },
+      review: { fact: "approval", decision: "approve" }, steering: events });
   });
 });

@@ -1,14 +1,16 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { COLLABORATOR_ROLE, COMMON_RULES, USER_QUESTION_CONTEXT, composePrompt } from "./compose.js";
+import { COLLABORATOR_ROLE, COMMON_RULES, USER_QUESTION_CONTEXT, WORKFLOW_CONTEXT, composePrompt } from "./compose.js";
 
 export const RECONCILER_SYSTEM = composePrompt({
   role: `${COLLABORATOR_ROLE} As the execution reconciliation agent, you diagnose one governed execution attempt and choose the smallest correct durable transition.`,
   task: `Assess the exact execution attempt, Tool observations, independent verification, current workspace state, full immutable plan, and completed work.
 
 Choose continue only after independent verification passed and the plan remains sound. Choose repair-step when the specification remains valid and another execution loop can repair the implementation. Choose reverify when implementation is complete but independent proof was inconclusive and the assertion contract remains valid. Choose replan when execution evidence exposes a missing investigation or invalidates a planning artifact, and name the earliest owner. Choose ask only when a material user decision cannot be resolved from evidence. Choose complete only when every responsibility is independently proven. Report unavailable capabilities or authority as unknowns and route them to investigation, replanning, or the user; you do not own terminal workflow control.`,
-  context: `Dynamic context supplies the current immutable plan and Fact, completed verified specialist results, the complete latest execution-attempt record and its content reference, the latest verified restore point, the original request, and a structural plateau state derived from durable evidence fingerprints.
+  context: `${WORKFLOW_CONTEXT}
+
+Dynamic context supplies the current immutable plan and Fact, completed verified specialist results, the complete latest execution-attempt record and its content reference, the latest verified restore point, the original request, and a structural plateau state derived from durable evidence fingerprints.
 
 A replan creates a new immutable revision. It does not mutate history or erase completed evidence.`,
   rules: `${COMMON_RULES}

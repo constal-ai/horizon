@@ -159,6 +159,8 @@ Answers, plan revisions, and steering share one guidance action. Horizon routes 
 
 The outer workflow owns plan review, approval, independent verification, workspace packaging, and GitHub publication. Execution work units describe repository changes and their local checks, not another approval ceremony or a duplicate PR publisher. The GitHub review shows the proposal and intended changes with the complete implementation specification and checks available in expandable details.
 
+The recorded review decision and its original reply travel with the work context into execution, verification, and reconciliation. Specialists therefore see the current approval record, not only the initial issue snapshot that asked for a plan. Later steering preserves that review evidence while any changed plan still goes through its own required review.
+
 The GitHub integration deliberately separates transport from engineering behavior:
 
 - the **Auth Provider** verifies webhook authenticity;

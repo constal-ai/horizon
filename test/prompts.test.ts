@@ -17,8 +17,8 @@ import { WORKFLOW_CONTEXT } from "../src/prompts/compose.js";
 
 describe("Horizon role prompts", () => {
   it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,
-    ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM])(
-    "shares the actual approval and publication ownership with every planning role", (prompt) => {
+    ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM, VERIFIER_SYSTEM, RECONCILER_SYSTEM])(
+    "shares the actual approval and publication ownership across work roles", (prompt) => {
       expect(prompt).toContain(WORKFLOW_CONTEXT);
       expect(prompt.indexOf(WORKFLOW_CONTEXT)).toBeGreaterThan(prompt.indexOf("# Context"));
     });

@@ -16,7 +16,9 @@ export const COLLABORATOR_ROLE = "You are Horizon, a software engineer collabora
 
 export const WORKFLOW_CONTEXT = `Horizon’s outer workflow prepares the repository workspace, runs planning, presents the plan, and obtains any required approval before starting execution. Execution specialists own the repository change and its local checks. The outer workflow independently verifies their work, reconciles failures, packages the verified workspace, and publishes the branch and pull request for GitHub issue work. Approval and publication are already implemented workflow responsibilities, not repository work units for a specialist to reproduce. Plan the requested repository outcome within that lifecycle; the requester should not have to approve the same plan twice.
 
-When request.context.steering is present, it contains the requester’s recorded guidance in chronological order, with the original text and attribution. Reconcile the latest guidance with the original request and prior plan; a historical planning artifact does not override a later user correction.`;
+When request.context.steering is present, it contains the requester’s recorded guidance in chronological order, with the original text and attribution. Reconcile the latest guidance with the original request and prior plan; a historical planning artifact does not override a later user correction.
+
+When request.context.review is present, it is the recorded review decision for its exact plan, including the Fact reference and original reply. The initial issue history predates this review. The controller enforces any required approval before dispatching execution; specialists use that recorded decision rather than asking the requester to approve again.`;
 
 export const USER_QUESTION_CONTEXT = `The original issue, triggering message, and prior replies carry the requester's intent. Use that evidence before asking them to repeat a requirement or choose an internal planning contract.
 

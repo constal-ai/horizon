@@ -18,8 +18,8 @@ export async function pendingSteering(ctx: Ctx, after: number): Promise<SteerEve
     .sort((left, right) => left.seq - right.seq);
 }
 
-export function requestWithSteering(request: HzRequest, steering: SteerEvent[]): HzRequest {
+export function requestWithContext(request: HzRequest, update: Record<string, unknown>): HzRequest {
   const context = request.context && typeof request.context === "object" && !Array.isArray(request.context)
     ? request.context : { original: request.context };
-  return { ...request, context: { ...context, steering } };
+  return { ...request, context: { ...context, ...update } };
 }
