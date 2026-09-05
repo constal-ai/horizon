@@ -73,3 +73,7 @@ Review case errors separately from Scorer failures. An execution error is not a 
 | `failing-environment-setup` | Deterministic setup failure blocks before semantic work |
 
 Unit tests continue to cover injected runtime failures—compaction, plateau detection, optional provider images, stale reads, and recovery—because those are deterministic implementation contracts rather than model-quality questions. Successful and failed production Runs should additionally be captured into later Dataset versions for replay regression coverage.
+
+## GitHub collaboration
+
+The [live collaboration report](github-collaboration.md) follows real issues in `constal-ai/const-alpha` through questions, plan review, execution, and PR publication. [Capture pins](github-collaboration-pins.json) identify the immutable Dataset version containing observed failures. Those records have no success oracle attached and are not a passing release baseline. The report separately tracks the unfinished positive end-to-end checks and reviews communication against the actual issue and recorded behavior, not production keyword validators.

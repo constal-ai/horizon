@@ -1,0 +1,29 @@
+{
+  "status": "in-progress",
+  "candidate": {
+    "source": "cfa78c9",
+    "deploymentRevision": "fc979af3-8bf7-4d1a-9391-525d17747e82",
+    "codeDigest": "ca5d827be85d7f83c851d24cd5cb9635c32d10d3727d50c5ed0cf33a3dabc83f",
+    "model": "openai/gpt-5.6-luna"
+  },
+  "dataset": {
+    "crn": "crn:constal:production:52752121874141666554:default:dataset/horizon-github-collaboration",
+    "version": "1",
+    "hash": "d0d8d6b3217bf5d6e11ffd50c7cf039b9874f38ff2dfadf79f454a68cabdcfb1"
+  },
+  "classification": "known-failure evidence, not a passing acceptance baseline",
+  "cases": [
+    {
+      "caseId": "issue-2-missing-review-context",
+      "run": "8974df88-7ac0-456a-961f-30b06fd368ba",
+      "fact": "4cc3096479dcaba817ff78a908cfe6bee7c7f7af04034edace85f91f6635a163",
+      "scope": "root-workflow"
+    },
+    {
+      "caseId": "issue-3-missing-review-context",
+      "run": "2b0dd90b-299b-870b-9c7f-86bb25c12aff",
+      "fact": "b7a21ee7c334ec2d2dd770c93449b9372e92482beb962c5502d969f6e869c07d",
+      "scope": "executor"
+    }
+  ]
+}
