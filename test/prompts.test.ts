@@ -40,6 +40,8 @@ describe("Horizon role prompts", () => {
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("respond without steering unless the requester actually changes the work");
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain('workSessionRef with platform_get and fields ["state.runs"]');
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("Replanning preserves earlier execution history");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain('fields ["run", "journal"] and page {"limit":10}');
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("Inspect that page before requesting more");
   });
 
   it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,
