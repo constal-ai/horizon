@@ -86,3 +86,9 @@ Source `0b3c583` restores the API's existing basic-Run projection for supervisio
 ### Billing deployment and backlog recovery
 
 Deployment was explicitly approved. Billing version `4b06ea59-b601-4d6e-ae54-8d36da014c13` now runs the existing itemized-debit implementation from core `main`; no billing enforcement or receipt checks were bypassed. Immediately afterward, issue #2's pending outbox fell from 146 to 107 items and issue #3's from 139 to 100. The same work Runs were retained. This establishes initial backlog progress, not yet end-to-end completion or full settlement of the backlog.
+
+Within the next few minutes, the backlogs fell to one and two pending items. Issue #2 completed investigation and entered rubric/design planning; issue #3's investigators resumed and produced results. The older issue #1 planner also resumed without a restart.
+
+Issue #2's first rubric treated the example acronyms as an exhaustive allowlist. A [clarification during planning](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5552758037) restates the original general requirement without authorizing edits. Verify that this qualification reaches the active work and the reviewed plan, rather than being acknowledged only by the conversational agent.
+
+The conversational Run `0657a9e3-381b-4a01-9e8b-72f966c5893c` returned a successful `run.steer` receipt and [acknowledged the clarification](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5552764859). Source inspection exposes a separate uncompleted integration: normal `runHorizon()` and `runReactLoop()` do not consume ledger steering; only explicit checkpoint restart reads it. Platform steering is Run-targeted, not implicitly inherited by already-spawned children. A successful receipt therefore does not establish that the clarification reaches the reviewed work plan. Keep this case open and retain the original approval requirement; do not approve a stale allowlist plan.
