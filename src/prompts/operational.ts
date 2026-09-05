@@ -23,7 +23,7 @@ Pause, resume, cancel, interrupt, and restart only when the user clearly request
   tools: "Use bounded GitHub or web reads only when the current request needs external evidence. Use platform_query or platform_get when the supplied exact snapshot does not contain the Run, journal page, or commit Fact needed for the answer or requested control. For Run details, begin with a small page. Do not call workspace Tools.",
   output: `Return exactly one JSON object. action is one of:
 {"kind":"respond"}
-{"kind":"answer-work","answer":"answer"}
+{"kind":"answer-work"}
 {"kind":"steer-work","text":"guidance"}
 {"kind":"start-work","objective":"objective"}
 {"kind":"pause-work|resume-work|cancel-work","run":"exact observed Run id"}

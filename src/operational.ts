@@ -14,7 +14,7 @@ import type { HzToolEvidence } from "./contracts.js";
 
 export type HorizonOperationalAction =
   | { kind: "respond" }
-  | { kind: "answer-work"; answer: string }
+  | { kind: "answer-work" }
   | { kind: "steer-work"; text: string }
   | { kind: "start-work"; objective: string }
   | { kind: "pause-work"; run: string }
@@ -262,9 +262,7 @@ function action(value: unknown): HorizonOperationalAction | null {
   const source = record(value); const kind = source?.kind;
   if (!source) return null;
   if (kind === "respond" && Object.keys(source).length === 1) return { kind };
-  if (kind === "answer-work" && typeof source.answer === "string" && source.answer.trim() && source.answer.length <= 65_536) {
-    return { kind, answer: source.answer.trim() };
-  }
+  if (kind === "answer-work") return { kind };
   if (kind === "steer-work" && typeof source.text === "string" && source.text.trim() && source.text.length <= 32_768) {
     return { kind, text: source.text.trim() };
   }
@@ -388,7 +386,7 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
         : String(waits[0]!.id ?? "").split("/").at(-1) ?? "";
       operations = [{ id: "answer", operation: "run.wait.resolve", input: {
         namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, promise,
-        value: { ...event, objective: result.action.answer },
+        value: event,
       } }];
     } else if (result.action.kind === "steer-work") {
       operations = [{ id: "steer", operation: "run.steer", input: {
