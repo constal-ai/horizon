@@ -327,7 +327,7 @@ const patch: Tool = {
 
 const diff: Tool = {
   name: "workspace_diff", version: "1",
-  description: "Read the exact bounded Git diff for the selected repository paths. Use after edits and before reporting completion so the specialist can catch accidental or unrelated changes.",
+  description: "Read the working-tree Git diff for tracked repository paths. This runs git diff, so it excludes untracked new files and staged changes. Use workspace_exec with git status --short --untracked-files=all to inventory changes, workspace_read to inspect new files, and git diff --cached for staged changes.",
   schema: { type: "object", properties: { cwd: pathProperty, paths: pathsProperty }, additionalProperties: false },
   maxEffect: "reconcilable", needs: [{ binding: "sandbox", kind: "sandbox-pool", ops: ["createSandbox", "exec"] }],
   async run(args: { cwd?: string; paths?: string[] }, ctx) {

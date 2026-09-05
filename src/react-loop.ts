@@ -8,9 +8,9 @@ import { COMMON_RULES, composePrompt } from "./prompts/compose.js";
 const PROGRESS_CHECKPOINT_INTERVAL = 8;
 
 export const LOOP_CHECKPOINT_SYSTEM = composePrompt({
-  role: "You are Horizon's evidence progress observer. You summarize one specialist's bounded observations; the deterministic loop controller alone changes Tool availability.",
+  role: "You are Horizon's working-memory specialist. Your checkpoint lets another specialist continue its work after older Tool observations leave its context.",
   task: "Produce a stable structured checkpoint of the questions this specialist still owns. Resolve an unknown only from supplied evidence. Identify the smallest exact evidence still needed; do not ask for generic additional inspection.",
-  context: "Dynamic context supplies the specialist role, objective, original role context, recent observations, compacted evidence, and the prior checkpoint when one exists.",
+  context: "Dynamic context supplies the specialist role, objective, original role context, complete observations since the previous checkpoint, an index of older evidence, and the prior checkpoint when one exists. Preserve established findings, their evidence, completed checks, and unresolved questions. Update prior conclusions when newer evidence changes them.",
   rules: `${COMMON_RULES}\n\nDescribe the current unknown frontier directly; do not invent identifiers for semantic questions. Evidence accumulation without a changed question, state, or resolution is not progress. Set ready only when no assigned unknown remains open, needs input, or blocked. Do not invent proof obligations beyond the supplied role objective, context, and stop condition. For a verifier role, the executor report remains a claim, while the execution Fact and supplied Tool receipts provide governed provenance. The verifier must still independently inspect semantic and final-workspace claims. Do not decide implementation or call Tools.`,
   tools: "No Tools are available. Judge progress only from supplied observations.",
   output: `Return exactly one JSON object:
@@ -87,16 +87,6 @@ function bounded(value: unknown, depth = 0): unknown {
   return Object.fromEntries(Object.entries(source).slice(0, 96).map(([key, entry]) => [key, bounded(entry, depth + 1)]));
 }
 
-function compactBounded(value: unknown, depth = 0): unknown {
-  if (depth >= 4) return "[depth omitted]";
-  if (typeof value === "string") return value.length <= 2_048 ? value : `${value.slice(0, 2_048)}…`;
-  if (value === null || typeof value === "number" || typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.slice(0, 32).map((entry) => compactBounded(entry, depth + 1));
-  const source = record(value);
-  if (!source) return String(value);
-  return Object.fromEntries(Object.entries(source).slice(0, 32).map(([key, entry]) => [key, compactBounded(entry, depth + 1)]));
-}
-
 function durableCallValue(call: ToolCallRecord): unknown {
   if (call.preview !== undefined) return bounded(call.preview);
   if (call.result !== undefined) return bounded(call.result);
@@ -109,23 +99,25 @@ function reasoningCallValue(call: ToolCallRecord): unknown {
   return Object.hasOwn(call, "result") ? call.result : durableCallValue(call);
 }
 
-const VOLATILE_OBSERVATION_FIELDS = new Set(["commandId", "usage"]);
-
-function stableObservation(value: unknown, depth = 0): unknown {
-  if (depth >= 8 || value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((entry) => stableObservation(entry, depth + 1));
-  const source = record(value);
-  if (!source) return value;
-  return Object.fromEntries(Object.entries(source)
-    .filter(([key]) => !VOLATILE_OBSERVATION_FIELDS.has(key))
-    .map(([key, entry]) => [key, stableObservation(entry, depth + 1)]));
+function commandObservation(call: ToolCallRecord): Record<string, unknown> | null {
+  if (call.name !== "workspace_exec" && call.name !== "workspace_diff") return null;
+  const value = reasoningCallValue(call);
+  const source = record(typeof value === "string" ? jsonMessage(value) : value);
+  if (!source || typeof source.commandId !== "string" || typeof source.status !== "string"
+    || !Object.hasOwn(source, "stdoutRef") || !Object.hasOwn(source, "stderrRef")
+    || !Object.hasOwn(source, "exitCode") || !Array.isArray(source.outputs)) return null;
+  // The command receipt changes per invocation, but its output hashes identify
+  // the observed content. Strip only this known carrier's execution metadata;
+  // identically named fields in arbitrary Tool payloads remain meaningful.
+  const { commandId: _command, usage: _usage, sandbox: _sandbox, ...observation } = source;
+  return observation;
 }
 
 function callSignature(call: ToolCallRecord): string {
-  const value = call.ref ?? stableObservation(durableCallValue(call));
+  const value = commandObservation(call) ?? call.ref ?? durableCallValue(call);
   return canonicalJson({ name: call.name, status: call.status, value,
     ...(["error", "refused", "unknown", "outcome-unknown"].includes(call.status)
-      ? {} : { args: stableObservation(bounded(call.args)) }) });
+      ? {} : { args: call.args }) });
 }
 
 export class EvidencePlateauDetector {
@@ -169,8 +161,8 @@ function evidence(calls: readonly ToolCallRecord[]): HzToolEvidence[] {
   });
 }
 
-function roundContext(calls: readonly ToolCallRecord[]): unknown[] {
-  return calls.map((call) => ({ name: call.name, status: call.status, args: bounded(call.args), ref: call.ref ?? null,
+function roundContext(calls: readonly ToolCallRecord[]) {
+  return calls.map((call) => ({ name: call.name, status: call.status, args: call.args, ref: call.ref ?? null,
     result: reasoningCallValue(call) }));
 }
 
@@ -195,7 +187,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
     .map((stage) => [...new Set(stage)].filter((name) => enabledToolSet.has(name)))
     .filter((stage) => stage.length > 0);
   const calls: ToolCallRecord[] = [];
-  const recentRounds: unknown[][] = [];
+  const recentRounds: ReturnType<typeof roundContext>[] = [];
   const compacted: Array<{ fact: string; rounds: number }> = [];
   const progressCheckpoints: Array<{ fact: string; ready: boolean; summary: string }> = [];
   let compactedEvidence: unknown[] = [];
@@ -216,7 +208,7 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
         ? initialContext
         : { request: initialContext, compacted, compactedGovernedToolObservations: compactedEvidence,
           recentGovernedToolObservations: recentRounds,
-          progressCheckpoints,
+          progressCheckpoints, progressCheckpoint: priorCheckpoint,
           ...(narrowedPlateau ? { plateau: "The current evidence phase stopped changing. Use one of the remaining convergence Tools if the assigned stop condition still needs that effect or proof; otherwise resolve from the governed observations already recorded." }
             : forcedPlateau ? { plateau: "The observed evidence or structured unknown frontier stopped changing. Resolve, ask, or block without another Tool call." } : {}) },
       tools: offered,
@@ -259,25 +251,13 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
       else forcedPlateau = true;
     }
 
-    if (recentRounds.length > 6) {
-      const older = recentRounds.splice(0, recentRounds.length - 3);
-      const projected = older.flat().map(compactBounded);
-      const unique = new Map<string, unknown>();
-      for (const observation of [...compactedEvidence, ...projected]) unique.set(canonicalJson(observation), observation);
-      compactedEvidence = [...unique.values()].slice(-128);
-      const fact = await ctx.commit({ kind: "horizon.react-compaction", role: spec.role, rounds: older.length,
-        observations: projected }, { tier: "audit" });
-      compacted.push({ fact: fact.hash, rounds: older.length });
-      if (compacted.length > 32) compacted.splice(0, compacted.length - 32);
-    }
-
     if (!forcedPlateau && toolRounds % PROGRESS_CHECKPOINT_INTERVAL === 0) {
       const progress = await ctx.turn({
         system: LOOP_CHECKPOINT_SYSTEM,
         objective: "Checkpoint the assigned unknown frontier from observed evidence.",
-        context: { role: spec.role, objective: spec.objective, request: compactBounded(spec.context),
+        context: { role: spec.role, objective: spec.objective, request: initialContext,
           priorCheckpoint, compactedGovernedToolObservations: compactedEvidence,
-          recentGovernedToolObservations: recentRounds.slice(-3) },
+          recentGovernedToolObservations: recentRounds },
         tools: [],
         gate: {
           id: `horizon-${spec.role}-progress`, version: "1", retries: 3,
@@ -292,6 +272,21 @@ export async function runReactLoop<T>(spec: ReactLoopSpec<T>, ctx: Ctx): Promise
       progressCheckpoints.push({ fact: fact.hash, ready: current.ready, summary: current.summary });
       if (progressCheckpoints.length > 32) progressCheckpoints.splice(0, progressCheckpoints.length - 32);
       priorCheckpoint = current;
+
+      // Compact only after the memory specialist has seen the complete results.
+      // Keep recent rounds verbatim and older receipts as an explicit index, not
+      // depth-limited prefixes that could be mistaken for complete observations.
+      const older = recentRounds.splice(0, recentRounds.length - 3);
+      const projected = older.flat().map(({ result: _result, ...receipt }) => ({
+        ...receipt, resultCompactedInto: fact.hash,
+      }));
+      const unique = new Map<string, unknown>();
+      for (const observation of [...compactedEvidence, ...projected]) unique.set(canonicalJson(observation), observation);
+      compactedEvidence = [...unique.values()].slice(-128);
+      const compaction = await ctx.commit({ kind: "horizon.react-compaction", role: spec.role,
+        rounds: older.length, checkpoint: fact.hash, observations: projected }, { tier: "audit" });
+      compacted.push({ fact: compaction.hash, rounds: older.length });
+      if (compacted.length > 32) compacted.splice(0, compacted.length - 32);
     }
   }
   throw new TypeError(`${spec.role} exhausted its ReAct safety ceiling without a final artifact`);

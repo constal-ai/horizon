@@ -26,9 +26,11 @@ describe("EvidencePlateauDetector", () => {
     expect(detector.observe([call({ ref: "two" })])).toEqual({ plateaued: false, stableRounds: 0, added: 1 });
   });
 
-  it("ignores volatile sandbox identity and metering fields when evidence is unchanged", () => {
+  it.each([false, true])("compares command output rather than unique receipt hashes (JSON carrier: %s)", (encoded) => {
     const detector = new EvidencePlateauDetector();
-    const command = (ordinal: number) => call({
+    const command = (ordinal: number) => ({ ...call(encoded ? JSON.stringify(result(ordinal)) : result(ordinal)),
+      name: "workspace_diff", ref: `receipt-${ordinal}` });
+    const result = (ordinal: number) => ({
       commandId: `run:root/${ordinal}/tool/0`, status: "completed", exitCode: 0,
       stdoutRef: "same-content", stdoutPreview: "README.md\n", stderrRef: null, outputs: [],
       sandbox: { id: "session-sandbox", generation: 1, fresh: false },
@@ -37,6 +39,23 @@ describe("EvidencePlateauDetector", () => {
     expect(detector.observe([command(1)])).toEqual({ plateaued: false, stableRounds: 0, added: 1 });
     expect(detector.observe([command(2)])).toEqual({ plateaued: false, stableRounds: 1, added: 0 });
     expect(detector.observe([command(3)])).toEqual({ plateaued: true, stableRounds: 2, added: 0 });
+  });
+
+  it("retains changed command output and exit status as new evidence", () => {
+    const detector = new EvidencePlateauDetector();
+    const command = (stdoutRef: string, exitCode: number) => ({ ...call({ commandId: "command",
+      status: "completed", stdoutRef, stderrRef: null, exitCode, outputs: [] }), name: "workspace_exec" });
+    detector.observe([command("first", 0)]);
+    expect(detector.observe([command("second", 0)]).added).toBe(1);
+    expect(detector.observe([command("second", 1)]).added).toBe(1);
+  });
+
+  it("preserves business payload fields named usage, sandbox, and commandId", () => {
+    const detector = new EvidencePlateauDetector();
+    detector.observe([call({ usage: 1, sandbox: "a", commandId: "a" })]);
+    expect(detector.observe([call({ usage: 2, sandbox: "a", commandId: "a" })]).added).toBe(1);
+    expect(detector.observe([call({ usage: 2, sandbox: "b", commandId: "a" })]).added).toBe(1);
+    expect(detector.observe([call({ usage: 2, sandbox: "b", commandId: "b" })]).added).toBe(1);
   });
 
   it("removes Tools after a plateau and requires the role to terminate honestly", async () => {
@@ -239,12 +258,24 @@ describe("EvidencePlateauDetector", () => {
     } });
   });
 
-  it("keeps bounded compacted evidence available while committing complete older rounds", async () => {
+  it("checkpoints complete observations before compaction and restores the full working memory", async () => {
     const contexts: unknown[] = []; const commits: unknown[] = []; let turns = 0;
+    const request = { plan: { step: { instructions: "instruction ".repeat(500) } } };
+    const file = { ref: "file-content", text: "source ".repeat(4_000) };
+    const memory = { object: "constal.horizon.loop-checkpoint", version: 1, role: "test", ready: false,
+      summary: "Source inspection is complete; check repository status next.",
+      unknowns: [{ question: "Does the source match?", state: "resolved", resolution: "The implementation matches.",
+        evidence: ["receipt-1"] }], nextEvidence: ["git status --short --untracked-files=all"] };
+    let memoryInput: unknown;
     const ctx = {
-      turn: async (spec: { context?: unknown }) => {
-        contexts.push(spec.context); turns++;
-        if (turns <= 7) return { toolCalls: [call({ ref: `evidence-${turns}` })],
+      turn: async (spec: { context?: unknown; system?: string }) => {
+        if (spec.system === LOOP_CHECKPOINT_SYSTEM) {
+          expect(commits).toHaveLength(0);
+          memoryInput = structuredClone(spec.context);
+          return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: memory } as unknown as TurnRecord;
+        }
+        contexts.push(structuredClone(spec.context)); turns++;
+        if (turns <= 8) return { toolCalls: [{ ...call(turns === 1 ? file : { ref: `evidence-${turns}` }), ref: `receipt-${turns}` }],
           message: { role: "assistant", content: "Inspecting." }, artifact: null } as unknown as TurnRecord;
         return { toolCalls: [], message: { role: "assistant", content: "" },
           artifact: { status: "complete" } } as unknown as TurnRecord;
@@ -254,14 +285,25 @@ describe("EvidencePlateauDetector", () => {
         return { hash: `fact-${commits.length}`, artifact, artifactHash: `artifact-${commits.length}` } as unknown as Fact<unknown>;
       },
     } as unknown as Ctx;
-    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: {},
+    const result = await runReactLoop({ role: "test", system: "test", objective: "test", context: request,
       tools: ["workspace_read"], maxRounds: 10,
       parse: (value) => value && typeof value === "object" && (value as { status?: unknown }).status === "complete"
         ? value as { status: "complete" } : null }, ctx);
     expect(result.plateaued).toBe(false);
-    expect(commits).toHaveLength(1);
-    expect(contexts[7]).toMatchObject({ compacted: [{ fact: "fact-1", rounds: 4 }],
-      compactedGovernedToolObservations: expect.arrayContaining([expect.objectContaining({ result: { ref: "evidence-1" } })]) });
+    expect(commits).toHaveLength(2);
+    expect(memoryInput).toMatchObject({ request, recentGovernedToolObservations:
+      expect.arrayContaining([[expect.objectContaining({ ref: "receipt-1", result: file })]]) });
+    expect(contexts[7]).toMatchObject({ compacted: [], recentGovernedToolObservations:
+      expect.arrayContaining([[expect.objectContaining({ result: file })]]) });
+    expect(contexts[8]).toMatchObject({ progressCheckpoint: memory, compacted: [{ fact: "fact-2", rounds: 5 }],
+      compactedGovernedToolObservations: expect.arrayContaining([
+        { name: "workspace_read", status: "ok", args: { path: "src/index.ts" }, ref: "receipt-1", resultCompactedInto: "fact-1" },
+      ]), recentGovernedToolObservations: [
+        [expect.objectContaining({ ref: "receipt-6" })], [expect.objectContaining({ ref: "receipt-7" })],
+        [expect.objectContaining({ ref: "receipt-8" })],
+      ] });
+    expect(JSON.stringify(contexts[8])).not.toContain("[depth omitted]");
+    expect(commits[1]).toMatchObject({ kind: "horizon.react-compaction", checkpoint: "fact-1" });
   });
 
   it("records semantic progress observations without letting them control Tool availability", async () => {
