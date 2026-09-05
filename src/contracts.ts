@@ -958,7 +958,7 @@ export function parseHzReconciliation(value: unknown): HzReconciliation | null {
     || planningOwner !== null && !["investigation", "rubric", "design", "decomposition", "assertions"].includes(String(planningOwner))
     || !["keep-current", "restore-last-verified"].includes(String(workspaceDisposition))
     || replanBrief === undefined || question === undefined) return null;
-  if ((action === "replan" || action === "ask") && (!replanBrief || planningOwner === null)
+  if (action === "replan" && (!replanBrief || planningOwner === null)
     || action === "ask" && !question
     || action !== "replan" && action !== "ask" && planningOwner !== null
     || action === "reverify" && workspaceDisposition !== "keep-current") return null;

@@ -153,6 +153,11 @@ describe("Horizon transport contracts", () => {
   });
 
   it("requires complete structurally valid continuity and explicit execution routes", () => {
+    expect(parseHzReconciliation({ object: "constal.horizon.reconciliation", version: 2, action: "ask",
+      summary: "The user's answer is needed before choosing a repair route.", remainingUnknowns: [], planningOwner: null,
+      workspaceDisposition: "keep-current", replanBrief: null,
+      question: { prompt: "Which behavior do you want?", options: ["Preserve it.", "Replace it.", "Support both."] },
+    })).toMatchObject({ action: "ask", planningOwner: null, replanBrief: null });
     expect(parseHzPlanContinuity({ object: "constal.horizon.plan-continuity", version: 1, revision: 2,
       decisions: [{ priorStepId: "implement", nextStepId: "implement", disposition: "reverify",
         reason: "The proof contract changed.", evidence: ["verification-fact"] }] }, 2,

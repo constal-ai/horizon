@@ -862,8 +862,9 @@ describe("Horizon workflow", () => {
     expect(result.longHorizon.replans).toBe(2);
   });
 
-  it("routes an execution plateau through one user decision and resumes toward completion", async () => {
+  it.each(["decomposition", null] as const)("resumes an execution question with planning owner %s", async (planningOwner) => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0; let plannerRuns = 0;
+    const storedPlans: Array<{ restartAt: unknown }> = [];
     let executionRuns = 0; let reconciliationRuns = 0;
     const failedExecution: HzStepResult = { ...stepResult, status: "failed", summary: "Attempt failed.", changedFiles: [],
       verification: ["same failure"], observations: ["same evidence"], unknowns: [{
@@ -879,7 +880,9 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
-      invoke: casRuntime(),
+      invoke: casRuntime((value) => {
+        if (value && typeof value === "object" && "restartAt" in value) storedPlans.push(value as { restartAt: unknown });
+      }),
       await: () => handle({ answer: "Use the alternative implementation seam identified in the failure evidence." }),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
@@ -900,7 +903,7 @@ describe("Horizon workflow", () => {
           if (reconciliationRuns === 3) return handle({ reconciliation: {
             object: "constal.horizon.reconciliation", version: 2, action: "ask",
             summary: "Repeated evidence requires one implementation decision.", remainingUnknowns: failedExecution.unknowns,
-            planningOwner: "decomposition", workspaceDisposition: "keep-current",
+            planningOwner, workspaceDisposition: "keep-current",
             replanBrief: "Use the user's selected alternative rather than repeating the unchanged attempt.",
             question: { prompt: "How should I proceed after the repeated failure?", options: [
               "Use the alternative implementation seam.", "Narrow the requested behavior.",
@@ -929,6 +932,7 @@ describe("Horizon workflow", () => {
     expect(result.status).toBe("complete");
     expect(result.plan?.revision).toBe(4);
     expect(result.longHorizon).toMatchObject({ replans: 3 });
+    expect(storedPlans.at(-1)?.restartAt).toBe(planningOwner ?? "rubric");
     expect(committed.map(({ kind }) => kind)).toContain("horizon.plateau");
   });
 });

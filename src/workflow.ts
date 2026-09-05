@@ -742,12 +742,13 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       replannedPlateaus.add(plateau.fingerprint);
     }
     const previous = current;
-    activeStage = `execution replanning from ${decision.planningOwner}`;
+    const planningOwner = decision.planningOwner ?? "rubric";
+    activeStage = `execution replanning from ${planningOwner}`;
     const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan, investigations: discovery.investigations,
       workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
       previousPlan: previous.plan, previousState: previous.state, completed,
       completedEvidence: completedEvidence(),
-      restartAt: decision.planningOwner!, executionEvidence: storedAttempt.attempt,
+      restartAt: planningOwner, executionEvidence: storedAttempt.attempt,
       replanBrief: decision.replanBrief ?? decision.summary, answer, tools: [] }, ctx);
     await adoptRevision(previous, next, decision.workspaceDisposition, decision.summary);
     if (decision.planningOwner === "assertions" && decision.workspaceDisposition === "keep-current"

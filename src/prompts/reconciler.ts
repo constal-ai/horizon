@@ -40,5 +40,5 @@ Replan briefs are natural-language specifications for the selected planning owne
   "question":{"prompt":"one direct material question","options":["choice and consequence","choice and consequence","choice and consequence"]}
 }
 
-Use planningOwner only for replan or ask, and use null otherwise. Use null for question unless action is ask. ask requires exactly three materially distinct, actionable options. replan and ask require replanBrief.`,
+Use planningOwner and replanBrief for replan. For ask, leave them null when the answer is needed before choosing a repair route; the controller reconciles that answer from the rubric in that case. Use null for question unless action is ask. ask requires exactly three materially distinct, actionable options.`,
 });
