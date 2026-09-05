@@ -58,3 +58,11 @@ After clarifying the handoff semantics, source `60a5a3c` was deployed as `baadb3
 That Run exposed a transport regression before semantic planning: the Session router rejected compound DriverContext operations such as `state/get`. A routing regression test failed for all five state operations while twelve single-segment operations passed. Core commit `6c54315e` restores forwarding of the full operation path to the existing authenticated handler; 69 related tests passed. Platform version `6abba12a-4c16-4cff-8eb7-78311424282e` was deployed, and the same waiting Run recovered and began workspace preparation without being restarted.
 
 Separately, platform logs show repeated Billing receipt rejections. The deployed Billing worker predates main's itemized-debit protocol. Deploying those existing changes may process accumulated charges, so approval was requested separately; no billing enforcement was weakened.
+
+### Shared question presentation
+
+[Issue #3's clarification](https://github.com/constal-ai/const-alpha/issues/3#issuecomment-5550960216) uses the shared question contract: the actual documentation-scope choice, three numbered alternatives, and a fourth free-form option. It does not expose planner state or require the requester to repeat repository facts.
+
+Source `2ce9728`, deployed as `8708d371-0fb1-4039-8c19-7b1329f92a7b`, also avoids the duplicate frontend acknowledgment after a successful work handoff. The work Run remains responsible for its start update; questions and failed handoffs are not suppressed. All 172 Horizon tests passed.
+
+The authoritative input of issue #2's work Run was checked through the conversation endpoint: its original issue body and the full punctuation/synonym-dictionary qualifications were both present.
