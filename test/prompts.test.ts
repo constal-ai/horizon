@@ -38,6 +38,8 @@ describe("Horizon role prompts", () => {
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("do not repeat a completed page");
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("Missing results in the initial snapshot do not mean the checks have not happened");
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("respond without steering unless the requester actually changes the work");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain('workSessionRef with platform_get and fields ["state.runs"]');
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("Replanning preserves earlier execution history");
   });
 
   it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,

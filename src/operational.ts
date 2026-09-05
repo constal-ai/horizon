@@ -58,6 +58,7 @@ interface SupervisionSnapshot {
   object: "constal.horizon.supervision";
   version: 1;
   thread: GitHubThreadContext;
+  workSessionRef: ApiObjectRef;
   issue: unknown;
   comments: unknown;
   currentRun: ApiGetResult | null | { error: string };
@@ -210,7 +211,10 @@ async function supervisionSnapshot(event: HorizonRoutedEvent, ctx: Ctx): Promise
     filter: { op: "and", filters: [{ op: "eq", field: "agent", value: "horizon" },
       { op: "eq", field: "session", value: thread.workSession }] }, limit: 200,
   }));
-  return { object: "constal.horizon.supervision", version: 1, thread, issue, comments, currentRun, rootRun: rootDetail, waits,
+  return { object: "constal.horizon.supervision", version: 1, thread,
+    workSessionRef: { kind: "session", id: `horizon/${thread.workSession}`, crn: null, hash: null,
+      namespace: ctx.run.namespace, version: null },
+    issue, comments, currentRun, rootRun: rootDetail, waits,
     history: workHistory(runs), activity: workActivity(currentRun, waits) };
 }
 

@@ -120,6 +120,7 @@ describe("Horizon behavior routing", () => {
     const invoke = readFixture();
     const turn = vi.fn(async (input: { context: { supervision: Record<string, unknown> } }) => {
       expect(input.context.supervision).toMatchObject({ thread: { workSession: sessions.work },
+        workSessionRef: { kind: "session", id: `horizon/${sessions.work}`, namespace: "default", crn: null, hash: null, version: null },
         issue: { issue: { number: 10 } }, comments: { comments: [{ body: "Progress?" }] },
         currentRun: { value: { runId: "run-1", status: "suspended", task: { id: "horizon-planner" } } },
         rootRun: { value: { runId: "run-1" } },
