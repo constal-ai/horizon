@@ -44,4 +44,8 @@ Review communication semantically against the request and observed evidence. Do 
 
 ## Result
 
-Pending live execution. Record the tested Agent revision, exact Run and comment links, approval, pull request, verification results, and any remaining failures here.
+The first live clarification was [relevant to the product choice](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5550837762), rather than asking for the issue body. Its inline A/B/C layout prompted reuse of the existing structured question renderer for conversational questions too.
+
+The [free-form answer](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5550848199) retained the constraints on other punctuation and on synonym dictionaries. The next conversational Run produced an implementation outline instead of handing off to the work agent. This is not accepted as successful planning: the conversational agent does not own the reviewed plan or its approval wait. The prompt's handoff semantics are being corrected to state positively that starting issue work begins investigation and plan review, not mutation.
+
+Pending: verified handoff, work-plan approval, implementation, independent checks, and pull request.
