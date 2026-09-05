@@ -539,7 +539,7 @@ function nullableString(value: unknown, maximum = 65_536): string | null | undef
   return string(value, maximum) ?? undefined;
 }
 
-function decisionQuestion(value: unknown): HzDecisionQuestion | null | undefined {
+export function parseHzDecisionQuestion(value: unknown): HzDecisionQuestion | null | undefined {
   if (value === null) return null;
   const source = item(value); const prompt = string(source?.prompt, 16_384);
   const options = strings(source?.options, 3, 8_192);
@@ -849,7 +849,7 @@ function parseHzCritiqueFinding(value: unknown): HzCritiqueFinding | null {
 
 export function parseHzPlanCritique(value: unknown, expectedRevision?: number): HzPlanCritique | null {
   const source = item(value); const revision = positiveRevision(source?.revision, expectedRevision); const verdict = source?.verdict;
-  const summary = string(source?.summary, 32_768); const question = decisionQuestion(source?.question);
+  const summary = string(source?.summary, 32_768); const question = parseHzDecisionQuestion(source?.question);
   if (!source || source.object !== "constal.horizon.plan-critique" || source.version !== 1 || revision === null
     || !["accepted", "repair", "needs-input"].includes(String(verdict)) || !summary || question === undefined
     || !Array.isArray(source.findings) || source.findings.length > 128) return null;
@@ -879,7 +879,7 @@ export function parseHzPlan(value: unknown): HzPlan | null {
   const objective = string(source?.objective); const summary = string(source?.summary, 32_768);
   const specification = string(source?.specification, 262_144); const workspaceRoot = nullableString(source?.workspaceRoot, 4_096);
   const parsedUnknowns = unknowns(source?.unknowns); const risks = strings(source?.risks, 128, 8_192);
-  const question = decisionQuestion(source?.question);
+  const question = parseHzDecisionQuestion(source?.question);
   if (!source || source.object !== "constal.horizon.plan" || source.version !== 1
     || !Number.isInteger(revision) || Number(revision) < 1
     || !["ready", "needs-input"].includes(String(status))
@@ -951,7 +951,7 @@ export function parseHzReconciliation(value: unknown): HzReconciliation | null {
   const remainingUnknowns = unknowns(source?.remainingUnknowns); const replanBrief = nullableString(source?.replanBrief, 65_536);
   const planningOwner = source?.planningOwner === null ? null : source?.planningOwner;
   const workspaceDisposition = source?.workspaceDisposition;
-  const question = decisionQuestion(source?.question);
+  const question = parseHzDecisionQuestion(source?.question);
   if (!source || source.object !== "constal.horizon.reconciliation" || source.version !== 2
     || !["continue", "repair-step", "reverify", "replan", "ask", "complete"].includes(String(action))
     || !summary || !remainingUnknowns

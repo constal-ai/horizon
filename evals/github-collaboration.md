@@ -35,6 +35,13 @@ The supervisor had read the issue but handed off only the model's restatement of
 
 Review communication semantically against the request and observed evidence. Do not add production keyword checks, required prose phrases, or arbitrary response-length gates to make this evaluation pass.
 
+## Candidate
+
+- Agent source: `e8859ff` on `main`.
+- Deployed Agent revision: `65d280d1-67f8-42b2-a1af-47e5c5491eba`.
+- Existing tenant bindings retained, including the current logical GitHub service.
+- Horizon checks: typecheck and all 170 tests passed before activation.
+
 ## Result
 
 Pending live execution. Record the tested Agent revision, exact Run and comment links, approval, pull request, verification results, and any remaining failures here.

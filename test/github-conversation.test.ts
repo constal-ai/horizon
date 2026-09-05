@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { planMarkdown, questionMarkdown, terminalMarkdown } from "../src/github-conversation.js";
 import type { HzPlan } from "../src/contracts.js";
+import { parseHorizonOperationalResult } from "../src/operational.js";
 
 describe("GitHub decision questions", () => {
   it("renders one first-person question, three choices, and a free-form path", () => {
@@ -48,5 +49,17 @@ describe("GitHub decision questions", () => {
     const message = "I'm checking the command's existing-file behavior.\n\nThe tests cover replacement; I'm now checking the default path.";
     expect(terminalMarkdown({ object: "constal.horizon.operational-result", version: 1,
       status: "complete", message, action: { kind: "respond" }, evidence: [] })).toBe(message);
+  });
+
+  it("uses the same question contract for conversational and planning questions", () => {
+    const question = { prompt: "How should dotted initialisms behave?", options: [
+      "Match their undotted forms.", "Keep punctuation significant.", "Try exact matches before a normalized fallback.",
+    ] as [string, string, string] };
+    const result = parseHorizonOperationalResult({ object: "constal.horizon.operational-result", version: 1,
+      status: "needs-input", message: "", question, action: { kind: "respond" }, evidence: [] });
+    expect(result).not.toBeNull();
+    expect(terminalMarkdown(result!)).toBe(questionMarkdown(question));
+    expect(terminalMarkdown(result!)).toContain("4. **Write your own answer.**");
+    expect(parseHorizonOperationalResult({ ...result, question: { prompt: "Choose?", options: ["One"] } })).toBeNull();
   });
 });

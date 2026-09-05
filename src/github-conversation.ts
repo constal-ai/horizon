@@ -39,7 +39,7 @@ export function milestoneMarkdown(step: HzPlan["steps"][number], result: HzStepR
 }
 
 export function terminalMarkdown(result: HzRunResult | HorizonOperationalResult): string {
-  if (result.object === "constal.horizon.operational-result") return result.message;
+  if (result.object === "constal.horizon.operational-result") return result.question ? questionMarkdown(result.question) : result.message;
   if (result.status === "complete") {
     const steps = result.completedSteps.map((step) => `- ${step.summary}`).join("\n");
     const publication = result.publication ? `\n\n### Pull request\n\n[#${result.publication.pullRequest.number}](${result.publication.pullRequest.url}) · \`${result.publication.branch}\`` : "";

@@ -10,7 +10,7 @@ import { runReactLoop } from "./react-loop.js";
 import { applicationError, applicationFailureSummary, rethrowRuntimeControl } from "./runtime-control.js";
 import { availableTools, OPERATIONAL_TOOL_NAMES } from "./tools/index.js";
 import type { HorizonRoutedEvent } from "./behaviors.js";
-import type { HzToolEvidence } from "./contracts.js";
+import { parseHzDecisionQuestion, type HzDecisionQuestion, type HzToolEvidence } from "./contracts.js";
 
 export type HorizonOperationalAction =
   | { kind: "respond" }
@@ -31,6 +31,7 @@ export interface HorizonOperationalResult {
   version: 1;
   status: "complete" | "needs-input" | "blocked";
   message: string;
+  question?: HzDecisionQuestion | null;
   action: HorizonOperationalAction;
   evidence: string[];
   control?: { operation: HorizonControlOperation; plan: string; receipt: string; state: string }
@@ -288,13 +289,14 @@ function action(value: unknown): HorizonOperationalAction | null {
 
 export function parseHorizonOperationalResult(value: unknown): HorizonOperationalResult | null {
   const source = record(value); const selected = action(source?.action);
+  const question = source?.question === undefined ? null : parseHzDecisionQuestion(source.question);
   if (!source || source.object !== "constal.horizon.operational-result" || source.version !== 1
     || !["complete", "needs-input", "blocked"].includes(String(source.status)) || !selected
-    || typeof source.message !== "string" || !source.message.trim() || source.message.length > 65_536
+    || question === undefined || typeof source.message !== "string" || !source.message.trim() && !question || source.message.length > 65_536
     || !Array.isArray(source.evidence) || source.evidence.length > 128
     || source.evidence.some((item) => typeof item !== "string" || !item.trim() || item.length > 8_192)) return null;
   return { object: "constal.horizon.operational-result", version: 1,
-    status: source.status as HorizonOperationalResult["status"], message: source.message.trim(), action: selected,
+    status: source.status as HorizonOperationalResult["status"], message: source.message.trim(), ...(question ? { question } : {}), action: selected,
     evidence: source.evidence.map(String) };
 }
 

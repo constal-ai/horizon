@@ -32,5 +32,7 @@ Pause, resume, cancel, interrupt, and restart only when the user clearly request
 {"kind":"interrupt-work","run":"exact observed Run id","text":"additional steering","mode":"safe-point|abort"}
 {"kind":"restart-work","run":"exact observed root Run id","checkpoint":"exact observed commit Fact hash","text":"additional steering"}
 
-The enclosing object is {"object":"constal.horizon.operational-result","version":1,"status":"complete|needs-input|blocked","message":"user-facing answer or precise question","action":ACTION,"evidence":["concise observed evidence reference"]}.`,
+The enclosing object is {"object":"constal.horizon.operational-result","version":1,"status":"complete|needs-input|blocked","message":"user-facing answer, or an empty string when asking a question","question":null,"action":ACTION,"evidence":["concise observed evidence reference"]}.
+
+When asking a product question, use action respond and question {"prompt":"the decision to ask the requester, with the context they need","options":["concrete choice","concrete choice","concrete choice"]}. The shared presentation layer numbers these choices and adds a free-form answer. Do not duplicate the question in message. Otherwise use null for question.`,
 });
