@@ -9,6 +9,7 @@ Status: in progress. Do not treat the criteria below as passed until the linked 
 
 - Repository: `constal-ai/const-alpha` (private).
 - Starting commit: `2c653af`.
+- Baseline checks: typecheck and all 339 tests passed before Horizon changed the test bed.
 - Model: the existing Luna binding; no stronger-model substitution.
 - Issue: [Find documentation by short technical terms](https://github.com/constal-ai/const-alpha/issues/2).
 - Scope: the existing documentation-search implementation and its tests. Horizon must open a pull request, not merge or deploy the target repository.
