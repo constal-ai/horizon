@@ -12,6 +12,7 @@ Status: in progress. Do not treat the criteria below as passed until the linked 
 - Baseline checks: typecheck and all 339 tests passed before Horizon changed the test bed.
 - Model: the existing Luna binding; no stronger-model substitution.
 - Issue: [Find documentation by short technical terms](https://github.com/constal-ai/const-alpha/issues/2).
+- Second case: [Contributor guide without production credentials](https://github.com/constal-ai/const-alpha/issues/3), covering a documentation-only change and the shared conversational question renderer.
 - Scope: the existing documentation-search implementation and its tests. Horizon must open a pull request, not merge or deploy the target repository.
 
 The issue contains a real unresolved product choice: whether dotted initialisms should match their undotted forms. Activate it through a comment so the test also exercises preservation of the original issue body across the conversational-to-work handoff.
@@ -49,3 +50,11 @@ The first live clarification was [relevant to the product choice](https://github
 The [free-form answer](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5550848199) retained the constraints on other punctuation and on synonym dictionaries. The next conversational Run produced an implementation outline instead of handing off to the work agent. This is not accepted as successful planning: the conversational agent does not own the reviewed plan or its approval wait. The prompt's handoff semantics are being corrected to state positively that starting issue work begins investigation and plan review, not mutation.
 
 Pending: verified handoff, work-plan approval, implementation, independent checks, and pull request.
+
+### Handoff and platform recovery
+
+After clarifying the handoff semantics, source `60a5a3c` was deployed as `baadb326-ac41-414e-bc9d-df66e9ee9d79`. The [follow-up request](https://github.com/constal-ai/const-alpha/issues/2#issuecomment-5550889687) created work Run `8974df88-7ac0-456a-961f-30b06fd368ba` in `github-6c2d3ea2287574232a92a7c851bbe9399b2432dafd7f403e-work`.
+
+That Run exposed a transport regression before semantic planning: the Session router rejected compound DriverContext operations such as `state/get`. A routing regression test failed for all five state operations while twelve single-segment operations passed. Core commit `6c54315e` restores forwarding of the full operation path to the existing authenticated handler; 69 related tests passed. Platform version `6abba12a-4c16-4cff-8eb7-78311424282e` was deployed, and the same waiting Run recovered and began workspace preparation without being restarted.
+
+Separately, platform logs show repeated Billing receipt rejections. The deployed Billing worker predates main's itemized-debit protocol. Deploying those existing changes may process accumulated charges, so approval was requested separately; no billing enforcement was weakened.
