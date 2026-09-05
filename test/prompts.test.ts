@@ -36,6 +36,8 @@ describe("Horizon role prompts", () => {
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("top-level fields run, workflow, journal, lineage, and resourceInvocations");
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("status, result, and error are inside run");
     expect(HORIZON_OPERATIONAL_SYSTEM).toContain("do not repeat a completed page");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("Missing results in the initial snapshot do not mean the checks have not happened");
+    expect(HORIZON_OPERATIONAL_SYSTEM).toContain("respond without steering unless the requester actually changes the work");
   });
 
   it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,

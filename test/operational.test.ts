@@ -141,6 +141,41 @@ describe("Horizon behavior routing", () => {
         "budget", "limits", "task", "parent", "awaiting"] });
   });
 
+  it("keeps an on-demand test-progress report read-only while work continues", async () => {
+    const invoke = readFixture(); const invokeAsync = vi.fn(); let turns = 0;
+    const observed = { object: "constal.api.object", ref: runItem(), value: {
+      run: { runId: "run-1", status: "complete", resultRef: "executor-result" }, journal: { entries: [{ kind: "turn", pos: "root/8",
+        value: { message: { role: "assistant", content: JSON.stringify({ object: "constal.horizon.step-result",
+          version: 1, status: "complete", verification: ["npm test: 351 tests passed"] }) } } }] },
+    } };
+    const turn = vi.fn(async (input: { tools: string[]; context: unknown }) => {
+      turns++;
+      if (turns === 1) {
+        expect(input.tools).toContain("platform_get");
+        return { toolCalls: [{ id: "read-checks", pos: "root/1", name: "platform_get", version: "1",
+          status: "ok", maxEffect: "read-only", effectObserved: "read-only", args: { ref: runItem(), fields: ["run", "journal"] },
+          ref: "check-results", result: observed }], message: { role: "assistant", content: "" }, artifact: null };
+      }
+      expect(input.context).toMatchObject({ recentGovernedToolObservations: [[{
+        name: "platform_get", ref: "check-results", result: observed,
+      }]] });
+      return { toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+        object: "constal.horizon.operational-result", version: 1, status: "complete",
+        message: "The executor reports 351 tests passed. Independent verification is still running.",
+        action: { kind: "respond" }, evidence: ["check-results"],
+      } };
+    });
+    const commit = vi.fn(async () => ({ hash: "result" }));
+    const ctx = { invoke, invokeAsync, turn, commit, resources: { model: "model", github: "github", api: "api" },
+      run: { id: "front", namespace: "default" } } as unknown as Ctx;
+    const result = await runHorizonOperational(event("How are the tests looking? Keep working."), ctx);
+    expect(result).toMatchObject({ action: { kind: "respond" }, evidence: ["check-results"] });
+    expect(result.control).toBeUndefined();
+    expect(invoke.mock.calls.map(([, operation]) => operation)).not.toContain("plan");
+    expect(invokeAsync).not.toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ kind: "horizon.operational-result" }), { tier: "audit" });
+  });
+
   it("exposes prior failed attempts as exact queryable work history", async () => {
     const failed = { ...runItem("failed"), id: `horizon/${sessions.work}/failed-run`,
       fields: { ...runItem("failed").fields, id: "failed-run", parent_run: "root-run",
