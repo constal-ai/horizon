@@ -37,7 +37,6 @@ async function deploy() {
   const sourceManifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const current = await request(`/v1/namespaces/${encodeURIComponent(sourceManifest.namespace)}/resources/${encodeURIComponent(sourceManifest.kind)}/${encodeURIComponent(sourceManifest.id)}`)
     .then((value) => value?.data ?? null, (error) => error?.status === 404 ? null : Promise.reject(error));
-  if (current?.version === sourceManifest.version) return { deployment: current, existing: true };
   await writeFile(manifestPath, `${JSON.stringify(targetManifest(sourceManifest, current), null, 2)}\n`);
   execFileSync("tar", ["-czf", archivePath, "-C", projectPath, "."], { stdio: "pipe" });
   const archive = await readFile(archivePath); const archiveHash = createHash("sha256").update(archive).digest("hex");

@@ -53,7 +53,9 @@ describe("Horizon durable setup workflow", () => {
       },
       invoke: async (_resource: string, operation: string, args: unknown) => {
         if (operation === "plan") {
-          expect(args).toMatchObject({ operations: [{ operation: "channel.install", input: { configuration: {
+          expect(args).toMatchObject({ operations: [{ operation: "channel.install", input: {
+            scopedBindings: [{ key: "github-app", owner: { kind: "tenant" }, target: values.github && (values.github as { credential: unknown }).credential }],
+            configuration: {
             routes: { "github.issue.activated": "issue-work", "github.issue.comment": "operate" },
             mentions: ["@constalai", "@constal-ai"],
           } } }] });

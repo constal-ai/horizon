@@ -211,7 +211,7 @@ async function runHorizonSetupInternal(message: unknown, ctx: Ctx): Promise<Setu
       operations: [{ id: "install-channel", operation: "channel.install", input: {
         namespace: ctx.run.namespace, package: channelPackage, id: "horizon-github", configuration: channelConfiguration,
         target: { resourceKind: "agent", selector: { matchLabels: { "channels.constal.ai/horizon-github": "enabled" } } },
-        scopedBindings: [{ key: "github-user", subject: `github:${connection.installationId}`, target: connection.credential }],
+        scopedBindings: [{ key: "github-app", owner: { kind: "tenant" }, target: connection.credential }],
         ingressRoutes: [{ provider: "github", key: `installation:${connection.installationId}` }],
       } }],
     }, { dedupeKey: `horizon-setup-plan:${ctx.run.session}:${revision}` });

@@ -3,7 +3,7 @@
   "kind": "channel",
   "id": "horizon-github",
   "namespace": "default",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "entry": "src/github-channel/index.ts",
   "config": {
     "repositories": ["constal-ai/horizon", "constal-ai/const-alpha"],
@@ -30,7 +30,7 @@
     "resourceKind": "agent",
     "selector": { "matchLabels": { "channels.constal.ai/horizon-github": "enabled" } }
   },
-  "bindings": { "github": "crn:constal:production:platform:default:service/github" },
+  "bindings": { "github": "crn:constal:production:platform:default:service/github-app" },
   "policies": [],
   "expectedCurrentDeploymentRevision": null
 }

@@ -16,7 +16,7 @@ describe("Horizon GitHub Auth Provider", () => {
       provider: "crn:constal:production:tenant:default:auth-provider/horizon-github",
       requestId: "request", resources: { verifier: "verifier" }, invoke,
     } as unknown as AuthProviderContext);
-    expect(result).toEqual({ authenticated: true, subject: "github:123", expiresAt: null, claims: {
+    expect(result).toEqual({ authenticated: true, subject: "github:user:7", expiresAt: null, claims: {
       provider: "github", installation: "123", sender_id: "7", sender_login: "wlan0",
     } });
     expect(invoke).toHaveBeenCalledWith("verifier", "webhook.verify", {
@@ -25,5 +25,11 @@ describe("Horizon GitHub Auth Provider", () => {
     if (!result.authenticated) throw new Error("expected authenticated evidence");
     expect(result.expiresAt).toBeNull();
     expect(Object.keys(result.claims ?? {})).toEqual(expect.arrayContaining(["sender_id", "sender_login"]));
+  });
+  it("does not substitute the installer or installation when sender evidence is missing", async () => {
+    const context = { resources: { verifier: "verifier" }, invoke: async () => ({ verified: true, installation: "123" }) };
+    const result = await horizonGitHubAuth.authenticate({ request: { headers: {}, bodyBase64: "e30=" } } as never,
+      context as unknown as AuthProviderContext);
+    expect(result).toEqual({ authenticated: false });
   });
 });

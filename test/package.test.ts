@@ -72,7 +72,7 @@ describe("Horizon managed Agent package", () => {
       model: "crn:constal:production:platform:default:model/gpt-5.6-luna",
       sandbox: "crn:constal:production:platform:default:sandbox-pool/constal-code",
       cas: "crn:constal:production:platform:default:cas/constal",
-      github: "crn:constal:production:platform:default:service/github",
+      github: "crn:constal:production:platform:default:service/github-app",
       web: "crn:constal:production:platform:default:web/constal",
       search: "crn:constal:production:platform:default:service/constal-search",
       api: "crn:constal:production:platform:default:service/constal-api",
