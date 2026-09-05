@@ -41,11 +41,11 @@ export function applicationError(error: unknown): { name: string; message: strin
 export function applicationFailureSummary(stage: string, error: unknown): string {
   const detail = applicationError(error);
   if (detail.name === "GateExhausted" || detail.name === "CommitGateRejected") {
-    return `Horizon could not produce a valid ${stage} result after correction attempts.`;
+    return `I couldn't produce a valid ${stage} result after correction attempts.`;
   }
   if (detail.name === "PolicyDecisionFailed" || detail.name === "PolicyConstraintFailed"
     || detail.name === "EffectCeilingExceeded" || detail.name === "DirectNetworkDenied") {
-    return `Horizon does not have the authority required during ${stage}: ${detail.message}`;
+    return `I couldn't continue during ${stage}: ${detail.message}`;
   }
   if (detail.name === "ResourceDisabled" || detail.name === "ResourceUnbound"
     || detail.name === "ToolUnavailable" || detail.name === "CredentialUnavailable"
@@ -53,10 +53,10 @@ export function applicationFailureSummary(stage: string, error: unknown): string
     return `A required capability is unavailable during ${stage}: ${detail.message}`;
   }
   if (detail.name === "OutcomeUnknown" || detail.name === "DriverRecoveryFailed") {
-    return `Horizon stopped during ${stage} because an external effect could not be safely reconciled: ${detail.message}`;
+    return `I stopped during ${stage} because an external effect could not be safely reconciled: ${detail.message}`;
   }
   if (detail.name === "DurableHandoffTooLarge") {
-    return `Horizon stopped during ${stage} because the durable handoff exceeds the bound CAS contract.`;
+    return `I couldn't pass the task data to the next specialist during ${stage}: it exceeds the storage interface's supported size.`;
   }
-  return `Horizon stopped during ${stage}: ${detail.message}`;
+  return `I stopped during ${stage}: ${detail.message}`;
 }

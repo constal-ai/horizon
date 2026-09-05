@@ -81,10 +81,13 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequ
     });
     let decision = parseApprovalDecision(response, planFact);
     const event = decision ? null : horizonRoutedEvent(response);
-    if (!decision && event) decision = await ctx.spawn(approvalInterpreter, { plan, planFact, event }, {
-      retries: 1, dedupe: "specHash", budget: { turns: 8, microUsd: 1_000_000, wallMs: 600_000 },
-      attenuation: { bindings: ["model"], tools: [] },
-    });
+    if (!decision && event) {
+      const input = await storeArtifact(ctx, { plan, planFact, event });
+      decision = await ctx.spawn(approvalInterpreter, input, {
+        retries: 1, dedupe: "specHash", budget: { turns: 8, microUsd: 1_000_000, wallMs: 600_000 },
+        attenuation: attenuation([], ctx),
+      });
+    }
     if (!decision) throw new TypeError("Horizon plan approval response is invalid or stale");
     if (decision.decision === "approve" && event) {
       const authorization = await approvalAuthorized(event, ctx);
@@ -330,13 +333,10 @@ async function planRevision(input: HzPlanInput, ctx: Ctx): Promise<{
 }> {
   const tools = availableTools(PLANNER_TOOL_NAMES, ctx);
   const planningInput = await storeArtifact(ctx, { ...input, tools });
-  const baseAttenuation = attenuation(tools, ctx);
-  const plannerAttenuation = { ...baseAttenuation,
-    bindings: [...new Set([...baseAttenuation.bindings, "cas"])].sort() };
   const result = await ctx.spawn(planner, planningInput, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_EXECUTION_LOOP_TURNS,
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
-    attenuation: plannerAttenuation,
+    attenuation: attenuation(tools, ctx),
   });
   const planningState = await storeArtifact(ctx, result.state);
   const fact = await ctx.commit({ kind: "horizon.plan", plan: result.plan, planningState,
@@ -351,8 +351,9 @@ async function discover(request: HzRequest, workspace: PreparedWorkspace, ctx: C
   specialistRuns: number;
 }> {
   const discoveryTools = availableTools(DISCOVERY_TOOL_NAMES, ctx);
-  const framed = await ctx.spawn(discoveryFramer, { request, workspaceRoot: workspace.receipt.root,
-    workspaceReceipt: workspace.receiptRef, tools: discoveryTools }, {
+  const discoveryInput = await storeArtifact(ctx, { request, workspaceRoot: workspace.receipt.root,
+    workspaceReceipt: workspace.receiptRef, tools: discoveryTools });
+  const framed = await ctx.spawn(discoveryFramer, discoveryInput, {
     retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
       microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
     attenuation: attenuation(discoveryTools, ctx),

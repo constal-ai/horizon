@@ -233,8 +233,10 @@ describe("Horizon workflow", () => {
     });
   });
 
-  it("commits an immutable plan, delegates one work unit, reconciles, and packages the result", async () => {
+  it.each([{ name: "small", discussion: null }, { name: "large", discussion: "Full original discussion. ".repeat(5_000) }])(
+    "uses artifact-backed handoffs from discovery through packaging with $name context", async ({ discussion }) => {
     const committed: unknown[] = []; let sequence = 0;
+    const inputs: unknown[] = [];
     const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
@@ -243,8 +245,10 @@ describe("Horizon workflow", () => {
         committed.push(artifact); sequence++;
         return { hash: `fact-${sequence}`, artifact, artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
-      invoke: casRuntime(),
-      spawn: (task: { id: string }) => {
+      invoke: casRuntime((value) => inputs.push(value)),
+      spawn: (task: { id: string }, input: { ref: string }) => {
+        expect(Object.keys(input)).toEqual(["ref"]);
+        expect(typeof input.ref).toBe("string");
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") return handle({ plan, state: planningState(plan), toolEvidence: [], planningRuns: 7 });
@@ -261,10 +265,11 @@ describe("Horizon workflow", () => {
         outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
     } as unknown as Ctx;
 
-    const result = await runHorizon({ objective: plan.objective }, ctx);
+    const result = await runHorizon({ objective: plan.objective, context: { discussion } }, ctx);
     expect(result.status).toBe("complete");
     expect(result.artifact?.ref).toBe("artifact-ref");
     expect(result.longHorizon).toMatchObject({ durablePlan: true, specialistRuns: 12, replans: 0 });
+    expect(inputs[0]).toMatchObject({ request: { context: { discussion } }, workspaceRoot: "/workspace/repo" });
     expect((committed as Array<{ kind?: string }>).map(({ kind }) => kind)).toEqual([
       "horizon.request", "horizon.discovery-plan", "horizon.investigation", "horizon.plan", "horizon.step-result",
       "horizon.verification", "horizon.execution-attempt", "horizon.milestone", "horizon.progress",

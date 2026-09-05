@@ -20,8 +20,11 @@ describe("Horizon runtime control boundaries", () => {
 
   it("turns known application failures into user-facing recovery explanations", () => {
     expect(applicationFailureSummary("planning", Object.assign(new Error("turn gate exhausted"), { name: "GateExhausted" })))
-      .toBe("Horizon could not produce a valid planning result after correction attempts.");
+      .toBe("I couldn't produce a valid planning result after correction attempts.");
     expect(applicationFailureSummary("publication", Object.assign(new Error("effect outcome is unknown"), { name: "OutcomeUnknown" })))
       .toContain("could not be safely reconciled");
+    expect(applicationFailureSummary("discovery", Object.assign(
+      new Error("spawn input exceeds the inline value limit"), { name: "PolicyDecisionFailed" })))
+      .toBe("I couldn't continue during discovery: spawn input exceeds the inline value limit");
   });
 });

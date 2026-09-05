@@ -23,7 +23,7 @@ describe("Horizon Tool capability projection", () => {
     const resources = { model: "model", sandbox: "sandbox", cas: "cas", web: "web" } as never;
     expect(availableTools(["workspace_read", "web_fetch", "web_search", "github_file"], { resources }))
       .toEqual(["workspace_read", "web_fetch"]);
-    expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["model", "sandbox", "web"]);
+    expect(bindingsForTools(["workspace_read", "web_fetch"], { resources })).toEqual(["cas", "model", "sandbox", "web"]);
   });
 
   it("advertises only arguments supported by the bound platform Search provider", () => {

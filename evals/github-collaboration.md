@@ -141,3 +141,9 @@ Platform version `f9f820b8-6afb-489b-ae62-385ef82ac2aa` and builder version `7de
 - Issue #4's [reviewed proposal](https://github.com/constal-ai/const-alpha/issues/4#issuecomment-5554410497) uses a readable proposal with expandable implementation details and incorporates the requested unfinished-specialist behavior. It received [approval](https://github.com/constal-ai/const-alpha/issues/4#issuecomment-5554420813). Executor `dbd1b43e-bef9-8d3e-bf1d-5d928d48956c` completed the guide work unit; independent verification is still in progress. This case remains pinned to `eadd0472` and was not restarted while it was making progress.
 
 No PR or full acceptance result is claimed yet.
+
+### Large discussion handoff
+
+Replacement root `597bab49-e68b-4681-bee4-a45e846f5e4f` exposed a separate agent defect before discovery: the full issue discussion exceeded the inline spawn-input limit. Discovery, source selection, and approval interpretation were the remaining direct-input handoffs; the other specialists already used `ArtifactEnvelope`. The correction brings all three onto that existing CAS path and retains CAS independently of offered Tools. No discussion text is truncated and no runtime limit is raised. Tests run the complete workflow with a large original discussion and decode large inputs at each of the three changed specialist entrypoints.
+
+The failure formatter also no longer equates every `PolicyDecisionFailed` with absent user authority: this failure was a payload contract error. Typecheck and all 198 Horizon tests pass. The other replacement root (`bf605cda-a948-4dc7-84d1-952e9f33047f`) continues planning, and issue #4 remains in independent verification after its first completed work unit.

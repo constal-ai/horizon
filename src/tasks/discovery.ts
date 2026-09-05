@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { subtask } from "@constal/sdk";
+import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzDiscoveryPlan, type HzDiscoveryInput, type HzDiscoveryResult } from "../contracts.js";
 import { DISCOVERY_SYSTEM } from "../prompts/discovery.js";
 import { runReactLoop } from "../react-loop.js";
@@ -9,8 +10,9 @@ import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 
 export const discoveryFramer = subtask<HzDiscoveryResult>({
   id: "horizon-discovery-framer",
-  version: "3",
-  async run(input: HzDiscoveryInput, ctx) {
+  version: "4",
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<HzDiscoveryInput>(ctx, envelope);
     const conversation = await runReactLoop({
       role: "discovery-framer", system: DISCOVERY_SYSTEM,
       objective: "Establish the repository and frame focused software investigations.",

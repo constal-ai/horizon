@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { subtask } from "@constal/sdk";
+import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import { parseHzSourceResolution, type HzSourceResolverInput, type HzSourceResolverResult } from "../contracts.js";
 import { HORIZON_STANDARD_LOOP_TURNS } from "../limits.js";
 import { SOURCE_RESOLVER_SYSTEM } from "../prompts/source.js";
@@ -9,8 +10,9 @@ import { runReactLoop } from "../react-loop.js";
 
 export const sourceResolver = subtask<HzSourceResolverResult>({
   id: "horizon-source-resolver",
-  version: "1",
-  async run(input: HzSourceResolverInput, ctx) {
+  version: "2",
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<HzSourceResolverInput>(ctx, envelope);
     const conversation = await runReactLoop({
       role: "source-resolver", system: SOURCE_RESOLVER_SYSTEM,
       objective: "Resolve one authenticated repository and revision for this mission.",

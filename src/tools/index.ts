@@ -72,7 +72,8 @@ export function availableTools(names: readonly string[], ctx: Pick<Ctx, "resourc
 }
 
 export function bindingsForTools(names: readonly string[], ctx: Pick<Ctx, "resources">): string[] {
-  const bindings = new Set<string>(["model"]);
+  // Every specialist reads its input from CAS, independently of its offered Tools.
+  const bindings = new Set<string>(["cas", "model"]);
   for (const name of names) for (const binding of requiredBindings(TOOLS[name]!)) {
     if (typeof ctx.resources[binding] === "string") bindings.add(binding);
   }

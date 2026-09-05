@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { subtask } from "@constal/sdk";
+import { loadArtifact, type ArtifactEnvelope } from "../artifacts.js";
 import type { HorizonPlanDecision } from "../workflow.js";
 import type { HzPlan } from "../contracts.js";
 import type { HorizonRoutedEvent } from "../behaviors.js";
@@ -25,8 +26,9 @@ export function parseApprovalDecision(value: unknown, planFact: string): Horizon
 }
 
 export const approvalInterpreter = subtask<HorizonPlanDecision>({
-  id: "horizon-approval-interpreter", version: "1",
-  async run(input: HorizonApprovalInput, ctx) {
+  id: "horizon-approval-interpreter", version: "2",
+  async run(envelope: ArtifactEnvelope, ctx) {
+    const input = await loadArtifact<HorizonApprovalInput>(ctx, envelope);
     const result = await ctx.turn({ system: HORIZON_APPROVAL_SYSTEM,
       objective: "Interpret the authenticated comment against the exact plan revision.",
       context: { plan: input.plan, planFact: input.planFact, event: input.event }, tools: [],

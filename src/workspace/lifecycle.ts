@@ -122,7 +122,8 @@ async function resolveRequestedSource(request: HzRequest, ctx: Ctx): Promise<HzS
   }
   let answer: string | null = null;
   for (let attempt = 1; ; attempt++) {
-    const resolved = await ctx.spawn(sourceResolver, { request, answer, tools }, {
+    const input = await storeArtifact(ctx, { request, answer, tools });
+    const resolved = await ctx.spawn(sourceResolver, input, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS }, attenuation: attenuation(tools, ctx),
     });

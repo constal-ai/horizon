@@ -18,7 +18,7 @@ type RepairOwner = Exclude<HzCritiqueOwner, "user">;
 const REPAIR_ORDER: readonly RepairOwner[] = ["investigation", "rubric", "design", "decomposition", "assertions", "continuity"];
 
 function attenuation(tools: readonly string[], ctx: Pick<Ctx, "resources">): SpawnAttenuation {
-  return { bindings: [...new Set([...bindingsForTools(tools, ctx), "cas"])].sort(), tools: [...tools].sort() };
+  return { bindings: bindingsForTools(tools, ctx), tools: [...tools].sort() };
 }
 
 function planningFingerprint(rubric: HzRubric, design: HzDesign, workPlan: HzWorkPlan,

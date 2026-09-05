@@ -161,6 +161,8 @@ The outer workflow owns plan review, approval, independent verification, workspa
 
 The recorded review decision and its original reply travel with the work context into execution, verification, and reconciliation. Specialists therefore see the current approval record, not only the initial issue snapshot that asked for a plan. Later steering preserves that review evidence while any changed plan still goes through its own required review.
 
+Every specialist handoff—including source selection, discovery, and review interpretation—uses the same content-addressed artifact envelope. The complete request remains available without being copied into the runtime's inline spawn input. CAS is retained by the task independently of the model-facing Tools it is allowed to use.
+
 The GitHub integration deliberately separates transport from engineering behavior:
 
 - the **Auth Provider** verifies webhook authenticity;
