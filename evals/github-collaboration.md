@@ -76,3 +76,9 @@ The authoritative input of issue #2's work Run was checked through the conversat
 - The Billing worker's latest deployment is `f8e8f495-3ba4-4ffd-84e6-58b913305ec8` from 2026-09-04, before main's itemized-debit change `1578ac84`. The old debit validator requires `amountMicroUsd`; the current platform submits canonical meter `lines`. Current Billing typecheck and all 45 Billing tests pass. Deployment approval was requested because aligning the service may process accumulated usage charges.
 
 The end-to-end result remains unproven. Keep the existing Runs; do not mark the evaluation passed or replace them just because observation is slow.
+
+### Follow-up review while waiting
+
+The completed `docs-search-tokenization` investigation (`c763e0bc-4560-8bce-8cea-98084f6d49f2`, result artifact `71360920c70d4311298c47f7b2183703cd100cd03aa294fd646c3ebfd7729ac9`) found the real filter and normalization requirements. It also suggested treating the example acronyms as a possible whitelist. Review the eventual plan for this overfitting: the issue says “such as” and rejects an acronym dictionary, not general support for other meaningful short technical terms. No work-plan approval has been given.
+
+Source `0b3c583` restores the API's existing basic-Run projection for supervision metadata. The earlier change to request full traces for status was unnecessary; the API explicitly supports basic fields without trace authority. All 172 Horizon tests passed after restoring it.
