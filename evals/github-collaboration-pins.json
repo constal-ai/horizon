@@ -1,9 +1,9 @@
 {
   "status": "in-progress",
   "candidate": {
-    "source": "5ea98af",
-    "deploymentRevision": "d00981f5-804c-48c2-8613-25e322ce2552",
-    "codeDigest": "e91e561da0db5c7ea9df4cc3e479765a50091baa36388e1a1cedff90ab32ff6f",
+    "source": "b4afc3d",
+    "deploymentRevision": "301925ba-24a1-4f95-99e3-c7d4f2905c39",
+    "codeDigest": "9dc2f11e4c48310092f3aaf0fd0e7746b77774ff3bf168f4d76f2286d4c8308c",
     "runtimeCoreCommit": "63825f1d",
     "builderImage": "sha256:baa1f16d74a3f5384bcda49f196c06696d8701d812a33067f37803bd2c48383e",
     "model": "openai/gpt-5.6-luna"
