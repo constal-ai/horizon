@@ -420,6 +420,8 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   const completedEvidence = (): HzExecutionAttempt[] => completed.flatMap(({ stepId }) => {
     const stored = successfulAttempts.get(stepId); return stored ? [stored.attempt] : [];
   });
+  const latestExecutionEvidence = (): HzExecutionAttempt | null => [...latestAttempts.values()]
+    .find(({ attempt }) => attempt.ordinal === attemptOrdinal)?.attempt ?? null;
   const steering: SteerEvent[] = [];
   const collectSteering = async (): Promise<SteerEvent[]> => {
     const fresh = await pendingSteering(ctx, steering.at(-1)?.seq ?? 0);
@@ -442,7 +444,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
       investigations: discovery.investigations, workspaceReceipt: workspace.receiptRef,
       revision: 1, previousPlan: null, previousState: null,
-      completed, completedEvidence: [], restartAt: null, executionEvidence: null, replanBrief: null, answer, tools: [] }, ctx);
+      completed, completedEvidence: [], restartAt: null, executionEvidence: latestExecutionEvidence(), replanBrief: null, answer, tools: [] }, ctx);
   } catch (error) {
     return unplannedBlockedResult(await recordApplicationFailure(ctx, activeStage, error), workspace, specialistRuns);
   }
@@ -491,7 +493,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
       investigations: discovery.investigations, workspaceReceipt: workspace.receiptRef,
       revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state,
-      completed, completedEvidence: completedEvidence(), restartAt: "rubric", executionEvidence: null,
+      completed, completedEvidence: completedEvidence(), restartAt: "rubric", executionEvidence: latestExecutionEvidence(),
       replanBrief: "Reconcile the latest user guidance in request.context.steering with the existing plan and verified work.",
       answer: null, tools: [] }, ctx);
     await adoptRevision(previous, next, "keep-current", "Apply new user guidance before continuing the work.");
@@ -518,7 +520,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
         previousPlan: previous.plan, previousState: previous.state, completed,
         completedEvidence: completedEvidence(),
-        restartAt: "rubric", executionEvidence: null,
+        restartAt: "rubric", executionEvidence: latestExecutionEvidence(),
         replanBrief: "Reconcile the user answer with the prior immutable plan.", answer, tools: [] }, ctx);
       await adoptRevision(previous, next, "keep-current", "Reconcile the user answer with the prior immutable plan.");
       continue;
@@ -589,7 +591,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
           workspaceReceipt: workspace.receiptRef, revision: previous.plan.revision + 1,
           previousPlan: previous.plan, previousState: previous.state, completed,
           completedEvidence: completedEvidence(),
-          restartAt: "rubric", executionEvidence: null,
+          restartAt: "rubric", executionEvidence: latestExecutionEvidence(),
           replanBrief: "Revise the plan according to the authorized review guidance before any further repository mutation.",
           answer: approval.guidance, tools: [] }, ctx);
         await adoptRevision(previous, next, "keep-current",
@@ -629,9 +631,11 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     }
     activeStage = "independent verification";
     const verifierTools = availableTools(VERIFIER_TOOL_NAMES, ctx);
+    const executionToolEvidence = reused?.attempt.executionToolEvidence ?? summarizeToolEvidence(executed.toolEvidence);
     const verifierInput = await storeArtifact(ctx, { request, plan: current.plan, planFact: current.fact, step,
       execution: executed.result, stepFact: stepFactHash,
-      executionToolEvidence: summarizeToolEvidence(executed.toolEvidence), tools: verifierTools });
+      executionToolEvidence, previousAttempt: latestAttempts.get(step.id)?.attempt ?? null,
+      executionReused: !!reused, workspaceBefore, tools: verifierTools });
     const verified = await ctx.spawn(verifier, verifierInput, {
       retries: 1, dedupe: "specHash", budget: { turns: HORIZON_STANDARD_LOOP_TURNS,
         microUsd: HORIZON_LOOP_MICRO_USD, wallMs: HORIZON_LOOP_WALL_MS },
@@ -647,7 +651,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       stepId: step.id, executionReused: !!reused, previousAttemptRef: latestAttempts.get(step.id)?.ref ?? null,
       restorePoint, workspaceBefore, workspaceAfter, stepFact: stepFactHash,
       verificationFact: verificationFact.hash, execution: executed.result,
-      executionToolEvidence: summarizeToolEvidence(executed.toolEvidence), verification: verified.verification,
+      executionToolEvidence, verification: verified.verification,
       verificationToolEvidence: summarizeToolEvidence(verified.toolEvidence) }, ctx);
     latestAttempts.set(step.id, storedAttempt);
     if (executed.result.status === "complete" && verified.verification.verdict === "passed") {
@@ -672,7 +676,7 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
       }
     }
     const resultDigest = await attemptProgressDigest({ execution: executed.result,
-      executionTools: executed.toolEvidence, verification: verified.verification,
+      executionTools: executionToolEvidence, verification: verified.verification,
       verificationTools: verified.toolEvidence, workspaceBefore, workspaceAfter });
     resultDigests = [...new Set([...resultDigests, resultDigest])];
     completed = updateCompleted(completed, executed.result, verified.verification.verdict === "passed");

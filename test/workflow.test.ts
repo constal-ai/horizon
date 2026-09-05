@@ -328,15 +328,16 @@ describe("Horizon workflow", () => {
     await expect(runHorizon(plan.objective, ctx)).rejects.toBe(control);
   });
 
-  it("repairs the same step forward with the complete prior attempt and no plan revision", async () => {
+  it.each([false, true])("preserves the complete prior attempt during forward repair (new guidance: %s)", async (steered) => {
     const committed: Array<{ kind?: string }> = []; const executorInputs: Array<Record<string, unknown>> = [];
-    let sequence = 0; let executorRuns = 0; let reconcilerRuns = 0;
+    const planningInputs: Array<Record<string, unknown>> = []; const guidance: SteerEvent[] = [];
+    let sequence = 0; let executorRuns = 0; let reconcilerRuns = 0; let planningRuns = 0;
     const failed: HzStepResult = { ...stepResult, status: "failed", summary: "The focused check failed.",
       verification: ["test failed"], observations: ["The existing partial edit is useful."] };
     const failedProof = { ...verification, verdict: "failed" as const, summary: "The behavior is incomplete.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "test failed" }],
       failureBrief: "Continue the partial implementation." };
-    const ctx = { ledger: { view: async () => [] },
+    const ctx = { ledger: { view: async () => guidance.slice() },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -345,14 +346,18 @@ describe("Horizon workflow", () => {
           artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
       invoke: casRuntime((stored) => {
-        if (stored && typeof stored === "object" && !Array.isArray(stored) && "previousAttempt" in stored) {
+        if (stored && typeof stored === "object" && "restartAt" in stored) planningInputs.push(stored as Record<string, unknown>);
+        if (stored && typeof stored === "object" && !Array.isArray(stored) && "previousAttempt" in stored && "completed" in stored) {
           executorInputs.push(stored as Record<string, unknown>);
         }
       }),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
-        if (task.id === "horizon-planner") return handle({ plan, state: planningState(plan), toolEvidence: [], planningRuns: 7 });
+        if (task.id === "horizon-planner") {
+          const selected = { ...plan, revision: ++planningRuns };
+          return handle({ plan: selected, state: planningState(selected), toolEvidence: [], planningRuns: 7 });
+        }
         if (task.id === "horizon-executor") {
           executorRuns++;
           return handle({ result: executorRuns === 1 ? failed : stepResult, toolEvidence: [] });
@@ -360,6 +365,9 @@ describe("Horizon workflow", () => {
         if (task.id === "horizon-verifier") return handle({ verification: executorRuns === 1 ? failedProof : verification, toolEvidence: [] });
         if (task.id === "horizon-reconciler") {
           reconcilerRuns++;
+          if (steered && reconcilerRuns === 1) guidance.push({ kind: "steer", seq: 1, hash: "steering", prev: null, at: 1,
+            tenant: "tenant", ledger: "main", branch: "main", eventId: "follow-up", run: "run", ref: null,
+            actor: { kind: "operator", id: "reviewer" }, payload: { text: "Preserve the current implementation while correcting its checks." } });
           return handle({ reconciliation: reconcilerRuns === 1 ? {
             object: "constal.horizon.reconciliation", version: 2, action: "repair-step",
             summary: "Continue the useful partial implementation.", remainingUnknowns: [], planningOwner: null,
@@ -377,17 +385,24 @@ describe("Horizon workflow", () => {
     const result = await runHorizon(plan.objective, ctx);
 
     expect(result.status).toBe("complete");
-    expect(result.longHorizon.replans).toBe(0);
+    expect(result.longHorizon.replans).toBe(steered ? 1 : 0);
     expect(executorInputs).toHaveLength(2);
     expect(executorInputs[0]?.previousAttempt).toBeNull();
     expect(executorInputs[1]?.previousAttempt).toMatchObject({ execution: { status: "failed" },
       verification: { verdict: "failed" }, workspaceBefore: workspaceState, workspaceAfter: workspaceState });
     expect(committed.filter(({ kind }) => kind === "horizon.execution-attempt")).toHaveLength(2);
+    if (steered) expect(planningInputs[1]).toMatchObject({ executionEvidence: {
+      execution: failed, verification: failedProof, workspaceBefore: workspaceState, workspaceAfter: workspaceState,
+    } });
   });
 
   it("reverifies a completed implementation without running the executor twice", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0; let executorRuns = 0;
     let verifierRuns = 0; let reconcilerRuns = 0;
+    const stored: Array<Record<string, unknown>> = [];
+    const executionEvidence = [{ name: "workspace_exec", status: "ok" as const, args: { cmd: "npm", args: ["test"] },
+      ref: "execution-result", result: { exitCode: 0 } }];
+    const executionReceipts = [{ name: "workspace_exec", status: "ok", ref: "execution-result" }];
     const inconclusive = { ...verification, verdict: "failed" as const, summary: "The proof command was inconclusive.",
       checks: [{ target: "focused behavior", outcome: "not-run" as const, evidence: "temporary test runner failure" }],
       failureBrief: "Repeat independent verification without changing implementation." };
@@ -399,13 +414,21 @@ describe("Horizon workflow", () => {
         committed.push(artifact); return { hash: `fact-${++sequence}`, artifact,
           artifactHash: `artifact-${sequence}` } as unknown as Fact<unknown>;
       },
-      invoke: casRuntime(),
+      invoke: casRuntime((value) => stored.push(value as Record<string, unknown>)),
       spawn: (task: { id: string }) => {
         if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
         if (task.id === "horizon-investigator") return handle({ investigation, toolEvidence: [] });
         if (task.id === "horizon-planner") return handle({ plan, state: planningState(plan), toolEvidence: [], planningRuns: 7 });
-        if (task.id === "horizon-executor") { executorRuns++; return handle({ result: stepResult, toolEvidence: [] }); }
-        if (task.id === "horizon-verifier") { verifierRuns++; return handle({ verification: verifierRuns === 1 ? inconclusive : verification, toolEvidence: [] }); }
+        if (task.id === "horizon-executor") { executorRuns++; return handle({ result: stepResult, toolEvidence: executionEvidence }); }
+        if (task.id === "horizon-verifier") {
+          verifierRuns++;
+          expect(stored.at(-1)).toMatchObject({ executionToolEvidence: executionReceipts,
+            executionReused: verifierRuns > 1, workspaceBefore: workspaceState });
+          if (verifierRuns === 1) expect(stored.at(-1)?.previousAttempt).toBeNull();
+          else expect(stored.at(-1)?.previousAttempt).toMatchObject({ execution: stepResult,
+            verification: inconclusive, executionToolEvidence: executionReceipts, workspaceAfter: workspaceState });
+          return handle({ verification: verifierRuns === 1 ? inconclusive : verification, toolEvidence: [] });
+        }
         if (task.id === "horizon-reconciler") {
           reconcilerRuns++;
           return handle({ reconciliation: reconcilerRuns === 1 ? {
@@ -428,6 +451,9 @@ describe("Horizon workflow", () => {
     expect(executorRuns).toBe(1);
     expect(verifierRuns).toBe(2);
     expect(committed.map(({ kind }) => kind)).toContain("horizon.execution-reused");
+    const attempts = stored.filter((value) => value.object === "constal.horizon.execution-attempt");
+    expect(attempts).toHaveLength(2);
+    for (const attempt of attempts) expect(attempt.executionToolEvidence).toEqual(executionReceipts);
   });
 
   it("restores the latest verified workspace only when reconciliation explicitly selects it", async () => {

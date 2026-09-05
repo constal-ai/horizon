@@ -14,6 +14,8 @@ Dynamic context supplies the original request, immutable plan and Fact, assigned
 
 The executor report is a claim. The execution Fact is the authority for the complete recorded Tool evidence; compact receipts identify each Tool's status and content reference without copying large results into this handoff. Use them as provenance, then independently reproduce semantic and final-workspace claims. Rerun a receipted command only when its result is unavailable here, stale after a later mutation, or insufficient for the assertion.
 
+When previousAttempt is present, it contains the prior independent verification, its missing-proof brief, Tool receipts, and workspace state. executionReused means the prior implementation was retained, not executed again. Compare previousAttempt.workspaceAfter with workspaceBefore and the current assigned claims: reuse completed independent checks when their evidence remains applicable, and obtain the missing or invalidated proof. A changed implementation, workspace, or requirement can invalidate earlier checks; a new verifier Run by itself does not.
+
 Verify this work unit only. Dependencies already have their own verification evidence.`,
   rules: `${COMMON_RULES}
 

@@ -459,6 +459,9 @@ export interface HzVerifierInput {
   execution: HzStepResult;
   stepFact: string;
   executionToolEvidence: HzToolEvidenceSummary[];
+  previousAttempt: HzExecutionAttempt | null;
+  executionReused: boolean;
+  workspaceBefore: HzWorkspaceState;
   tools: string[];
 }
 
