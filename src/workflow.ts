@@ -1,7 +1,8 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { canonicalJson, hashValue, type Ctx, type Handle, type SpawnAttenuation } from "@constal/sdk";
+import { canonicalJson, hashValue, type Ctx, type Handle, type SpawnAttenuation, type SteerEvent } from "@constal/sdk";
+import { pendingSteering, requestWithSteering } from "./views/steering.js";
 import { invokeGitHub } from "@constal-ai/github";
 import { storeArtifact } from "./artifacts.js";
 import { parseHzRequest, type HzDecisionQuestion, type HzDiscoveryPlan, type HzExecutionAttempt, type HzInvestigatorOutput,
@@ -416,14 +417,26 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
   const completedEvidence = (): HzExecutionAttempt[] => completed.flatMap(({ stepId }) => {
     const stored = successfulAttempts.get(stepId); return stored ? [stored.attempt] : [];
   });
+  const originalRequest = request;
+  const steering: SteerEvent[] = [];
+  const collectSteering = async (): Promise<SteerEvent[]> => {
+    const fresh = await pendingSteering(ctx, steering.at(-1)?.seq ?? 0);
+    if (fresh.length > 0) {
+      steering.push(...fresh);
+      request = requestWithSteering(originalRequest, steering.slice());
+    }
+    return fresh;
+  };
 
   let discovery: Awaited<ReturnType<typeof discover>>;
   let current: Awaited<ReturnType<typeof planRevision>>;
   try {
     activeStage = "repository discovery";
+    await collectSteering();
     discovery = await discover(request, workspace, ctx);
     specialistRuns += discovery.specialistRuns;
     activeStage = "initial planning";
+    await collectSteering();
     current = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
       investigations: discovery.investigations, workspaceReceipt: workspace.receiptRef,
       revision: 1, previousPlan: null, previousState: null,
@@ -468,7 +481,25 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
     specialistRuns += current.planningRuns; replans++; approvedPlanFact = null;
   };
 
+  const reconcileSteering = async (): Promise<boolean> => {
+    const fresh = await collectSteering();
+    if (fresh.length === 0) return false;
+    activeStage = "reviewing new guidance";
+    const previous = current;
+    const next = await planRevision({ request, discoveryPlan: discovery.discoveryPlan,
+      investigations: discovery.investigations, workspaceReceipt: workspace.receiptRef,
+      revision: previous.plan.revision + 1, previousPlan: previous.plan, previousState: previous.state,
+      completed, completedEvidence: completedEvidence(), restartAt: "rubric", executionEvidence: null,
+      replanBrief: "Reconcile the latest user guidance in request.context.steering with the existing plan and verified work.",
+      answer: null, tools: [] }, ctx);
+    await adoptRevision(previous, next, "keep-current", "Apply new user guidance before continuing the work.");
+    return true;
+  };
+
   try { for (;;) {
+    // A child may finish after newer guidance arrived. Reconcile at the work
+    // boundary, retaining its evidence but never treating its old plan as current.
+    if (await reconcileSteering()) continue;
     if (current.plan.status === "needs-input") {
       activeStage = "planning question";
       activeStage = "planning question reconciliation";
@@ -561,6 +592,9 @@ export async function runHorizon(message: unknown, ctx: Ctx, options: HorizonExe
         continue;
       }
       approvedPlanFact = current.fact;
+      // Guidance received while awaiting approval cannot be skipped by approval
+      // of the prior revision. adoptRevision clears that revision's approval.
+      if (await reconcileSteering()) continue;
     }
 
     activeStage = reverifyEntry ? "workspace reverification" : "execution preparation";

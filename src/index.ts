@@ -8,6 +8,7 @@ import { assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgen
 import { sourceResolver } from "./tasks/source.js";
 import { TOOLS } from "./tools/index.js";
 import { horizonProgress } from "./views/progress.js";
+import { horizonSteering } from "./views/steering.js";
 import { runHorizon } from "./workflow.js";
 import { horizonRoutedEvent, HORIZON_BEHAVIOR_CATALOG } from "./behaviors.js";
 import { runHorizonOperational } from "./operational.js";
@@ -64,7 +65,7 @@ export default agent({
   model: "model",
   mode: "script",
   tools: TOOLS,
-  views: [horizonProgress],
+  views: [horizonProgress, horizonSteering],
   subtasks: [sourceResolver, discoveryFramer, investigator, planner, rubricAgent, designAgent, decompositionAgent,
     workPlanRepairAgent, assertionAgent, assertionPlanRepairAgent, continuityAgent, critiqueAgent, planFinalizer,
     executor, verifier, reconciler, questionReconciler, approvalInterpreter],

@@ -13,8 +13,15 @@ import { ASSERTION_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM, CONTINUITY_SYSTEM, CRIT
 import { LOOP_CHECKPOINT_SYSTEM } from "../src/react-loop.js";
 import { QUESTION_RECONCILIATION_SYSTEM } from "../src/prompts/question-reconciliation.js";
 import { HORIZON_OPERATIONAL_SYSTEM } from "../src/prompts/operational.js";
+import { WORKFLOW_CONTEXT } from "../src/prompts/compose.js";
 
 describe("Horizon role prompts", () => {
+  it.each([RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, WORK_PLAN_REPAIR_SYSTEM, ASSERTION_SYSTEM,
+    ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM])(
+    "shares the actual approval and publication ownership with every planning role", (prompt) => {
+      expect(prompt).toContain(WORKFLOW_CONTEXT);
+      expect(prompt.indexOf(WORKFLOW_CONTEXT)).toBeGreaterThan(prompt.indexOf("# Context"));
+    });
   it.each([SOURCE_RESOLVER_SYSTEM, DISCOVERY_SYSTEM, INVESTIGATOR_SYSTEM, RUBRIC_SYSTEM, DESIGN_SYSTEM, DECOMPOSITION_SYSTEM, ASSERTION_SYSTEM,
     WORK_PLAN_REPAIR_SYSTEM, ASSERTION_PLAN_REPAIR_SYSTEM, CONTINUITY_SYSTEM, CRITIQUE_SYSTEM, PLANNER_SYSTEM, EXECUTOR_SYSTEM,
     VERIFIER_SYSTEM, RECONCILER_SYSTEM, QUESTION_RECONCILIATION_SYSTEM, HORIZON_OPERATIONAL_SYSTEM,

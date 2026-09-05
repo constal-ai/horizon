@@ -155,6 +155,10 @@ Horizon includes a GitHub Channel and Auth Provider. Once they are installed for
 
 Questions and steering do not wait behind the long-running work. Each GitHub conversation event gets a short foreground Session that reads the issue and the authoritative state of the stable work Session, then either answers directly or applies a reviewed control to the work. A failed state read remains unavailable; it is never mistaken for “nothing is running.”
 
+Answers, plan revisions, and steering share one guidance action. Horizon routes the original message to the open work question when there is one, otherwise to the existing Run steering ledger. The work workflow reads those events through a native ledger view before planning, after a child completes, and after approval. New guidance is reconciled with the current plan and verified work before further execution; a changed plan requires fresh approval. An in-flight tool call is not implicitly interrupted. Explicit pause, cancel, and interrupt remain separate controls.
+
+The outer workflow owns plan review, approval, independent verification, workspace packaging, and GitHub publication. Execution work units describe repository changes and their local checks, not another approval ceremony or a duplicate PR publisher. The GitHub review shows the proposal and intended changes with the complete implementation specification and checks available in expandable details.
+
 The GitHub integration deliberately separates transport from engineering behavior:
 
 - the **Auth Provider** verifies webhook authenticity;

@@ -43,6 +43,14 @@ describe("GitHub decision questions", () => {
     expect(body).not.toContain("internal-work-id");
     expect(body).not.toContain("Plan fact");
     expect(body).not.toContain("interprets the meaning");
+    const [review, details] = body.split("<details>");
+    expect(review).toContain(plan.summary);
+    expect(review).toContain("1. **Preserve existing files**\n\n   Existing-file behavior");
+    expect(review).not.toContain(plan.specification);
+    expect(details).toContain("<summary>Implementation details and checks</summary>");
+    expect(details).toContain(plan.specification);
+    expect(details).toContain("Update the command.\n\n   Keep the current flags.");
+    expect(body.indexOf("I won't change")).toBeGreaterThan(body.indexOf("</details>"));
   });
 
   it("leaves the supervisor's actual answer intact", () => {

@@ -19,7 +19,7 @@ Use the normalized supervision.activity as the authoritative user-facing executi
 
 supervision.history is an authoritative discovery page over the work Run tree, including completed, failed, stopped, and active attempts. Status alone does not explain a failure. When the user asks about a previous attempt, failure, retry, recovery, or comparative progress, select the relevant exact Run refs from history and use platform_get to inspect their current detail and journal evidence. Exact Run detail has the top-level fields run, workflow, journal, lineage, and resourceInvocations; status, result, and error are inside run. Omit fields or request those top-level fields. Follow a continuation only when older evidence is needed, and do not repeat a completed page. Follow the supplied continuation with platform_query when the requested coverage exceeds the current history page. State when coverage is incomplete.
 
-Use action respond for an informational answer or a preliminary product clarification. Use answer-work when the message answers the one observed open work decision; its original text is forwarded unchanged. Use steer-work for guidance that should affect active work without rewriting history.
+Use action respond for an informational answer or a preliminary product clarification. Use guide-work for an answer, plan approval, requested revision, or guidance for ongoing work. The controller forwards the original message unchanged: it resolves the open work question when one exists, otherwise records steering for the next work boundary. You decide the user's intent, not which delivery mechanism to use.
 
 Use start-work for a requested code change or implementation plan when no equivalent work is active, including after a preliminary clarification has been answered. This hands the original issue and conversation to the planning workflow. It does not approve a plan or authorize repository mutation. If the requester says “show me the plan before changing code,” start-work is the handoff that fulfills that request. The work agent, not this conversation, produces the proposal and owns its approval wait. Do not substitute an outline in your reply for that handoff.
 
@@ -27,8 +27,7 @@ Pause, resume, cancel, interrupt, and restart only when the user clearly request
   tools: "Use bounded GitHub or web reads only when the current request needs external evidence. Use platform_query or platform_get when the supplied exact snapshot does not contain the Run, journal page, or commit Fact needed for the answer or requested control. For Run details, begin with a small page. Do not call workspace Tools.",
   output: `Return exactly one JSON object. action is one of:
 {"kind":"respond"}
-{"kind":"answer-work"}
-{"kind":"steer-work","text":"guidance"}
+{"kind":"guide-work"}
 {"kind":"start-work","objective":"objective"}
 {"kind":"pause-work|resume-work|cancel-work","run":"exact observed Run id"}
 {"kind":"interrupt-work","run":"exact observed Run id","text":"additional steering","mode":"safe-point|abort"}

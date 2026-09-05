@@ -50,6 +50,37 @@ function readFixture(options: { waits?: unknown[]; runs?: unknown[]; runStatus?:
 }
 
 describe("Horizon behavior routing", () => {
+  it.each([
+    { action: { kind: "guide-work" }, waiting: true, operation: "run.wait.resolve" },
+    { action: { kind: "guide-work" }, waiting: false, operation: "run.steer" },
+    { action: { kind: "start-work", objective: "A model-authored paraphrase" }, waiting: true, operation: "run.wait.resolve" },
+    { action: { kind: "start-work", objective: "A model-authored paraphrase" }, waiting: false, operation: "run.steer" },
+  ])("delivers $action.kind as $operation from the observed work state", async ({ action, waiting, operation }) => {
+    const reads = readFixture({ awaiting: waiting
+      ? [{ id: "review", label: "horizon-approval-1-1", kind: "await" }]
+      : [{ id: "child", label: "spawn:horizon-design", kind: "spawn" }] });
+    const invoke = vi.fn(async (resource: string, op: string, args: Record<string, unknown>, options?: unknown) => {
+      if (resource === "api" && op === "plan") return { object: "constal.change-plan", id: "plan", hash: "b".repeat(64) };
+      return reads(resource, op, args, options);
+    });
+    const invokeAsync = vi.fn(async () => ({ object: "constal.change-receipt", id: "receipt", state: "succeeded" }));
+    const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: "" }, artifact: {
+      object: "constal.horizon.operational-result", version: 1, status: "complete", action,
+      message: "I'll incorporate your correction.", evidence: [],
+    } }));
+    const ctx = { invoke, invokeAsync, turn, commit: vi.fn(), resources: { model: "model", github: "github", api: "api" },
+      run: { id: "front", namespace: "default" } } as unknown as Ctx;
+    const original = event("Revise the plan before editing.\n\nThese are examples, not an allowlist.");
+    expect(await runHorizonOperational(original, ctx)).toMatchObject({ control: { operation, state: "succeeded" } });
+    expect(invoke).toHaveBeenCalledWith("api", "plan", expect.objectContaining({ operations: [expect.objectContaining({
+      operation, input: expect.objectContaining(waiting ? { promise: "review", value: original }
+        : { text: original.objective, data: expect.objectContaining({ event: original }) }),
+    })] }), expect.any(Object));
+    expect(invokeAsync).toHaveBeenCalledOnce();
+    expect(ctx.commit).toHaveBeenCalledOnce();
+    expect(ctx.commit).toHaveBeenCalledWith(expect.objectContaining({ kind: "horizon.operational-result" }), { tier: "audit" });
+  });
+
   it("advertises issue work separately from lightweight operation", () => {
     expect(HORIZON_BEHAVIOR_CATALOG.modes.map(({ id, longHorizon }) => ({ id, longHorizon }))).toEqual([
       { id: "issue-work", longHorizon: true }, { id: "operate", longHorizon: false },
@@ -208,7 +239,7 @@ describe("Horizon behavior routing", () => {
     const invokeAsync = vi.fn(async () => ({ object: "constal.change-receipt", id: "receipt-1", state: "succeeded" }));
     const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
       object: "constal.horizon.operational-result", version: 1, status: "complete",
-      message: "I have the decision and will continue the same work.", action: { kind: "answer-work" },
+      message: "I have the decision and will continue the same work.", action: { kind: "guide-work" },
       evidence: ["One planning decision is open."],
     }) }, artifact: null }));
     const ctx = { invoke, invokeAsync, turn, commit: vi.fn(async () => ({ hash: "a".repeat(64) })),
@@ -236,7 +267,7 @@ describe("Horizon behavior routing", () => {
       expect(input.context.supervision.activity.state).toBe("waiting-user");
       return { toolCalls: [], message: { role: "assistant", content: JSON.stringify({
         object: "constal.horizon.operational-result", version: 1, status: "complete",
-        message: "I recorded option 3 and will continue the same work.", action: { kind: "answer-work" },
+        message: "I recorded option 3 and will continue the same work.", action: { kind: "guide-work" },
         evidence: ["The exact active Run contains one open planning decision."],
       }) }, artifact: null };
     });
@@ -259,7 +290,7 @@ describe("Horizon behavior routing", () => {
     });
     const turn = vi.fn(async () => ({ toolCalls: [], message: { role: "assistant", content: JSON.stringify({
       object: "constal.horizon.operational-result", version: 1, status: "complete",
-      message: "Decision recorded.", action: { kind: "answer-work" },
+      message: "Decision recorded.", action: { kind: "guide-work" },
       evidence: ["The reply semantically answers the presented decision."],
     }) }, artifact: null }));
     const invokeAsync = vi.fn();

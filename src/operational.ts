@@ -14,8 +14,7 @@ import { parseHzDecisionQuestion, type HzDecisionQuestion, type HzToolEvidence }
 
 export type HorizonOperationalAction =
   | { kind: "respond" }
-  | { kind: "answer-work" }
-  | { kind: "steer-work"; text: string }
+  | { kind: "guide-work" }
   | { kind: "start-work"; objective: string }
   | { kind: "pause-work"; run: string }
   | { kind: "resume-work"; run: string }
@@ -265,10 +264,7 @@ function action(value: unknown): HorizonOperationalAction | null {
   const source = record(value); const kind = source?.kind;
   if (!source) return null;
   if (kind === "respond" && Object.keys(source).length === 1) return { kind };
-  if (kind === "answer-work") return { kind };
-  if (kind === "steer-work" && typeof source.text === "string" && source.text.trim() && source.text.length <= 32_768) {
-    return { kind, text: source.text.trim() };
-  }
+  if (kind === "guide-work") return { kind };
   if (kind === "start-work" && typeof source.objective === "string" && source.objective.trim() && source.objective.length <= 65_536) {
     return { kind, objective: source.objective.trim() };
   }
@@ -377,44 +373,40 @@ async function executeAction(result: HorizonOperationalResult, event: HorizonRou
   const eventId = `horizon-supervisor-${delivery}`;
   try {
     let operations: Array<{ id: string; operation: HorizonControlOperation; input: Record<string, unknown> }>;
-    if (result.action.kind === "answer-work") {
+    if (result.action.kind === "guide-work" || result.action.kind === "start-work" && activeWork(snapshot)) {
       const waits = conversationalWaits(snapshot);
       if (waits === null) return { ...result, status: "blocked", action: { kind: "respond" },
-        message: "I recognized this as an answer, but the durable work state is temporarily unavailable. I have not discarded or reinterpreted your reply.",
+        message: "The work state is temporarily unavailable, so I couldn't deliver your guidance. I have not discarded or reinterpreted your reply.",
         evidence: [...result.evidence, "The work Run and wait observations were unavailable."] };
-      if (waits.length !== 1) return { ...result, status: "needs-input", action: { kind: "respond" },
-        message: waits.length === 0 ? "There is no open work decision for me to answer right now."
-          : "More than one work decision is open, so I need the specific question you are answering.",
+      if (waits.length > 1) return { ...result, status: "needs-input", action: { kind: "respond" },
+        message: "More than one work decision is open, so I need the specific question you are answering.",
         evidence: [...result.evidence, `Observed ${waits.length} open conversational work waits.`] };
-      const fields = record(waits[0]!.fields); const promise = typeof fields?.promise === "string" ? fields.promise
-        : String(waits[0]!.id ?? "").split("/").at(-1) ?? "";
-      operations = [{ id: "answer", operation: "run.wait.resolve", input: {
-        namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, promise,
-        value: event,
-      } }];
-    } else if (result.action.kind === "steer-work") {
-      operations = [{ id: "steer", operation: "run.steer", input: {
-        namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, text: result.action.text,
-        data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id },
-      } }];
+      if (waits.length === 1) {
+        const fields = record(waits[0]!.fields); const promise = typeof fields?.promise === "string" ? fields.promise
+          : String(waits[0]!.id ?? "").split("/").at(-1) ?? "";
+        operations = [{ id: "answer", operation: "run.wait.resolve", input: {
+          namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, promise, value: event,
+        } }];
+      } else {
+        if (!activeWork(snapshot)) return { ...result, status: "needs-input", action: { kind: "respond" },
+          message: "There is no active work to update. Would you like me to start a new task?" };
+        operations = [{ id: "steer", operation: "run.steer", input: {
+          namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, text: event.objective,
+          data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id, event },
+        } }];
+      }
     } else if (result.action.kind === "start-work") {
       if (snapshot.history.state === "unavailable") return { ...result, status: "blocked", action: { kind: "respond" },
         message: "I cannot determine whether issue work is already active because the authoritative Run inventory is unavailable.",
         evidence: [...result.evidence, snapshot.history.error] };
-      if (!activeWork(snapshot)) {
-        const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective,
-          context: { ...record(event.context), request: {
-            trigger: event.objective, issue: snapshot.issue, comments: snapshot.comments,
-          } },
-        }, {
-          tier: "audit", to: `session:${snapshot.thread.workSession}`, deliver: "queue",
-        });
-        return { ...result, control: { operation: "session.deliver", fact: fact.hash, state: "queued" } };
-      }
-      operations = [{ id: "steer", operation: "run.steer", input: {
-        namespace: ctx.run.namespace, agent: "horizon", session: snapshot.thread.workSession, text: result.action.objective,
-        data: { source: "github", issue: snapshot.thread.issue, foregroundRun: ctx.run.id },
-      } }];
+      const fact = await ctx.commit({ ...event, behavior: "issue-work", objective: result.action.objective,
+        context: { ...record(event.context), request: {
+          trigger: event.objective, issue: snapshot.issue, comments: snapshot.comments,
+        } },
+      }, {
+        tier: "audit", to: `session:${snapshot.thread.workSession}`, deliver: "queue",
+      });
+      return { ...result, control: { operation: "session.deliver", fact: fact.hash, state: "queued" } };
     } else {
       const selected = exactRun(snapshot, result.action.run);
       if (!selected) return { ...result, status: "needs-input", action: { kind: "respond" },

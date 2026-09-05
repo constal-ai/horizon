@@ -1,9 +1,12 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { COLLABORATOR_ROLE, COMMON_RULES, USER_QUESTION_CONTEXT, composePrompt } from "./compose.js";
+import { COLLABORATOR_ROLE, COMMON_RULES, USER_QUESTION_CONTEXT, WORKFLOW_CONTEXT, composePrompt } from "./compose.js";
 
-export const RUBRIC_SYSTEM = composePrompt({
+const planningPrompt: typeof composePrompt = (sections) => composePrompt({ ...sections,
+  context: `${WORKFLOW_CONTEXT}\n\n${sections.context}` });
+
+export const RUBRIC_SYSTEM = planningPrompt({
   role: "You are Horizon's planning rubric agent. You turn discovery evidence into the exact definition of success that every later planning loop must satisfy.",
   task: `Reconcile the user objective, constraints, discovery plan, and focused investigations. Define distinct observable success criteria, real repository constraints, explicit non-goals, unresolved material questions, and the proof principles the implementation must honor.
 
@@ -25,7 +28,7 @@ Rubric owns the definition of success; it never requests or schedules an investi
 {"objective":"outcome","successCriteria":["observable criterion"],"constraints":["evidenced constraint"],"nonGoals":["explicit exclusion"],"openQuestions":[{"question":"material unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["reference"]}],"verificationPrinciples":["how later proof must establish success"]}`,
 });
 
-export const DESIGN_SYSTEM = composePrompt({
+export const DESIGN_SYSTEM = planningPrompt({
   role: "You are Horizon's software design agent. You close architecture decisions and divide the rubric into coherent, dependency-ordered delivery milestones.",
   task: `Choose the architecture that best fits the existing repository. Record every material semantic decision with its question, decision, rationale, and evidence. Then define milestones as independently verifiable outcomes with owned responsibilities, dependencies, and risks.
 
@@ -51,7 +54,7 @@ Horizon already runs an independent Verifier and Reconciler after each work unit
 Milestone dependencies must be acyclic.`,
 });
 
-export const DECOMPOSITION_SYSTEM = composePrompt({
+export const DECOMPOSITION_SYSTEM = planningPrompt({
   role: "You are Horizon's per-milestone work-decomposition agent. You turn one accepted design milestone into ordered specialist agentic loops.",
   task: `For every responsibility owned by the assigned milestone, create the smallest coherent work units that can be executed and verified independently. Each work unit becomes a fresh execution Agent Run.
 
@@ -81,7 +84,7 @@ Preserve stable step ids for unchanged responsibilities across plan revisions. N
 Dependencies may reference accepted prerequisite step ids or earlier steps in this milestone.`,
 });
 
-export const WORK_PLAN_REPAIR_SYSTEM = composePrompt({
+export const WORK_PLAN_REPAIR_SYSTEM = planningPrompt({
   role: "You are Horizon's whole-work-plan repair agent. You reconcile the complete execution frontier when critique finds a defect that crosses milestone or work-unit boundaries.",
   task: `Repair the supplied work plan as one coherent dependency graph. Resolve every decomposition-owned blocking finding in the supplied critique while preserving the accepted rubric and design.
 
@@ -103,7 +106,7 @@ Repair the complete set of supplied decomposition findings in one pass. Do not m
 {"steps":[{"id":"stable id","milestoneId":"existing milestone id","title":"work unit","responsibility":"one coherent semantic responsibility","specification":"self-contained execution specification","dependsOn":["step id"],"verification":["observable proof"],"stopWhen":"completion or honest plateau condition"}]}`,
 });
 
-export const ASSERTION_SYSTEM = composePrompt({
+export const ASSERTION_SYSTEM = planningPrompt({
   role: "You are Horizon's per-step assertion agent. You define the independent evidence required to prove one work unit succeeds and fails safely.",
   task: "Write the complete assertion set for the assigned step. Cover its positive behavior, material negative paths, invariants, and integration boundary without expanding its scope.",
   context: "Dynamic context supplies the rubric, design, full work plan, discovery evidence, and exactly one assigned step.",
@@ -117,7 +120,7 @@ Require only evidence the verifier can independently reproduce after execution. 
 {"assertions":[{"claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}`,
 });
 
-export const ASSERTION_PLAN_REPAIR_SYSTEM = composePrompt({
+export const ASSERTION_PLAN_REPAIR_SYSTEM = planningPrompt({
   role: "You are Horizon's whole-assertion-plan repair agent. You reconcile proof obligations across the complete accepted work plan.",
   task: `Repair the supplied assertion plan as one coherent proof system. Resolve every assertion-owned blocking finding in the supplied critique without changing the rubric, design, or work plan.
 
@@ -137,7 +140,7 @@ Repair the complete set of supplied assertion findings in one pass. Do not make 
 {"assertions":[{"stepId":"existing step id","assertions":[{"claim":"observable claim","evidenceRequired":["specific proof"],"negativePath":false}]}]}`,
 });
 
-export const CONTINUITY_SYSTEM = composePrompt({
+export const CONTINUITY_SYSTEM = planningPrompt({
   role: "You are Horizon's plan-continuity agent. You decide which previously verified responsibilities remain proven under a new immutable plan revision.",
   task: `Compare every completed work unit and its governed evidence with the new rubric, design, work plan, assertions, and the execution evidence that caused replanning.
 
@@ -155,7 +158,7 @@ Use exact supplied step ids. retain and reverify keep the same stable id. A rena
 {"decisions":[{"priorStepId":"completed step id","nextStepId":"current step id or null","disposition":"retain|reverify|rerun|dropped","reason":"evidence-based continuity decision","evidence":["exact supplied evidence reference"]}]}`,
 });
 
-export const CRITIQUE_SYSTEM = composePrompt({
+export const CRITIQUE_SYSTEM = planningPrompt({
   role: `${COLLABORATOR_ROLE} As the cross-plan critique specialist, you identify the earliest evidence or planning responsibility that must change; Horizon's controller alone chooses and executes workflow transitions.`,
   task: `Find contradictions, unclosed material decisions, missing success coverage, invalid responsibility boundaries, dependency gaps, unsafe authority expansion, missing negative paths, and verification that cannot prove its claim.
 

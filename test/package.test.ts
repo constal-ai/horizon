@@ -63,7 +63,7 @@ describe("Horizon managed Agent package", () => {
       "horizon-executor", "horizon-verifier", "horizon-reconciler", "horizon-question-reconciliation",
       "horizon-approval-interpreter",
     ]);
-    expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress"]);
+    expect(agent.views?.map(({ id }) => id)).toEqual(["horizon-progress", "horizon-steering"]);
   });
 
   it("uses only existing platform catalog Resources and a long-horizon admission ceiling", async () => {

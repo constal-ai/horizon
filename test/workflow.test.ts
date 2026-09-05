@@ -1,7 +1,7 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Ctx, Fact, Handle } from "@constal/sdk";
+import type { Ctx, Fact, Handle, SteerEvent } from "@constal/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { HzPlan, HzPlanContinuity, HzPlanningState, HzStepResult } from "../src/contracts.js";
 import { applyPlanContinuity, attemptProgressDigest, runHorizon } from "../src/workflow.js";
@@ -114,6 +114,68 @@ function casRuntime(onStore?: (value: unknown) => void) {
 }
 
 describe("Horizon workflow", () => {
+  it.each(["discovery", "planning", "approval"])("consumes guidance arriving during %s before execution", async (arrival) => {
+    const guidance: SteerEvent[] = [];
+    const event: SteerEvent = { kind: "steer", seq: 1, hash: "steer-hash", prev: null, at: 1,
+      tenant: "tenant", ledger: "main", branch: "main", eventId: "comment-2", run: "run", ref: null,
+      actor: { kind: "operator", id: "reviewer" }, payload: { text: "Use a general rule, not an allowlist.\nKeep punctuation unchanged." } };
+    let fact = 0; let planning = 0; let approvals = 0; let executed = 0; let approvedFact = "";
+    const stored: Array<Record<string, unknown>> = [];
+    const ctx = {
+      run: { id: "run", session: "session", namespace: "default", tenant: "tenant",
+        agent: { id: "horizon", version: "0.6.42", crn: "crn:constal:production:tenant:default:agent/horizon" } },
+      resources: { model: "model", cas: "cas", sandbox: "sandbox" },
+      ledger: { view: async () => guidance.slice() },
+      commit: async (artifact: { kind?: string; planFact?: string }) => {
+        if (artifact.kind === "horizon.approval-request") approvedFact = artifact.planFact!;
+        return { hash: `fact-${++fact}`, artifact };
+      },
+      invoke: casRuntime((value) => stored.push(value as Record<string, unknown>)),
+      await: () => {
+        approvals++;
+        if (arrival === "approval" && approvals === 1) guidance.push(event);
+        return handle({ object: "constal.horizon.plan-decision", version: 1, planFact: approvedFact,
+          decision: "approve", guidance: null });
+      },
+      spawn: (task: { id: string }) => {
+        if (task.id === "horizon-discovery-framer") return handle({ discoveryPlan, toolEvidence: [] });
+        if (task.id === "horizon-investigator") {
+          if (arrival === "discovery") guidance.push(event);
+          return handle({ investigation, toolEvidence: [] });
+        }
+        if (task.id === "horizon-planner") {
+          planning++;
+          if (arrival === "planning" && planning === 1) guidance.push(event);
+          const selected = { ...plan, revision: planning };
+          return handle({ plan: selected, state: planningState(selected), toolEvidence: [], planningRuns: 7 });
+        }
+        if (task.id === "horizon-executor") {
+          executed++;
+          const input = stored.at(-1)!;
+          expect(input.request).toMatchObject({ context: { event: { issue: 2 }, steering: [event] } });
+          expect(planning).toBe(arrival === "discovery" ? 1 : 2);
+          expect(approvals).toBe(arrival === "approval" ? 2 : 1);
+          return handle({ result: stepResult, toolEvidence: [] });
+        }
+        if (task.id === "horizon-verifier") return handle({ verification, toolEvidence: [] });
+        if (task.id === "horizon-reconciler") return handle({ reconciliation: {
+          object: "constal.horizon.reconciliation", version: 2, action: "complete", summary: "Verified.",
+          remainingUnknowns: [], planningOwner: null, workspaceDisposition: "keep-current", replanBrief: null, question: null,
+        }, toolEvidence: [] });
+        throw new Error(`unexpected task ${task.id}`);
+      },
+      sandboxPool: () => ({ createSandbox: async () => ({ exec: () => handle({ status: "completed", exitCode: 0,
+        outputs: [{ path: "/workspace/.constal/horizon-final.tar.gz", ref: "artifact-ref", bytes: 42 }] }) }) }),
+    } as unknown as Ctx;
+    const result = await runHorizon({ objective: plan.objective, context: { event: { issue: 2 } } }, ctx,
+      { requirePlanApproval: true });
+    expect(result.status, result.summary).toBe("complete");
+    expect(executed).toBe(1);
+    const plans = stored.filter((value) => "restartAt" in value);
+    expect(plans.at(-1)).toMatchObject({ request: { context: { steering: [event] } } });
+    if (arrival !== "discovery") expect(plans[1]).toMatchObject({ restartAt: "rubric", completed: [] });
+  });
+
   it("turns invalid input into a durable blocked result instead of an uncaught exception", async () => {
     const committed: Array<{ kind?: string; stage?: string }> = []; let sequence = 0;
     const ctx = { commit: async (artifact: { kind?: string; stage?: string }) => {
@@ -170,7 +232,7 @@ describe("Horizon workflow", () => {
 
   it("commits an immutable plan, delegates one work unit, reconciles, and packages the result", async () => {
     const committed: unknown[] = []; let sequence = 0;
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -209,7 +271,7 @@ describe("Horizon workflow", () => {
 
   it("records an exhausted execution failure and returns the current durable plan", async () => {
     const committed: Array<{ kind?: string; stage?: string }> = []; let sequence = 0;
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -236,7 +298,7 @@ describe("Horizon workflow", () => {
 
   it("never translates durable runtime control flow into an application failure", async () => {
     let sequence = 0; const control = Object.assign(new Error("commit"), { name: "CommitYield" });
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -263,7 +325,7 @@ describe("Horizon workflow", () => {
     const failedProof = { ...verification, verdict: "failed" as const, summary: "The behavior is incomplete.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "test failed" }],
       failureBrief: "Continue the partial implementation." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -318,7 +380,7 @@ describe("Horizon workflow", () => {
     const inconclusive = { ...verification, verdict: "failed" as const, summary: "The proof command was inconclusive.",
       checks: [{ target: "focused behavior", outcome: "not-run" as const, evidence: "temporary test runner failure" }],
       failureBrief: "Repeat independent verification without changing implementation." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -364,7 +426,7 @@ describe("Horizon workflow", () => {
     const failedProof = { ...verification, verdict: "failed" as const, summary: "Unrelated files changed.",
       checks: [{ target: "change scope", outcome: "failed" as const, evidence: "unrelated diff" }],
       failureBrief: "Discard the mis-scoped attempt." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -416,7 +478,7 @@ describe("Horizon workflow", () => {
       failureBrief: "Repair the dependent work specification." };
     const plannerInputs: Array<Record<string, unknown>> = []; const executedSteps: string[] = [];
     let sequence = 0; let plannerRuns = 0; let executorRuns = 0; let verifierRuns = 0; let reconcilerRuns = 0;
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.6.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -477,7 +539,7 @@ describe("Horizon workflow", () => {
 
   it("requires approval of the exact issue-work plan before spawning an executor", async () => {
     const sequence: string[] = []; const committed: Array<{ kind?: string; planFact?: string }> = []; let fact = 0;
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.3.37", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -526,7 +588,7 @@ describe("Horizon workflow", () => {
 
   it("does not report complete when the immutable final artifact cannot be created", async () => {
     const committed: Array<{ kind?: string }> = []; let sequence = 0;
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -572,7 +634,7 @@ describe("Horizon workflow", () => {
     const failedVerification = { ...verification, verdict: "failed" as const, summary: "The focused proof failed.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "focused test failed" }],
       failureBrief: "Use the observed live seam and make the focused test pass." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -632,7 +694,7 @@ describe("Horizon workflow", () => {
     const wrongProof = { ...verification, verdict: "failed" as const, summary: "The assertion targeted the wrong command.",
       checks: [{ target: "configured proof", outcome: "not-run" as const, evidence: "the command does not exist" }],
       failureBrief: "Correct the assertion without changing the implementation." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.5.19", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -690,7 +752,7 @@ describe("Horizon workflow", () => {
     const revised: HzPlan = { ...plan, revision: 2,
       assertions: plan.assertions.map((assertion) => ({ ...assertion, revision: 2 })),
       specification: "Adopt v2 as explicitly selected by the user." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -746,7 +808,7 @@ describe("Horizon workflow", () => {
         "Preserve v1 behavior for compatibility.", "Adopt v2 behavior as the new contract.",
         "Support both versions behind an explicit boundary.",
       ] } };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },
@@ -794,7 +856,7 @@ describe("Horizon workflow", () => {
     const failedProof = { ...verification, verdict: "failed" as const, summary: "Same proof failed.",
       checks: [{ target: "focused behavior", outcome: "failed" as const, evidence: "same failure" }],
       failureBrief: "The same observable failure remains." };
-    const ctx = {
+    const ctx = { ledger: { view: async () => [] },
       resources: { model: "model", sandbox: "sandbox", cas: "cas", github: "github", web: "web", search: "search" },
       run: { id: "run", session: "session", tenant: "tenant", namespace: "default", identity: {},
         agent: { id: "horizon", version: "0.2.0", crn: "crn:constal:production:tenant:default:agent/horizon" }, mode: "script" },

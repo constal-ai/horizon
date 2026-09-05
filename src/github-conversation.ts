@@ -23,6 +23,10 @@ export function questionMarkdown(question: HzDecisionQuestion): string {
 }
 
 export function planMarkdown(plan: HzPlan): string {
+  const overview = plan.steps.map((step, index) => {
+    const indent = " ".repeat(String(index + 1).length + 2);
+    return `${index + 1}. **${step.title}**\n\n${step.responsibility.split("\n").map((line) => line ? `${indent}${line}` : "").join("\n")}`;
+  }).join("\n\n");
   const steps = plan.steps.map((step, index) => {
     const checks = step.verification.length ? step.verification : [step.stopWhen];
     const indent = " ".repeat(String(index + 1).length + 2);
@@ -31,7 +35,7 @@ export function planMarkdown(plan: HzPlan): string {
     return `${index + 1}. **${step.title}**\n\n${specification}\n\n${indent}Verification:\n\n${verification}`;
   }).join("\n\n");
   const risks = plan.risks.length > 0 ? `\n\n### Risks\n\n${plan.risks.map((risk) => `- ${risk}`).join("\n")}` : "";
-  return `## Proposed plan\n\n${plan.summary}\n\n### Approach\n\n${plan.specification}\n\n### Changes and checks\n\n${steps}${risks}\n\nDoes this plan look right? Reply with your approval or tell me what you'd like changed. I won't change the repository until you approve.`;
+  return `## Proposed plan\n\n${plan.summary}\n\n### Changes\n\n${overview}${risks}\n\n<details>\n<summary>Implementation details and checks</summary>\n\n${plan.specification}\n\n### Work units and verification\n\n${steps}\n\n</details>\n\nDoes this plan look right? Reply with your approval or tell me what you'd like changed. I won't change the repository until you approve.`;
 }
 
 export function milestoneMarkdown(step: HzPlan["steps"][number], result: HzStepResult, completed: number, total: number): string {
