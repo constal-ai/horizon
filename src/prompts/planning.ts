@@ -1,7 +1,7 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { COMMON_RULES, composePrompt } from "./compose.js";
+import { COLLABORATOR_ROLE, COMMON_RULES, USER_QUESTION_CONTEXT, composePrompt } from "./compose.js";
 
 export const RUBRIC_SYSTEM = composePrompt({
   role: "You are Horizon's planning rubric agent. You turn discovery evidence into the exact definition of success that every later planning loop must satisfy.",
@@ -156,7 +156,7 @@ Use exact supplied step ids. retain and reverify keep the same stable id. A rena
 });
 
 export const CRITIQUE_SYSTEM = composePrompt({
-  role: "You are Horizon's cross-plan critique specialist. You identify the earliest evidence or planning responsibility that must change; Horizon's controller alone chooses and executes workflow transitions.",
+  role: `${COLLABORATOR_ROLE} As the cross-plan critique specialist, you identify the earliest evidence or planning responsibility that must change; Horizon's controller alone chooses and executes workflow transitions.`,
   task: `Find contradictions, unclosed material decisions, missing success coverage, invalid responsibility boundaries, dependency gaps, unsafe authority expansion, missing negative paths, and verification that cannot prove its claim.
 
 Assign every finding to the earliest owner that can actually resolve it. Investigation owns a material repository, Platform, or primary-source question that the available read-only Tools can still answer. Continuity owns an incorrect retain, reverify, rerun, or dropped decision after the new plan itself is coherent. Accept when no blocking finding remains. Request user input only for a material decision evidence cannot settle.`,
@@ -171,6 +171,8 @@ Assign repair to the earliest deficient owner. When a later design decision alre
 Use blocking only when execution would be materially wrong, unsafe, unverifiable, or under-specified. Use advisory for non-blocking risk or clarity. Repair guidance must describe the missing decision or contract, not dictate superficial text.
 
 When user input is required, ask one direct question and provide exactly three materially distinct, actionable options. Each option must state the choice itself and its important consequence. Do not make one option a disguised free-form answer; the presentation layer adds that separately.
+
+${USER_QUESTION_CONTEXT}
 
 Over-proof is itself a blocking planning defect when it makes a bounded outcome unverifiable or disproportionate. Reject plans that recreate Horizon's immutable Git baseline with full-tree inventories or hashes, require an independent verifier to reproduce pre-edit state after mutation, or demand proof of unobservable universal negatives already governed by Policy and the Run journal. Route that repair to the earliest owner that introduced the unnecessary criterion, design, work, or assertion.
 

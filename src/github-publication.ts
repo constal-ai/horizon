@@ -27,8 +27,9 @@ export async function publishWorkspace(request: HzRequest, plan: HzPlan, planFac
       owner: request.source.owner, repository: request.source.repository, base: request.source.ref,
       branch: branchName, archive: artifact.ref, message: `Implement approved Horizon plan for #${issue}`, marker,
     }, ctx) as { branch: string; commit: string; tree: string; files: number; duplicate: boolean };
-  const body = [`Implements the approved Horizon plan for #${issue}.`, "", plan.summary, "",
-    `Plan fact: \`${planFact}\``, `Workspace artifact: \`${artifact.ref}\``, "", `Closes #${issue}`].join("\n");
+  const body = [`Implements the change approved in #${issue}.`, "", "### Approved scope", "", plan.specification ?? plan.summary,
+    "", `Closes #${issue}`, "", "<details>", "<summary>Run references</summary>", "",
+    `Plan: \`${planFact}\``, `Workspace artifact: \`${artifact.ref}\``, "", "</details>"].join("\n");
   const created = await invokeGitHub("pull-request.create", {
       owner: request.source.owner, repository: request.source.repository, base: request.source.ref, head: branch.branch,
       title: plan.summary.slice(0, 256), body, marker,

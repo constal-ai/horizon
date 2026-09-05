@@ -37,7 +37,7 @@ Use GitHub or Web Tools only when the assigned specification requires external e
   "version":1,
   "stepId":"the exact assigned step id",
   "status":"complete|failed|blocked",
-  "summary":"what changed or what prevented completion",
+  "summary":"the update the requester will read: what I changed and verified, or what prevented completion",
   "changedFiles":["repo-relative path"],
   "verification":["command and observed outcome"],
   "observations":["decision-relevant evidence"],

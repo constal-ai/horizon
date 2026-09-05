@@ -1,10 +1,10 @@
 // Copyright 2026 Coresource AI, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { COMMON_RULES, composePrompt } from "./compose.js";
+import { COLLABORATOR_ROLE, COMMON_RULES, composePrompt } from "./compose.js";
 
 export const PLANNER_SYSTEM = composePrompt({
-  role: "You are Horizon's plan finalization agent. You render the converged outputs of several planning Agents into one immutable natural-language execution specification.",
+  role: `${COLLABORATOR_ROLE} As the plan finalization agent, you turn the converged planning work into a proposal they can review and a complete natural-language specification for execution.`,
   task: `Consolidate the accepted rubric, architecture design, ordered work plan, per-step assertions, and final critique into the semantic narrative for this revision.
 
 Do not introduce new decisions, responsibilities, or assertions in finalization. If the critique requires user input or reports a blocker, preserve that state in the plan rather than pretending it converged.`,
@@ -25,7 +25,7 @@ The runtime attaches the original objective, revision, critique state, workspace
   tools: "Finalization has no Tools. All evidence gathering and planning repair belongs to earlier loops.",
   output: `Return exactly one JSON object with these semantic fields:
 {
-  "summary":"what the plan will accomplish and why this decomposition fits",
+  "summary":"what I propose to change and what the requester will get from it",
   "specification":"the complete natural-language execution specification",
   "unknowns":[{"question":"precise unknown","state":"open|resolved|assumed|needs-input|blocked","resolution":"answer or null","evidence":["exact evidence reference"]}],
   "risks":["specific risk"]

@@ -47,15 +47,15 @@ async function routeHorizon(message: unknown, ctx: Parameters<typeof runHorizon>
     const result = await runHorizonOperational(event, ctx);
     await ctx.commit({ kind: "horizon.channel-update", phase: result.object === "constal.horizon.operational-result" ? "operational" : "terminal",
       status: result.status, result }, { tier: "audit", presentation: result.object === "constal.horizon.operational-result"
-      ? waitPresentation("operational", "Horizon", terminalMarkdown(result))
-      : waitPresentation("terminal", result.status === "complete" ? "Horizon completed" : "Horizon is blocked", terminalMarkdown(result)) });
+      ? waitPresentation("operational", "Update", terminalMarkdown(result))
+      : waitPresentation("terminal", result.status === "complete" ? "Completed" : "Work stopped", terminalMarkdown(result)) });
     return result;
   }
   const result = await startIssueWork({ objective: event.objective, context: { eventClass: event.eventClass, event: event.context ?? null },
     constraints: event.constraints ?? [], ...(event.source === undefined ? {} : { source: event.source }),
     ...(event.environment === undefined ? {} : { environment: event.environment }) }, ctx);
   await ctx.commit({ kind: "horizon.channel-update", phase: "terminal", status: result.status }, { tier: "audit",
-    presentation: waitPresentation("terminal", result.status === "complete" ? "Horizon completed" : "Horizon is blocked", terminalMarkdown(result)) });
+    presentation: waitPresentation("terminal", result.status === "complete" ? "Completed" : "Work stopped", terminalMarkdown(result)) });
   return result;
 }
 

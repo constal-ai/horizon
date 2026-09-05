@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { questionMarkdown } from "../src/github-conversation.js";
+import { planMarkdown, questionMarkdown, terminalMarkdown } from "../src/github-conversation.js";
+import type { HzPlan } from "../src/contracts.js";
 
 describe("GitHub decision questions", () => {
   it("renders one first-person question, three choices, and a free-form path", () => {
@@ -11,12 +12,41 @@ describe("GitHub decision questions", () => {
       "Use a reaction together with a short textual response.",
       "Always use a textual response and never react alone.",
     ] });
-    expect(body).toContain("## I need one decision");
-    expect(body).toContain("**When should I use a reaction-only acknowledgment?**");
+    expect(body.startsWith("When should I use a reaction-only acknowledgment?")).toBe(true);
     expect(body).toContain("1. Only when acknowledgment fully satisfies the request.");
     expect(body).toContain("2. Use a reaction together with a short textual response.");
     expect(body).toContain("3. Always use a textual response and never react alone.");
-    expect(body).toContain("4. **Write your own answer**");
+    expect(body).toContain("4. **Write your own answer.**");
     expect(body).not.toContain("Horizon");
+    expect(body).not.toContain("same Run");
+  });
+
+  it("preserves the question's explanation and Markdown instead of rewriting its prose", () => {
+    const prompt = "Should existing files be replaced?\n\nThe command currently leaves them untouched. `--force` is already available.";
+    const body = questionMarkdown({ prompt, options: ["Keep existing files.", "Replace only with --force.", "Always replace."] });
+    expect(body.startsWith(`${prompt}\n\n1.`)).toBe(true);
+  });
+
+  it("presents an actionable proposal while keeping execution identity out of the comment", () => {
+    const plan: HzPlan = { object: "constal.horizon.plan", version: 1, revision: 2, status: "ready",
+      objective: "Handle missing files", summary: "I'll preserve existing files unless replacement is requested.",
+      specification: "Use the current command and its existing options.", workspaceRoot: "/workspace/repo",
+      unknowns: [], assertions: [], risks: [], question: null, steps: [{ id: "internal-work-id", milestoneId: "files",
+        title: "Preserve existing files", responsibility: "Existing-file behavior", specification: "Update the command.\n\nKeep the current flags.",
+        dependsOn: [], verification: ["Run command tests.", "Check the existing-file case."], stopWhen: "Behavior is tested." }] };
+    const body = planMarkdown(plan);
+    expect(body).toContain("## Proposed plan");
+    expect(body).toContain("1. **Preserve existing files**\n\n   Update the command.\n\n   Keep the current flags.");
+    expect(body).toContain("   Verification:\n\n   - Run command tests.\n   - Check the existing-file case.");
+    expect(body).toContain("I won't change the repository until you approve.");
+    expect(body).not.toContain("internal-work-id");
+    expect(body).not.toContain("Plan fact");
+    expect(body).not.toContain("interprets the meaning");
+  });
+
+  it("leaves the supervisor's actual answer intact", () => {
+    const message = "I'm checking the command's existing-file behavior.\n\nThe tests cover replacement; I'm now checking the default path.";
+    expect(terminalMarkdown({ object: "constal.horizon.operational-result", version: 1,
+      status: "complete", message, action: { kind: "respond" }, evidence: [] })).toBe(message);
   });
 });

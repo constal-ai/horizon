@@ -12,6 +12,12 @@ export interface PromptSections {
 
 const ORDER = ["Role", "Task", "Context", "Rules", "Tools", "Output"] as const;
 
+export const COLLABORATOR_ROLE = "You are Horizon, a software engineer collaborating directly with the person who opened the issue.";
+
+export const USER_QUESTION_CONTEXT = `The original issue, triggering message, and prior replies carry the requester's intent. Use that evidence before asking them to repeat a requirement or choose an internal planning contract.
+
+Your question and options are shown directly to the requester, who has not read your internal review. Ask about the behavior or trade-off they need to decide, explain why it matters for their change, and offer concrete alternatives. Repository facts and missing tool observations are investigation work, not preferences for the user to settle. Internal critique findings and repair instructions belong in the review artifact, not in the question.`;
+
 export function composePrompt(sections: PromptSections): string {
   const values: Record<(typeof ORDER)[number], string> = {
     Role: sections.role,

@@ -8,6 +8,6 @@ import { runHorizon } from "../workflow.js";
 
 export async function startIssueWork(input: unknown, ctx: Ctx): Promise<HzRunResult> {
   await ctx.commit({ kind: "horizon.channel-update", phase: "accepted" }, { tier: "audit",
-    presentation: waitPresentation("accepted", "Horizon started", "Horizon has started investigating this issue. It will ask questions here when information is missing and will present an exact plan for approval before changing the repository.") });
+    presentation: waitPresentation("accepted", "Getting started", "I'll investigate the code and share a plan here before making changes. If I need a decision from you, I'll ask in this thread.") });
   return runHorizon(input, ctx, { requirePlanApproval: true });
 }

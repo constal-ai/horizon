@@ -58,11 +58,11 @@ async function approvalAuthorized(event: HorizonRoutedEvent, ctx: Ctx): Promise<
 async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequest, ctx: Ctx): Promise<HorizonPlanDecision> {
   await ctx.commit({ kind: "horizon.approval-request", planFact, plan,
     instruction: "Approve this exact plan revision, request a revision, or cancel before repository mutation begins." }, { tier: "audit" });
-  const body = planMarkdown(plan, planFact);
+  const body = planMarkdown(plan);
   for (let attempt = 1; ; attempt++) {
     const response = await ctx.await<unknown>(`horizon-approval-${plan.revision}-${attempt}`, {
       maxBytes: 65_536, afterRun: "message",
-      presentation: waitPresentation("approval", `Approve Horizon plan revision ${plan.revision}`, body,
+      presentation: waitPresentation("approval", "Proposed plan", body,
         { planFact, revision: plan.revision, attempt }),
       schema: { anyOf: [
         { type: "object", additionalProperties: false,
@@ -86,7 +86,7 @@ async function awaitPlanDecision(plan: HzPlan, planFact: string, request: HzRequ
     if (decision.decision === "approve" && event) {
       const authorization = await approvalAuthorized(event, ctx);
       if (!authorization.authorized) {
-        const denied = `Horizon did not accept this approval because the sender has repository permission \`${authorization.permission}\`, which is not in the configured approver permissions. An authorized reviewer can reply to this issue.`;
+        const denied = `I couldn't accept this approval: your repository permission is \`${authorization.permission}\`, which doesn't allow approval for this project. A reviewer with one of the configured approver permissions can approve here.`;
         await ctx.commit({ kind: "horizon.approval-denied", planFact, eventClass: event.eventClass,
           permission: authorization.permission, reason: "The GitHub sender does not have a configured approval permission." }, { tier: "audit",
           presentation: waitPresentation("approval-denied", "Approval was not accepted", denied) });
@@ -240,7 +240,7 @@ async function answerQuestion(question: HzDecisionQuestion, revision: number, ct
         object: { const: "constal.horizon.event" }, version: { const: 1 }, objective: { type: "string", minLength: 1, maxLength: 65_536 },
       } },
     ] }, maxBytes: 65_536, afterRun: "message",
-    presentation: waitPresentation("question", "I need one decision", body, { revision }),
+    presentation: waitPresentation("question", "A question before I continue", body, { revision }),
   });
   const direct = response && typeof response === "object" && !Array.isArray(response) && typeof (response as { answer?: unknown }).answer === "string"
     ? (response as { answer: string }).answer : horizonRoutedEvent(response)?.objective;
