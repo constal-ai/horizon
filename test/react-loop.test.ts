@@ -26,10 +26,11 @@ describe("EvidencePlateauDetector", () => {
     expect(detector.observe([call({ ref: "two" })])).toEqual({ plateaued: false, stableRounds: 0, added: 1 });
   });
 
-  it.each([false, true])("compares command output rather than unique receipt hashes (JSON carrier: %s)", (encoded) => {
+  it.each(["workspace_exec", "workspace_diff", "workspace_search"].flatMap((name) => [false, true].map((encoded) => ({ name, encoded }))))(
+    "compares $name output rather than unique receipt hashes (JSON carrier: $encoded)", ({ name, encoded }) => {
     const detector = new EvidencePlateauDetector();
     const command = (ordinal: number) => ({ ...call(encoded ? JSON.stringify(result(ordinal)) : result(ordinal)),
-      name: "workspace_diff", ref: `receipt-${ordinal}` });
+      name, ref: `receipt-${ordinal}` });
     const result = (ordinal: number) => ({
       commandId: `run:root/${ordinal}/tool/0`, status: "completed", exitCode: 0,
       stdoutRef: "same-content", stdoutPreview: "README.md\n", stderrRef: null, outputs: [],

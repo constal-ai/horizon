@@ -100,7 +100,7 @@ function reasoningCallValue(call: ToolCallRecord): unknown {
 }
 
 function commandObservation(call: ToolCallRecord): Record<string, unknown> | null {
-  if (call.name !== "workspace_exec" && call.name !== "workspace_diff") return null;
+  if (!["workspace_exec", "workspace_diff", "workspace_search"].includes(call.name)) return null;
   const value = reasoningCallValue(call);
   const source = record(typeof value === "string" ? jsonMessage(value) : value);
   if (!source || typeof source.commandId !== "string" || typeof source.status !== "string"
